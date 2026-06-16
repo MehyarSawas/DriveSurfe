@@ -1,0 +1,25 @@
+<div class="login-page">
+  <div class="login-card">
+    <div class="logo">
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="24" cy="24" r="24" fill="#1a73e8"/>
+        <path d="M14 30l6-12 6 8 4-6 6 10H14z" fill="white" opacity="0.9"/>
+        <path d="M10 34h28" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h1>DriveSurfe</h1>
+    <p class="subtitle">Surf your cloud drives. Preview &amp; clean up media with swipe gestures.</p>
+
+    <div class="providers">
+      <button class="provider-btn kdrive" (click)="loginWithKDrive()">
+        <svg class="provider-icon" viewBox="0 0 24 24" fill="none">
+          <rect width="24" height="24" rx="4" fill="#0098FF"/>
+          <path d="M5 16l4-8 4 5.5 3-4.5 4 7H5z" fill="white"/>
+        </svg>
+        <span>Connect with kDrive</span>
+      </button>
+    </div>
+
+    <p class="hint">More drive providers coming soon</p>
+  </div>
+</div>

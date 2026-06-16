@@ -1,0 +1,31 @@
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 20px;
+  flex-shrink: 0;
+}
+
+.crumb {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition);
+
+  &:hover:not(.current) {
+    background: var(--color-hover);
+    color: var(--color-text);
+  }
+
+  &.current {
+    color: var(--color-text);
+    font-weight: 500;
+  }
+}
+
+.sep {
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  user-select: none;
+}

@@ -1,0 +1,207 @@
+import {
+  Component, input, output, signal, computed, HostListener,
+  ElementRef, ViewChild, OnDestroy, effect
+} from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { DriveFile } from '../../core/models/drive-file.model';
+
+type DeletePhase = 'idle' | 'confirming' | 'countdown';
+
+@Component({
+  selector: 'ds-preview',
+  standalone: true,
+  imports: [CommonModule],
+  templateUrl: './preview.component.html',
+  styleUrls: ['./preview.component.scss'],
+})
+export class PreviewComponent implements OnDestroy {
+  @ViewChild('mediaEl') mediaEl?: ElementRef<HTMLElement>;
+
+  readonly file = input.required<DriveFile>();
+  readonly hasPrev = input(false);
+  readonly hasNext = input(false);
+
+  readonly close = output<void>();
+  readonly prev = output<void>();
+  readonly next = output<void>();
+  readonly favorite = output<DriveFile>();
+  readonly download = output<DriveFile>();
+  readonly delete = output<DriveFile>();
+
+  readonly zoom = signal(1);
+  readonly deletePhase = signal<DeletePhase>('idle');
+  readonly countdown = signal(10);
+
+  // Swipe state
+  private touchStartX = 0;
+  private touchStartY = 0;
+  private touchCurrentX = 0;
+  private touchCurrentY = 0;
+  private isSwiping = false;
+
+  readonly swipeOffsetX = signal(0);
+  readonly swipeOffsetY = signal(0);
+  readonly isTransitioning = signal(false);
+
+  private countdownInterval?: ReturnType<typeof setInterval>;
+
+  readonly isImage = computed(() => {
+    const f = this.file();
+    return f.mime_type.startsWith('image/') || ['jpg','jpeg','png','gif','webp','heic','heif'].includes(f.extension);
+  });
+
+  readonly isVideo = computed(() => {
+    const f = this.file();
+    return f.mime_type.startsWith('video/') || ['mp4','mov','m4v'].includes(f.extension);
+  });
+
+  readonly previewSrc = computed(() => `/api/files/${this.file().id}/preview`);
+
+  constructor() {
+    effect(() => {
+      // Reset state when file changes
+      this.file();
+      this.zoom.set(1);
+      this.swipeOffsetX.set(0);
+      this.swipeOffsetY.set(0);
+      this.cancelDelete();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.clearCountdown();
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  onKeyDown(e: KeyboardEvent): void {
+    switch (e.key) {
+      case 'ArrowLeft': this.prev.emit(); break;
+      case 'ArrowRight': this.next.emit(); break;
+      case 'Escape': this.close.emit(); break;
+      case 'Delete': this.initiateDelete(); break;
+      case '+': case '=': this.zoomIn(); break;
+      case '-': this.zoomOut(); break;
+    }
+  }
+
+  onTouchStart(e: TouchEvent): void {
+    const t = e.touches[0];
+    this.touchStartX = t.clientX;
+    this.touchStartY = t.clientY;
+    this.touchCurrentX = t.clientX;
+    this.touchCurrentY = t.clientY;
+    this.isSwiping = true;
+    this.isTransitioning.set(false);
+  }
+
+  onTouchMove(e: TouchEvent): void {
+    if (!this.isSwiping) return;
+    const t = e.touches[0];
+    this.touchCurrentX = t.clientX;
+    this.touchCurrentY = t.clientY;
+
+    const dx = t.clientX - this.touchStartX;
+    const dy = t.clientY - this.touchStartY;
+
+    if (Math.abs(dy) > Math.abs(dx)) {
+      // Vertical swipe — only track upward
+      if (dy < 0) {
+        this.swipeOffsetY.set(dy);
+        this.swipeOffsetX.set(0);
+        e.preventDefault();
+      }
+    } else {
+      // Horizontal swipe
+      this.swipeOffsetX.set(dx);
+      this.swipeOffsetY.set(0);
+      e.preventDefault();
+    }
+  }
+
+  onTouchEnd(): void {
+    if (!this.isSwiping) return;
+    this.isSwiping = false;
+
+    const dx = this.touchCurrentX - this.touchStartX;
+    const dy = this.touchCurrentY - this.touchStartY;
+
+    this.isTransitioning.set(true);
+
+    if (Math.abs(dy) > Math.abs(dx) && dy < -150) {
+      // Swipe up to delete
+      this.swipeOffsetY.set(-window.innerHeight);
+      setTimeout(() => {
+        this.swipeOffsetY.set(0);
+        this.isTransitioning.set(false);
+        this.initiateDelete();
+      }, 300);
+    } else if (Math.abs(dx) > 80) {
+      if (dx < 0 && this.hasNext()) {
+        // Swipe left → next
+        this.swipeOffsetX.set(-window.innerWidth);
+        setTimeout(() => {
+          this.swipeOffsetX.set(0);
+          this.isTransitioning.set(false);
+          this.next.emit();
+        }, 250);
+      } else if (dx > 0 && this.hasPrev()) {
+        // Swipe right → prev
+        this.swipeOffsetX.set(window.innerWidth);
+        setTimeout(() => {
+          this.swipeOffsetX.set(0);
+          this.isTransitioning.set(false);
+          this.prev.emit();
+        }, 250);
+      } else {
+        this.swipeOffsetX.set(0);
+        this.swipeOffsetY.set(0);
+      }
+    } else {
+      this.swipeOffsetX.set(0);
+      this.swipeOffsetY.set(0);
+    }
+  }
+
+  initiateDelete(): void {
+    this.deletePhase.set('countdown');
+    this.countdown.set(10);
+    this.countdownInterval = setInterval(() => {
+      const c = this.countdown() - 1;
+      if (c <= 0) {
+        this.clearCountdown();
+        this.delete.emit(this.file());
+        this.deletePhase.set('idle');
+      } else {
+        this.countdown.set(c);
+      }
+    }, 1000);
+  }
+
+  cancelDelete(): void {
+    this.clearCountdown();
+    this.deletePhase.set('idle');
+    this.countdown.set(10);
+  }
+
+  private clearCountdown(): void {
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = undefined;
+    }
+  }
+
+  zoomIn(): void { this.zoom.update(z => Math.min(z + 0.25, 4)); }
+  zoomOut(): void { this.zoom.update(z => Math.max(z - 0.25, 0.25)); }
+  resetZoom(): void { this.zoom.set(1); }
+
+  mediaTransform(): string {
+    const x = this.swipeOffsetX();
+    const y = this.swipeOffsetY();
+    const z = this.zoom();
+    return `translate(${x}px, ${y}px) scale(${z})`;
+  }
+
+  countdownPercent(): number {
+    return (this.countdown() / 10) * 100;
+  }
+}

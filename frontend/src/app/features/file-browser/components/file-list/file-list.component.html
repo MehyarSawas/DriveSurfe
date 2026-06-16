@@ -1,0 +1,63 @@
+<div class="file-list">
+  @for (file of files(); track file.id) {
+    <div
+      class="file-row"
+      [class.selected]="isSelected(file.id)"
+      (click)="fileClick.emit(file)"
+      (dblclick)="fileDblClick.emit(file)"
+    >
+      <!-- Checkbox -->
+      <div class="col-check" (click)="$event.stopPropagation(); fileClick.emit(file)">
+        <div class="checkbox" [class.checked]="isSelected(file.id)">
+          @if (isSelected(file.id)) {
+            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          }
+        </div>
+      </div>
+
+      <!-- Icon -->
+      <div class="col-icon">
+        @if (file.is_dir) {
+          <svg class="folder-icon" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+        } @else if (file.thumbnail_url) {
+          <img [src]="file.thumbnail_url" [alt]="file.name" class="thumb-img" loading="lazy" />
+        } @else {
+          <svg class="file-icon" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        }
+      </div>
+
+      <!-- Name -->
+      <div class="col-name">
+        <span class="file-name">{{ file.name }}</span>
+      </div>
+
+      <!-- Type -->
+      <div class="col-type">{{ fileTypeLabel(file) }}</div>
+
+      <!-- Modified -->
+      <div class="col-date">{{ file.modified_at | date:'MMM d, y' }}</div>
+
+      <!-- Size -->
+      <div class="col-size">{{ formatSize(file.size) }}</div>
+
+      <!-- Actions -->
+      <div class="col-actions" (click)="$event.stopPropagation()">
+        <button class="action-btn" [class.starred]="file.is_favorite" (click)="favorite.emit(file)">
+          <svg viewBox="0 0 24 24">
+            @if (file.is_favorite) {
+              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+            } @else {
+              <path d="M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z"/>
+            }
+          </svg>
+        </button>
+        <button class="action-btn" (click)="download.emit(file)">
+          <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        </button>
+        <button class="action-btn danger" (click)="delete.emit(file)">
+          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
+      </div>
+    </div>
+  }
+</div>
