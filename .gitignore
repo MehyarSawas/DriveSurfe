@@ -14,6 +14,8 @@ frontend/dist/
 # PHP
 backend/public/uploads/
 backend/cache/
+# composer.phar can optionally live in backend/ on the server — not committed
+composer.phar
 
 # IDE
 .idea/

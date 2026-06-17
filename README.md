@@ -19,26 +19,18 @@ A web app to connect multiple cloud drive solutions, preview images/videos with 
 - **Backend:** PHP 8.2+, Slim 4, no database (OAuth2 tokens only)
 - **Host:** lima-city.de at drive.msawas.com
 
-## Setup
-
-### Backend
+## Local Development
 
 ```bash
-cd backend
-composer install
-cp .env.example .env
-# Fill in KDRIVE_CLIENT_ID, KDRIVE_CLIENT_SECRET, APP_URL, SESSION_KEY
+# Backend (requires PHP 8.2+)
+cd backend && composer install
+cp .env.example .env   # fill in credentials
+php -S localhost:8080 -t public
+
+# Frontend (in a second terminal)
+cd frontend && npm install
+npm start   # dev server on localhost:4200, proxies /api → localhost:8080
 ```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run build
-```
-
-Copy `frontend/dist/drivesurfe/browser/` to `backend/public/`.
 
 ## kDrive OAuth2 App
 

@@ -1,0 +1,48 @@
+name: Deploy to lima-city
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Angular (production)
+        working-directory: frontend
+        run: npm run build
+
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LIMA_SSH_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H ${{ secrets.LIMA_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Pull latest code & run composer on server
+        run: |
+          ssh ${{ secrets.LIMA_USER }}@${{ secrets.LIMA_HOST }} \
+            "bash ${{ secrets.LIMA_DEPLOY_PATH }}/deploy.sh"
+
+      - name: Rsync Angular dist to server public directory
+        run: |
+          rsync -az --delete \
+            frontend/dist/drivesurfe/browser/ \
+            ${{ secrets.LIMA_USER }}@${{ secrets.LIMA_HOST }}:${{ secrets.LIMA_DEPLOY_PATH }}/backend/public/
