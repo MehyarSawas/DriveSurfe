@@ -22,35 +22,26 @@ final class ActionRoutes
 
     public function register(RouteCollectorProxy $group): void
     {
-        $auth = $this->auth;
-        $self = $this;
+        $drive = $this->drive;
+        $auth  = $this->auth;
 
-        $group->group('', static function (RouteCollectorProxy $g) use ($self) {
-            $g->post('/files/{id}/favorite', [$self, 'favorite']);
-            $g->delete('/files/{id}/favorite', [$self, 'unfavorite']);
-            $g->delete('/files/{id}', [$self, 'deleteFile']);
+        $group->post('/files/{id}/favorite', static function (Request $req, Response $res, array $args) use ($drive): Response {
+            $drive->favorite($args['id']);
+            return self::json($res, ['ok' => true]);
+        })->add($auth);
+
+        $group->delete('/files/{id}/favorite', static function (Request $req, Response $res, array $args) use ($drive): Response {
+            $drive->unfavorite($args['id']);
+            return self::json($res, ['ok' => true]);
+        })->add($auth);
+
+        $group->delete('/files/{id}', static function (Request $req, Response $res, array $args) use ($drive): Response {
+            $drive->delete($args['id']);
+            return self::json($res, ['ok' => true]);
         })->add($auth);
     }
 
-    public function favorite(Request $request, Response $response, array $args): Response
-    {
-        $this->drive->favorite($args['id']);
-        return $this->json($response, ['ok' => true]);
-    }
-
-    public function unfavorite(Request $request, Response $response, array $args): Response
-    {
-        $this->drive->unfavorite($args['id']);
-        return $this->json($response, ['ok' => true]);
-    }
-
-    public function deleteFile(Request $request, Response $response, array $args): Response
-    {
-        $this->drive->delete($args['id']);
-        return $this->json($response, ['ok' => true]);
-    }
-
-    private function json(Response $response, array $data): Response
+    private static function json(Response $response, array $data): Response
     {
         $response->getBody()->write(json_encode($data, JSON_THROW_ON_ERROR));
         return $response->withHeader('Content-Type', 'application/json');
