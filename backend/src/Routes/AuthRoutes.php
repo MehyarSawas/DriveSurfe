@@ -29,19 +29,12 @@ final class AuthRoutes
             return $res->withHeader('Location', $url)->withStatus(302);
         });
 
-        $group->get('/auth/kdrive/debug-url', function (Request $req, Response $res): Response {
-            $provider = self::makeProvider();
-            $url = $provider->getAuthorizationUrl();
-            $res->getBody()->write(json_encode(['url' => $url, 'client_id' => $_ENV['KDRIVE_CLIENT_ID'] ?? 'NOT SET', 'redirect_uri' => $_ENV['KDRIVE_REDIRECT_URI'] ?? 'NOT SET'], JSON_THROW_ON_ERROR));
-            return $res->withHeader('Content-Type', 'application/json');
-        });
-
-        $group->get('/auth/kdrive/callback', function (Request $req, Response $res) use ($session): Response {
+$group->get('/auth/kdrive/callback', function (Request $req, Response $res) use ($session): Response {
             $params = $req->getQueryParams();
             $data   = $session->get();
 
             if (empty($params['code'])) {
-                return self::jsonError($res, 'Missing authorization code: ' . json_encode($params), 400);
+                return self::jsonError($res, 'Missing authorization code', 400);
             }
             if (empty($params['state']) || $params['state'] !== ($data['oauth_state'] ?? '')) {
                 return self::jsonError($res, 'Invalid state', 400);

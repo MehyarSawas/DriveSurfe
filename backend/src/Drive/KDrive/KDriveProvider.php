@@ -26,7 +26,7 @@ final class KDriveProvider extends AbstractProvider
 
     public function getDefaultScopes(): array
     {
-        return ['drive', 'profile', 'email', 'openid'];
+        return ['drive'];
     }
 
     protected function checkResponse(ResponseInterface $response, $data): void
