@@ -41,7 +41,7 @@ final class AuthRoutes
             $data   = $session->get();
 
             if (empty($params['code'])) {
-                return self::jsonError($res, 'Missing authorization code', 400);
+                return self::jsonError($res, 'Missing authorization code: ' . json_encode($params), 400);
             }
             if (empty($params['state']) || $params['state'] !== ($data['oauth_state'] ?? '')) {
                 return self::jsonError($res, 'Invalid state', 400);
