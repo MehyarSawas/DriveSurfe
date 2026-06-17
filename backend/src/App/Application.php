@@ -59,7 +59,7 @@ final class Application
     private function registerMiddleware(): void
     {
         $this->slim->addErrorMiddleware(
-            displayErrorDetails: ($_ENV['APP_ENV'] ?? 'production') === 'development',
+            displayErrorDetails: true,
             logErrors: true,
             logErrorDetails: true
         );
