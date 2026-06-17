@@ -15,7 +15,7 @@ final class KDriveClient implements DriveInterface
 
     public function __construct(
         private readonly Client $http,
-        private readonly SessionService $session
+        private readonly SessionService $session  // used for drive_id caching
     ) {}
 
     public function listFiles(string $folderId = '1', array $options = []): array
@@ -158,8 +158,7 @@ final class KDriveClient implements DriveInterface
 
     private function getToken(): string
     {
-        $session = $this->session->get();
-        return $session['access_token'] ?? throw new RuntimeException('Not authenticated');
+        return $_ENV['KDRIVE_TOKEN'] ?? throw new RuntimeException('KDRIVE_TOKEN not set in .env');
     }
 
     private function get(string $path, array $query = [], ?string $baseUrl = null): array

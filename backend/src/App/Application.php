@@ -10,7 +10,6 @@ use DriveSurfe\Routes\ActionRoutes;
 use DriveSurfe\Routes\AuthRoutes;
 use DriveSurfe\Routes\FileRoutes;
 use DriveSurfe\Service\SessionService;
-use DriveSurfe\Service\ThumbnailService;
 use GuzzleHttp\Client;
 use Slim\Factory\AppFactory;
 use Slim\App;
@@ -41,7 +40,6 @@ final class Application
                 $_ENV['SESSION_KEY'] ?? 'fallback-key-change-me'
             ),
             Client::class => fn() => new Client(['timeout' => 30]),
-            ThumbnailService::class => fn() => new ThumbnailService(),
             KDriveClient::class => function (Container $c) {
                 return new KDriveClient(
                     $c->get(Client::class),
@@ -78,7 +76,7 @@ final class Application
 
     private function registerRoutes(Container $container): void
     {
-        $authRoutes = new AuthRoutes($container);
+        $authRoutes = new AuthRoutes();
         $fileRoutes = new FileRoutes($container);
         $actionRoutes = new ActionRoutes($container);
 

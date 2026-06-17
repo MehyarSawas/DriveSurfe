@@ -29,10 +29,6 @@ export class AuthService {
     }
   }
 
-  loginWithKDrive(): void {
-    window.location.href = '/api/auth/kdrive/login';
-  }
-
   async logout(): Promise<void> {
     await firstValueFrom(this.http.post('/api/auth/logout', {}));
     this.isAuthenticated.set(false);

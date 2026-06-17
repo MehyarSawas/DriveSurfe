@@ -17,8 +17,4 @@ export class LoginComponent implements OnInit {
       this.router.navigate(['/']);
     }
   }
-
-  loginWithKDrive(): void {
-    this.auth.loginWithKDrive();
-  }
 }

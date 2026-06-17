@@ -11,15 +11,10 @@
     <p class="subtitle">Surf your cloud drives. Preview &amp; clean up media with swipe gestures.</p>
 
     <div class="providers">
-      <button class="provider-btn kdrive" (click)="loginWithKDrive()">
-        <svg class="provider-icon" viewBox="0 0 24 24" fill="none">
-          <rect width="24" height="24" rx="4" fill="#0098FF"/>
-          <path d="M5 16l4-8 4 5.5 3-4.5 4 7H5z" fill="white"/>
-        </svg>
-        <span>Connect with kDrive</span>
-      </button>
+      <div class="config-notice">
+        <p>kDrive token not configured.</p>
+        <p>Add <code>KDRIVE_TOKEN</code> to your <code>.env</code> file on the server.</p>
+      </div>
     </div>
-
-    <p class="hint">More drive providers coming soon</p>
   </div>
 </div>
