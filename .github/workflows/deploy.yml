@@ -26,6 +26,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Install PHP dependencies
+        working-directory: backend
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
       - name: Set up SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -34,13 +38,18 @@ jobs:
       - name: Add server to known_hosts
         run: ssh-keyscan -H ${{ secrets.LIMA_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Pull latest code & run composer on server
+      - name: Deploy to server
+        env:
+          DEST: ${{ secrets.LIMA_USER }}@${{ secrets.LIMA_HOST }}:${{ secrets.LIMA_DEPLOY_PATH }}
         run: |
-          ssh ${{ secrets.LIMA_USER }}@${{ secrets.LIMA_HOST }} \
-            "bash ${{ secrets.LIMA_DEPLOY_PATH }}/deploy.sh"
+          # Angular dist files → web root
+          rsync -az frontend/dist/drivesurfe/browser/ $DEST/backend/public/
 
-      - name: Rsync Angular dist to server public directory
-        run: |
-          rsync -az --exclude='index.php' --exclude='.htaccess' --exclude='*.php' \
-            frontend/dist/drivesurfe/browser/ \
-            ${{ secrets.LIMA_USER }}@${{ secrets.LIMA_HOST }}:${{ secrets.LIMA_DEPLOY_PATH }}/backend/public/
+          # PHP entry point + htaccess → web root
+          rsync -az backend/public/index.php backend/public/.htaccess $DEST/backend/public/
+
+          # PHP source code → backend/src/
+          rsync -az backend/src/ $DEST/backend/src/
+
+          # Composer vendor → backend/vendor/
+          rsync -az backend/vendor/ $DEST/backend/vendor/
