@@ -41,6 +41,6 @@ jobs:
 
       - name: Rsync Angular dist to server public directory
         run: |
-          rsync -az --delete \
+          rsync -az --exclude='index.php' --exclude='.htaccess' --exclude='*.php' \
             frontend/dist/drivesurfe/browser/ \
             ${{ secrets.LIMA_USER }}@${{ secrets.LIMA_HOST }}:${{ secrets.LIMA_DEPLOY_PATH }}/backend/public/
