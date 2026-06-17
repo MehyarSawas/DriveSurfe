@@ -20,13 +20,13 @@ final class AuthRoutes
 
     public function register(RouteCollectorProxy $group): void
     {
-        $group->get('/auth/kdrive/login', $this->login(...));
-        $group->get('/auth/kdrive/callback', $this->callback(...));
-        $group->post('/auth/logout', $this->logout(...));
-        $group->get('/auth/me', $this->me(...));
+        $group->get('/auth/kdrive/login', [$this, 'login']);
+        $group->get('/auth/kdrive/callback', [$this, 'callback']);
+        $group->post('/auth/logout', [$this, 'logout']);
+        $group->get('/auth/me', [$this, 'me']);
     }
 
-    private function login(Request $request, Response $response): Response
+    public function login(Request $request, Response $response): Response
     {
         $provider = $this->makeProvider();
         $url = $provider->getAuthorizationUrl();
@@ -35,7 +35,7 @@ final class AuthRoutes
         return $response->withHeader('Location', $url)->withStatus(302);
     }
 
-    private function callback(Request $request, Response $response): Response
+    public function callback(Request $request, Response $response): Response
     {
         $params = $request->getQueryParams();
         $session = $this->session->get();
@@ -61,14 +61,14 @@ final class AuthRoutes
         return $response->withHeader('Location', $appUrl)->withStatus(302);
     }
 
-    private function logout(Request $request, Response $response): Response
+    public function logout(Request $request, Response $response): Response
     {
         $this->session->destroy();
         $response->getBody()->write(json_encode(['ok' => true], JSON_THROW_ON_ERROR));
         return $response->withHeader('Content-Type', 'application/json');
     }
 
-    private function me(Request $request, Response $response): Response
+    public function me(Request $request, Response $response): Response
     {
         if (!$this->session->isAuthenticated()) {
             $response->getBody()->write(json_encode(['authenticated' => false], JSON_THROW_ON_ERROR));
