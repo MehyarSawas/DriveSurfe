@@ -93,13 +93,13 @@ final class KDriveClient implements DriveInterface
     public function unfavorite(string $fileId): void
     {
         $driveId = $this->getDriveId();
-        $this->delete("{$driveId}/files/{$fileId}/favorite");
+        $this->deleteReq("{$driveId}/files/{$fileId}/favorite");
     }
 
     public function delete(string $fileId): void
     {
         $driveId = $this->getDriveId();
-        $this->delete("{$driveId}/files/{$fileId}");
+        $this->deleteReq("{$driveId}/files/{$fileId}");
     }
 
     public function listTrash(): array
@@ -192,7 +192,7 @@ final class KDriveClient implements DriveInterface
         }
     }
 
-    private function delete(string $path): array
+    private function deleteReq(string $path): array
     {
         $token = $this->getToken();
         try {
