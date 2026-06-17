@@ -22,26 +22,29 @@ final class ActionRoutes
 
     public function register(RouteCollectorProxy $group): void
     {
-        $group->group('', function (RouteCollectorProxy $g) {
-            $g->post('/files/{id}/favorite', $this->favorite(...));
-            $g->delete('/files/{id}/favorite', $this->unfavorite(...));
-            $g->delete('/files/{id}', $this->delete(...));
-        })->add($this->auth);
+        $auth = $this->auth;
+        $self = $this;
+
+        $group->group('', static function (RouteCollectorProxy $g) use ($self) {
+            $g->post('/files/{id}/favorite', [$self, 'favorite']);
+            $g->delete('/files/{id}/favorite', [$self, 'unfavorite']);
+            $g->delete('/files/{id}', [$self, 'deleteFile']);
+        })->add($auth);
     }
 
-    private function favorite(Request $request, Response $response, array $args): Response
+    public function favorite(Request $request, Response $response, array $args): Response
     {
         $this->drive->favorite($args['id']);
         return $this->json($response, ['ok' => true]);
     }
 
-    private function unfavorite(Request $request, Response $response, array $args): Response
+    public function unfavorite(Request $request, Response $response, array $args): Response
     {
         $this->drive->unfavorite($args['id']);
         return $this->json($response, ['ok' => true]);
     }
 
-    private function delete(Request $request, Response $response, array $args): Response
+    public function deleteFile(Request $request, Response $response, array $args): Response
     {
         $this->drive->delete($args['id']);
         return $this->json($response, ['ok' => true]);
