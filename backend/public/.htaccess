@@ -1,4 +1,5 @@
 RewriteEngine On
+RewriteBase /
 
 # Route API requests to index.php
 RewriteCond %{REQUEST_URI} ^/api
