@@ -56,7 +56,7 @@
 
       <div class="toolbar-actions">
         <!-- Filter -->
-        <select class="filter-select" [value]="filterType()" (change)="setFilter(($event.target as HTMLSelectElement).value)">
+        <select class="filter-select" [value]="filterType()" (change)="setFilter($any($event.target).value)">
           <option value="">All files</option>
           <option value="image">Images</option>
           <option value="video">Videos</option>
