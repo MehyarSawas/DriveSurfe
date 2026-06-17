@@ -25,17 +25,17 @@ final class ActionRoutes
         $drive = $this->drive;
         $auth  = $this->auth;
 
-        $group->post('/files/{id}/favorite', static function (Request $req, Response $res, array $args) use ($drive): Response {
+        $group->post('/files/{id}/favorite', function (Request $req, Response $res, array $args) use ($drive): Response {
             $drive->favorite($args['id']);
             return self::json($res, ['ok' => true]);
         })->add($auth);
 
-        $group->delete('/files/{id}/favorite', static function (Request $req, Response $res, array $args) use ($drive): Response {
+        $group->delete('/files/{id}/favorite', function (Request $req, Response $res, array $args) use ($drive): Response {
             $drive->unfavorite($args['id']);
             return self::json($res, ['ok' => true]);
         })->add($auth);
 
-        $group->delete('/files/{id}', static function (Request $req, Response $res, array $args) use ($drive): Response {
+        $group->delete('/files/{id}', function (Request $req, Response $res, array $args) use ($drive): Response {
             $drive->delete($args['id']);
             return self::json($res, ['ok' => true]);
         })->add($auth);

@@ -22,14 +22,14 @@ final class AuthRoutes
     {
         $session = $this->session;
 
-        $group->get('/auth/kdrive/login', static function (Request $req, Response $res) use ($session): Response {
+        $group->get('/auth/kdrive/login', function (Request $req, Response $res) use ($session): Response {
             $provider = self::makeProvider();
             $url = $provider->getAuthorizationUrl();
             $session->set(['oauth_state' => $provider->getState()]);
             return $res->withHeader('Location', $url)->withStatus(302);
         });
 
-        $group->get('/auth/kdrive/callback', static function (Request $req, Response $res) use ($session): Response {
+        $group->get('/auth/kdrive/callback', function (Request $req, Response $res) use ($session): Response {
             $params = $req->getQueryParams();
             $data   = $session->get();
 
@@ -52,13 +52,13 @@ final class AuthRoutes
             return $res->withHeader('Location', $_ENV['APP_URL'] ?? '/')->withStatus(302);
         });
 
-        $group->post('/auth/logout', static function (Request $req, Response $res) use ($session): Response {
+        $group->post('/auth/logout', function (Request $req, Response $res) use ($session): Response {
             $session->destroy();
             $res->getBody()->write(json_encode(['ok' => true], JSON_THROW_ON_ERROR));
             return $res->withHeader('Content-Type', 'application/json');
         });
 
-        $group->get('/auth/me', static function (Request $req, Response $res) use ($session): Response {
+        $group->get('/auth/me', function (Request $req, Response $res) use ($session): Response {
             if (!$session->isAuthenticated()) {
                 $res->getBody()->write(json_encode(['authenticated' => false], JSON_THROW_ON_ERROR));
                 return $res->withHeader('Content-Type', 'application/json');
