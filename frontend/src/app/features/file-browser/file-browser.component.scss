@@ -203,7 +203,19 @@
   p { font-size: 15px; }
 }
 
+.sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 768px) {
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 99;
+  }
+
   .sidebar {
     position: fixed;
     top: 0;

@@ -1,5 +1,8 @@
 <div class="browser-layout">
-  <!-- Sidebar -->
+  @if (sidebarOpen()) {
+    <div class="sidebar-backdrop" (click)="sidebarOpen.set(false)"></div>
+  }
+
   <aside class="sidebar" [class.closed]="!sidebarOpen()">
     <div class="sidebar-header">
       <div class="app-logo">

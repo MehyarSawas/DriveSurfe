@@ -35,7 +35,7 @@ export class FileBrowserComponent implements OnInit {
   readonly sortBy = signal<SortBy>('name');
   readonly sortDir = signal<SortDir>('asc');
   readonly filterType = signal<string>('');
-  readonly sidebarOpen = signal(true);
+  readonly sidebarOpen = signal(window.innerWidth > 768);
   readonly previewFile = signal<DriveFile | null>(null);
   readonly previewIndex = signal(0);
   readonly searchResults = signal<DriveFile[] | null>(null);
@@ -81,6 +81,7 @@ export class FileBrowserComponent implements OnInit {
   openPreview(file: DriveFile): void {
     if (file.is_dir) {
       this.fileService.navigateToFolder(file.id, file.name);
+      if (window.innerWidth <= 768) this.sidebarOpen.set(false);
       return;
     }
     const idx = this.mediaFiles().findIndex(f => f.id === file.id);

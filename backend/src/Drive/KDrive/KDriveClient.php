@@ -171,7 +171,11 @@ final class KDriveClient implements DriveInterface
                 'headers' => ['Authorization' => "Bearer {$token}"],
                 'query' => $query ?: null,
             ]);
-            return json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $data = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            if (($data['result'] ?? '') === 'error') {
+                throw new RuntimeException('kDrive: ' . json_encode($data['error'] ?? 'unknown'));
+            }
+            return $data;
         } catch (GuzzleException $e) {
             throw new RuntimeException("kDrive API error: " . $e->getMessage(), 0, $e);
         }
