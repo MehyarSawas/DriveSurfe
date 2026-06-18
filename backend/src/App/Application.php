@@ -41,9 +41,7 @@ final class Application
             ),
             Client::class => fn() => new Client(['timeout' => 30]),
             KDriveClient::class => fn(Container $c) => new KDriveClient($c->get(Client::class)),
-            AuthMiddleware::class => function (Container $c) {
-                return new AuthMiddleware($c->get(SessionService::class));
-            },
+            AuthMiddleware::class => fn() => new AuthMiddleware(),
         ]);
 
         return $builder->build();
