@@ -24,10 +24,6 @@ final class KDriveClient implements DriveInterface
             ],
         ];
 
-        if (!empty($options['type'])) {
-            $params['type'] = $options['type'];
-        }
-
         $data = $this->get("{$driveId}/files/{$folderId}/files", $params);
         return $this->normalizeFiles($data['data'] ?? []);
     }
@@ -97,6 +93,13 @@ final class KDriveClient implements DriveInterface
         $this->deleteReq("{$driveId}/files/{$fileId}");
     }
 
+    public function listFavorites(): array
+    {
+        $driveId = $this->getDriveId();
+        $data = $this->get("{$driveId}/files/search", ['query' => '', 'is_favorite' => true, 'per_page' => 100]);
+        return $this->normalizeFiles($data['data'] ?? []);
+    }
+
     public function listTrash(): array
     {
         $driveId = $this->getDriveId();
@@ -121,10 +124,15 @@ final class KDriveClient implements DriveInterface
         $token = $this->getToken();
         $url = self::API_BASE . "/{$driveId}/files/{$fileId}/{$type}";
 
-        $response = $this->http->get($url, [
-            'headers' => ['Authorization' => "Bearer {$token}"],
-            'stream' => true,
-        ]);
+        try {
+            $response = $this->http->get($url, [
+                'headers' => ['Authorization' => "Bearer {$token}"],
+                'stream' => true,
+            ]);
+        } catch (\GuzzleHttp\Exception\BadResponseException $e) {
+            http_response_code($e->getResponse()->getStatusCode());
+            exit;
+        }
 
         $contentType = $response->getHeaderLine('Content-Type') ?: 'application/octet-stream';
         header("Content-Type: {$contentType}");

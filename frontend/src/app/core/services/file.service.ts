@@ -58,6 +58,13 @@ export class FileService {
     }
   }
 
+  async loadFavorites(): Promise<DriveFile[]> {
+    const res = await firstValueFrom(
+      this.http.get<ApiResponse<DriveFile[]>>('/api/favorites')
+    );
+    return res.data;
+  }
+
   async search(query: string): Promise<DriveFile[]> {
     const res = await firstValueFrom(
       this.http.get<ApiResponse<DriveFile[]>>('/api/search', { params: { q: query } })
@@ -97,6 +104,12 @@ export class FileService {
 
   navigateToFolder(id: string, name: string): void {
     const crumbs = this.breadcrumb();
+    const isVirtual = crumbs.length > 0 && crumbs[0].id.startsWith('__');
+    if (isVirtual) {
+      this.breadcrumb.set(id === '1' ? [{ id: '1', name: 'My Drive' }] : [{ id: '1', name: 'My Drive' }, { id, name }]);
+      this.currentFolderId.set(id);
+      return;
+    }
     const existingIdx = crumbs.findIndex(c => c.id === id);
     if (existingIdx >= 0) {
       this.breadcrumb.set(crumbs.slice(0, existingIdx + 1));

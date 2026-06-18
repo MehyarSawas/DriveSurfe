@@ -122,11 +122,12 @@
 .filter-select {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  padding: 6px 28px 6px 10px;
   font-size: 13px;
   color: var(--color-text);
   background: var(--color-surface);
   cursor: pointer;
+  appearance: auto;
 }
 
 .icon-btn.active {

@@ -46,7 +46,10 @@ export class FileBrowserComponent implements OnInit {
   });
 
   readonly displayFiles = computed(() => {
-    return this.searchResults() ?? this.fileService.files();
+    let files = this.searchResults() ?? this.fileService.files();
+    const t = this.filterType();
+    if (t) files = files.filter(f => f.mime_type?.startsWith(t + '/'));
+    return files;
   });
 
   ngOnInit(): void {
@@ -59,7 +62,6 @@ export class FileBrowserComponent implements OnInit {
       folderId: this.fileService.currentFolderId(),
       sortBy: this.sortBy(),
       sortDir: this.sortDir(),
-      type: this.filterType() || undefined,
     });
     this.searchResults.set(null);
   }
@@ -71,6 +73,7 @@ export class FileBrowserComponent implements OnInit {
     }
     const results = await this.fileService.search(query);
     this.searchResults.set(results);
+    this.fileService.breadcrumb.set([{ id: '__search__', name: `Search: "${query}"` }]);
   }
 
   openPreview(file: DriveFile): void {
@@ -122,7 +125,6 @@ export class FileBrowserComponent implements OnInit {
 
   setFilter(type: string): void {
     this.filterType.set(type);
-    this.loadCurrentFolder();
   }
 
   async showTrash(): Promise<void> {
@@ -133,9 +135,10 @@ export class FileBrowserComponent implements OnInit {
   }
 
   async showStarred(): Promise<void> {
-    const results = await this.fileService.search('is:starred');
+    const results = await this.fileService.loadFavorites();
     this.searchResults.set(results);
     this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
+    this.fileService.currentFolderId.set('__starred__');
   }
 
   navigateToFolder(id: string, name: string): void {

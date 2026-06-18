@@ -31,7 +31,6 @@ final class FileRoutes
             $files    = $drive->listFiles($folderId, [
                 'sortBy'  => $params['sortBy'] ?? 'name',
                 'sortDir' => $params['sortDir'] ?? 'asc',
-                'type'    => $params['type'] ?? null,
             ]);
             return self::json($res, ['data' => $files]);
         })->add($auth);
@@ -71,6 +70,10 @@ final class FileRoutes
 
         $group->get('/trash', function (Request $req, Response $res) use ($drive): Response {
             return self::json($res, ['data' => $drive->listTrash()]);
+        })->add($auth);
+
+        $group->get('/favorites', function (Request $req, Response $res) use ($drive): Response {
+            return self::json($res, ['data' => $drive->listFavorites()]);
         })->add($auth);
 
         $group->get('/usage', function (Request $req, Response $res) use ($drive): Response {
