@@ -145,13 +145,9 @@ final class AuthRoutes
                 }
 
                 $passkeys   = self::loadPasskeys();
-                $publicKeyBin = $credential->publicKey instanceof \lbuchs\WebAuthn\Binary\ByteBuffer
-                    ? $credential->publicKey->getBinaryString()
-                    : (string) $credential->publicKey;
-
                 $passkeys[] = [
                     'id'        => base64_encode((string) $credIdBin),
-                    'publicKey' => base64_encode($publicKeyBin),
+                    'publicKey' => base64_encode(serialize($credential->publicKey)),
                     'counter'   => (int) ($credential->signCount ?? 0),
                     'name'      => 'Device ' . (count($passkeys) + 1),
                 ];
@@ -227,7 +223,7 @@ final class AuthRoutes
                     $clientDataJSON,
                     $authenticatorData,
                     $signature,
-                    base64_decode($passkey['publicKey']),
+                    unserialize(base64_decode($passkey['publicKey'])),
                     $challenge,
                     $passkey['counter'],
                     'preferred'
