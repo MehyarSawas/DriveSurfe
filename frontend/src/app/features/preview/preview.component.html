@@ -61,7 +61,11 @@
           Your browser does not support video playback.
         </video>
       } @else if (isPdf()) {
-        <iframe [src]="pdfSrc()" class="media-pdf" [title]="file().name"></iframe>
+        <object [attr.data]="pdfSrc()" type="application/pdf" class="media-pdf">
+          <p style="color:white;text-align:center">PDF cannot be displayed.<br>
+            <button class="btn-primary" style="margin-top:12px" (click)="download.emit(file())">Download</button>
+          </p>
+        </object>
       } @else if (!previewFailed()) {
         @if (isLoading()) {
           <div class="media-loading">
