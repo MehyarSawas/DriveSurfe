@@ -9,3 +9,14 @@ RewriteRule ^ index.php [L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.html [L]
+
+# MIME types for PWA
+AddType application/manifest+json .webmanifest
+AddType application/javascript .js
+AddType text/javascript .mjs
+
+# Service worker must be served without cache
+<FilesMatch "ngsw\.json|ngsw-worker\.js|safety-worker\.js">
+  Header set Cache-Control "no-cache, no-store, must-revalidate"
+  Header set Pragma "no-cache"
+</FilesMatch>
