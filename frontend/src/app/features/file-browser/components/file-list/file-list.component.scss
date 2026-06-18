@@ -78,24 +78,58 @@
 }
 
 .col-actions {
+  position: relative;
   display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity var(--transition);
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .action-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
 
-  svg { width: 16px; height: 16px; fill: var(--color-icon); }
-  &:hover { background: var(--color-border); }
+  svg { width: 18px; height: 18px; fill: var(--color-icon); }
+  &:hover { background: var(--color-hover); }
+}
+
+.file-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,0.15));
+  z-index: 50;
+  min-width: 150px;
+  overflow: hidden;
+  animation: dropdown-in 0.12s ease;
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--color-text);
+  transition: background var(--transition);
+
+  svg { width: 18px; height: 18px; fill: var(--color-icon); flex-shrink: 0; }
+  &:hover { background: var(--color-hover); }
   &.starred svg { fill: #fbbf24; }
-  &.danger:hover { background: #fce8e6; svg { fill: var(--color-danger); } }
+  &.danger { color: var(--color-danger); svg { fill: var(--color-danger); } }
+  &.danger:hover { background: #fce8e6; }
 }
 
 /* Mobile: collapse to icon + name + actions only */
@@ -108,16 +142,5 @@
   .col-date,
   .col-size {
     display: none;
-  }
-
-  .col-actions {
-    opacity: 1;
-  }
-}
-
-/* Touch: always show actions */
-@media (hover: none) {
-  .col-actions {
-    opacity: 1;
   }
 }

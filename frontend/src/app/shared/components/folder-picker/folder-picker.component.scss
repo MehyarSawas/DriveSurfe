@@ -1,0 +1,206 @@
+.picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 500;
+  display: flex;
+  align-items: flex-end;
+}
+
+.picker-panel {
+  width: 100%;
+  background: var(--color-surface, #fff);
+  border-radius: 16px 16px 0 0;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  animation: panel-up 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+@keyframes panel-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.picker-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 10px;
+  border-bottom: 1px solid var(--color-border, #e0e0e0);
+  flex-shrink: 0;
+
+  .icon-btn {
+    color: var(--color-icon, #555);
+    flex-shrink: 0;
+    svg { fill: currentColor; }
+    &:hover { background: var(--color-hover, #f5f5f5); }
+  }
+}
+
+.picker-breadcrumb {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.crumb-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-primary, #1a73e8);
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 4px;
+  border-radius: 4px;
+  &:hover { background: var(--color-hover, #f5f5f5); }
+}
+
+.crumb-sep {
+  color: var(--color-text-secondary, #888);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.crumb-current {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text, #333);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 4px;
+}
+
+.picker-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px 0;
+}
+
+.picker-loading {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
+}
+
+.picker-spinner, .btn-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--color-border, #e0e0e0);
+  border-top-color: var(--color-primary, #1a73e8);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.picker-empty {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--color-text-secondary, #888);
+  font-size: 13px;
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 20px;
+  color: var(--color-text, #333);
+  transition: background 0.12s;
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
+
+  @media (hover: hover) {
+    &:hover { background: var(--color-hover, #f5f5f5); }
+  }
+  &:active { background: var(--color-hover, #f5f5f5); }
+}
+
+.folder-icon {
+  width: 22px;
+  height: 22px;
+  fill: #fbbf24;
+  flex-shrink: 0;
+}
+
+.new-folder-icon {
+  width: 22px;
+  height: 22px;
+  fill: var(--color-primary, #1a73e8);
+  flex-shrink: 0;
+}
+
+.new-folder-row { color: var(--color-primary, #1a73e8); }
+
+.folder-name {
+  flex: 1;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.enter-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+  color: var(--color-icon, #555);
+
+  svg { width: 20px; height: 20px; fill: currentColor; }
+  @media (hover: hover) { &:hover { background: var(--color-hover, #f5f5f5); } }
+}
+
+.new-folder-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+
+  .icon-btn {
+    color: var(--color-icon, #555);
+    svg { fill: currentColor; }
+  }
+}
+
+.new-folder-input {
+  flex: 1;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  color: var(--color-text, #333);
+  background: var(--color-bg, #f8f9fa);
+  outline: none;
+
+  &:focus { border-color: var(--color-primary, #1a73e8); }
+}
+
+.create-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-primary, #1a73e8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  svg { width: 18px; height: 18px; fill: white; }
+  .btn-spinner { width: 16px; height: 16px; border-width: 2px; border-top-color: white; border-color: rgba(255,255,255,0.4); }
+
+  &:disabled { opacity: 0.6; }
+}

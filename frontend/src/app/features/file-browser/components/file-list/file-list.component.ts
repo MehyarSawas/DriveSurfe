@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { Component, input, output, HostListener } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { DriveFile } from '../../../../core/models/drive-file.model';
 
@@ -16,11 +16,21 @@ export class FileListComponent {
   readonly fileClick = output<DriveFile>();
   readonly fileDblClick = output<DriveFile>();
   readonly selectToggle = output<DriveFile>();
+  readonly move = output<DriveFile>();
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();
 
   readonly failedThumbs = new Set<string>();
+  openMenuId: string | null = null;
+
+  @HostListener('document:click')
+  onDocClick(): void { this.openMenuId = null; }
+
+  toggleMenu(e: Event, fileId: string): void {
+    e.stopPropagation();
+    this.openMenuId = this.openMenuId === fileId ? null : fileId;
+  }
 
   isSelected(id: string): boolean {
     return this.selectedIds().has(id);

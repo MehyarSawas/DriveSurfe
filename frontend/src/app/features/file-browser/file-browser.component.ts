@@ -12,6 +12,7 @@ import { FolderTreeComponent } from './components/folder-tree/folder-tree.compon
 import { BreadcrumbComponent } from './components/breadcrumb/breadcrumb.component';
 import { SearchBarComponent } from './components/search-bar/search-bar.component';
 import { PreviewComponent } from '../preview/preview.component';
+import { FolderPickerComponent } from '../../shared/components/folder-picker/folder-picker.component';
 
 @Component({
   selector: 'ds-file-browser',
@@ -25,6 +26,7 @@ import { PreviewComponent } from '../preview/preview.component';
     BreadcrumbComponent,
     SearchBarComponent,
     PreviewComponent,
+    FolderPickerComponent,
   ],
   templateUrl: './file-browser.component.html',
   styleUrls: ['./file-browser.component.scss'],
@@ -63,6 +65,8 @@ export class FileBrowserComponent implements OnInit {
   renameValue = signal('');
   previewFolderDirs = signal<DriveFile[]>([]);
   previewParentFolderId = signal('');
+  previewParentFolderName = signal('');
+  movingFiles = signal<DriveFile[] | null>(null);
 
   ngOnInit(): void {
     this.loadCurrentFolder();
@@ -100,9 +104,9 @@ export class FileBrowserComponent implements OnInit {
     this.previewFile.set(file);
     // Load parent folder's dirs for the move panel
     const crumbs = this.fileService.breadcrumb();
-    const parentId = crumbs.length >= 2 ? crumbs[crumbs.length - 2].id : '1';
-    this.previewParentFolderId.set(parentId);
-    this.previewFolderDirs.set(await this.fileService.fetchFolders(parentId));
+    const parentCrumb = crumbs.length >= 2 ? crumbs[crumbs.length - 2] : crumbs[0];
+    this.previewParentFolderId.set(parentCrumb?.id ?? '1');
+    this.previewParentFolderName.set(parentCrumb?.name ?? 'My Drive');
   }
 
   closePreview(): void {
@@ -176,6 +180,35 @@ export class FileBrowserComponent implements OnInit {
     }
   }
 
+  openMoveForFile(file: DriveFile): void {
+    this.movingFiles.set([file]);
+  }
+
+  openBulkMove(): void {
+    const ids = [...this.fileService.selectedIds()];
+    const files = ids.map(id => this.displayFiles().find(f => f.id === id)).filter(Boolean) as DriveFile[];
+    this.movingFiles.set(files);
+  }
+
+  async onPickerFolderSelected(folder: DriveFile): Promise<void> {
+    const files = this.movingFiles();
+    this.movingFiles.set(null);
+    if (!files) return;
+    await Promise.all(files.map(f => this.fileService.moveFile(f.id, folder.id)));
+    this.fileService.clearSelection();
+    // If moved from preview context, advance preview
+    if (files.length === 1 && this.previewFile()?.id === files[0].id) {
+      const remaining = this.mediaFiles();
+      if (remaining.length === 0) {
+        this.closePreview();
+      } else {
+        const idx = Math.min(this.previewIndex(), remaining.length - 1);
+        this.previewIndex.set(idx);
+        this.previewFile.set(remaining[idx]);
+      }
+    }
+  }
+
   async bulkDelete(): Promise<void> {
     const ids = [...this.fileService.selectedIds()];
     await Promise.all(ids.map(id => this.fileService.delete(id)));
@@ -211,15 +244,8 @@ export class FileBrowserComponent implements OnInit {
   }
 
   async handleMove(event: {file: DriveFile, folderId: string}): Promise<void> {
-    await this.fileService.moveFile(event.file.id, event.folderId);
-    const files = this.mediaFiles();
-    if (files.length === 0) {
-      this.closePreview();
-    } else {
-      const idx = Math.min(this.previewIndex(), files.length - 1);
-      this.previewIndex.set(idx);
-      this.previewFile.set(files[idx]);
-    }
+    this.movingFiles.set([event.file]);
+    await this.onPickerFolderSelected({ id: event.folderId } as DriveFile);
   }
 
   async handleCreateFolderFromPreview(event: {parentId: string, name: string, then: (f: DriveFile) => void}): Promise<void> {

@@ -5,13 +5,14 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DriveFile } from '../../core/models/drive-file.model';
+import { FolderPickerComponent } from '../../shared/components/folder-picker/folder-picker.component';
 
 type DeletePhase = 'idle' | 'confirming' | 'countdown';
 
 @Component({
   selector: 'ds-preview',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, FolderPickerComponent],
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],
 })
@@ -21,7 +22,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly file = input.required<DriveFile>();
   readonly hasPrev = input(false);
   readonly hasNext = input(false);
-  readonly folderDirs = input<DriveFile[]>([]);
   readonly currentFolderId = input('');
 
   readonly close = output<void>();
@@ -38,10 +38,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly deletePhase = signal<DeletePhase>('idle');
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
-  readonly newFolderInputOpen = signal(false);
-  readonly newFolderName = signal('');
-  readonly localExtraFolders = signal<DriveFile[]>([]);
-  readonly allFolderDirs = computed(() => [...this.folderDirs(), ...this.localExtraFolders()]);
 
   // Swipe state
   private touchStartX = 0;
@@ -80,8 +76,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
       this.folderPanelOpen.set(false);
-      this.newFolderInputOpen.set(false);
-      this.newFolderName.set('');
       if (this.isImage()) this.isLoading.set(true);
     });
   }
@@ -94,23 +88,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   onImageLoad(): void { this.isLoading.set(false); }
   onImageError(): void { this.isLoading.set(false); }
 
-  moveToFolder(folder: DriveFile): void {
+  onFolderSelected(folder: DriveFile): void {
     this.moveFile.emit({ file: this.file(), folderId: folder.id });
     this.folderPanelOpen.set(false);
-  }
-
-  submitNewFolder(): void {
-    const name = this.newFolderName().trim();
-    if (!name) return;
-    this.createFolder.emit({
-      parentId: this.currentFolderId(),
-      name,
-      then: (folder) => {
-        this.localExtraFolders.update(f => [...f, folder]);
-      }
-    });
-    this.newFolderInputOpen.set(false);
-    this.newFolderName.set('');
   }
 
   ngOnDestroy(): void {

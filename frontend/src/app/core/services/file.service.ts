@@ -99,12 +99,14 @@ export class FileService {
     }
   }
 
-  async createFolder(parentId: string, name: string): Promise<DriveFile> {
+  async createFolder(parentId: string, name: string, addToFileList = true): Promise<DriveFile> {
     const res = await firstValueFrom(
       this.http.post<ApiResponse<DriveFile>>('/api/folders', { parent_id: parentId, name })
     );
     const folder = res.data;
-    this.files.update(files => [folder, ...files]);
+    if (addToFileList) {
+      this.files.update(files => [folder, ...files]);
+    }
     return folder;
   }
 
