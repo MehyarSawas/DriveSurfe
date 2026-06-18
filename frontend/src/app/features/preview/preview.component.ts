@@ -76,16 +76,21 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   });
 
   constructor(private zone: NgZone, private el: ElementRef) {
+    let prevFileId = '';
     effect(() => {
-      this.file();
+      const f = this.file();
+      const isNewFile = f.id !== prevFileId;
+      prevFileId = f.id;
       this.zoom.set(1);
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
       this.folderPanelOpen.set(false);
       this.isPinching = false;
       this.isSwiping = false;
-      this.previewFailed.set(false);
-      if (!this.isVideo()) this.isLoading.set(true);
+      if (isNewFile) {
+        this.previewFailed.set(false);
+        if (!this.isVideo()) this.isLoading.set(true);
+      }
     });
   }
 
