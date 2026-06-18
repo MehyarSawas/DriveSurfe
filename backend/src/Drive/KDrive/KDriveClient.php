@@ -96,21 +96,8 @@ final class KDriveClient implements DriveInterface
     public function listFavorites(): array
     {
         $driveId = $this->getDriveId();
-
-        // Try 1: dedicated favorites endpoint
-        try {
-            $data = $this->get("{$driveId}/files/favorites", ['per_page' => 100]);
-            return $this->normalizeFiles($data['data'] ?? []);
-        } catch (RuntimeException) {}
-
-        // Try 2: search with a dot (matches almost all files) filtered by is_favorite
-        try {
-            $data = $this->get("{$driveId}/files/search", ['query' => '.', 'is_favorite' => 1, 'per_page' => 100]);
-            $files = $this->normalizeFiles($data['data'] ?? []);
-            return array_values(array_filter($files, fn($f) => $f['is_favorite']));
-        } catch (RuntimeException) {}
-
-        return [];
+        $data = $this->get("{$driveId}/files/favorites", ['per_page' => 100], 'https://api.infomaniak.com/3/drive');
+        return $this->normalizeFiles($data['data'] ?? []);
     }
 
     public function listTrash(): array
