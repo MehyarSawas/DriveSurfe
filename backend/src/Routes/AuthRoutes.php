@@ -71,8 +71,9 @@ final class AuthRoutes
             $webAuthn = self::makeWebAuthn();
             $excludeIds = array_map(fn($p) => base64_decode($p['id']), $passkeys);
 
+            $userId = random_bytes(16);
             $createArgs = $webAuthn->getCreateArgs(
-                random_bytes(16),
+                $userId,
                 'owner',
                 'DriveSurfe Owner',
                 60,
@@ -82,9 +83,35 @@ final class AuthRoutes
                 $excludeIds
             );
 
-            $session->update(['webauthn_challenge' => base64_encode($webAuthn->getChallenge()->getBinaryString())]);
+            $challengeBin = $webAuthn->getChallenge()->getBinaryString();
+            $session->update(['webauthn_challenge' => base64_encode($challengeBin)]);
 
-            $res->getBody()->write(json_encode($createArgs->publicKey, JSON_THROW_ON_ERROR));
+            $pk = $createArgs->publicKey;
+            $payload = [
+                'challenge'               => self::b64urlEncode($challengeBin),
+                'rp'                      => ['id' => $pk->rp->id, 'name' => $pk->rp->name],
+                'user'                    => [
+                    'id'          => self::b64urlEncode($userId),
+                    'name'        => $pk->user->name,
+                    'displayName' => $pk->user->displayName,
+                ],
+                'pubKeyCredParams'        => $pk->pubKeyCredParams,
+                'authenticatorSelection'  => $pk->authenticatorSelection,
+                'timeout'                 => $pk->timeout,
+                'attestation'             => $pk->attestation,
+            ];
+            if (!empty($pk->excludeCredentials)) {
+                $payload['excludeCredentials'] = array_map(fn($c) => [
+                    'type' => $c->type,
+                    'id'   => self::b64urlEncode(
+                        $c->id instanceof \lbuchs\WebAuthn\Binary\ByteBuffer
+                            ? $c->id->getBinaryString()
+                            : (string) $c->id
+                    ),
+                ], $pk->excludeCredentials);
+            }
+
+            $res->getBody()->write(json_encode($payload, JSON_THROW_ON_ERROR));
             return $res->withHeader('Content-Type', 'application/json');
         });
 
@@ -143,9 +170,19 @@ final class AuthRoutes
             // Empty allowedCredentials = browser discovers passkeys for the domain (resident key flow)
             $getArgs = $webAuthn->getGetArgs([], 60, true, false, false, false, true, 'preferred');
 
-            $session->update(['webauthn_challenge' => base64_encode($webAuthn->getChallenge()->getBinaryString())]);
+            $challengeBin = $webAuthn->getChallenge()->getBinaryString();
+            $session->update(['webauthn_challenge' => base64_encode($challengeBin)]);
 
-            $res->getBody()->write(json_encode($getArgs->publicKey, JSON_THROW_ON_ERROR));
+            $pk = $getArgs->publicKey;
+            $payload = [
+                'challenge'        => self::b64urlEncode($challengeBin),
+                'timeout'          => $pk->timeout,
+                'rpId'             => $pk->rpId,
+                'userVerification' => $pk->userVerification,
+                'allowCredentials' => [],
+            ];
+
+            $res->getBody()->write(json_encode($payload, JSON_THROW_ON_ERROR));
             return $res->withHeader('Content-Type', 'application/json');
         });
 
@@ -227,6 +264,11 @@ final class AuthRoutes
     private static function savePasskeys(array $passkeys): void
     {
         file_put_contents(self::PASSKEYS_FILE, json_encode($passkeys, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+    }
+
+    private static function b64urlEncode(string $binary): string
+    {
+        return rtrim(strtr(base64_encode($binary), '+/', '-_'), '=');
     }
 
     private static function b64urlDecode(string $input): string
