@@ -44,12 +44,14 @@ final class FileRoutes
         })->add($auth);
 
         $group->get('/files/{id}/thumbnail', function (Request $req, Response $res, array $args) use ($drive): Response {
-            $drive->proxyFile($args['id'], 'thumbnail');
+            $inTrash = ($req->getQueryParams()['context'] ?? '') === 'trash';
+            $drive->proxyFile($args['id'], 'thumbnail', $inTrash);
             return $res;
         })->add($auth);
 
         $group->get('/files/{id}/preview', function (Request $req, Response $res, array $args) use ($drive): Response {
-            $drive->proxyFile($args['id'], 'preview');
+            $inTrash = ($req->getQueryParams()['context'] ?? '') === 'trash';
+            $drive->proxyFile($args['id'], 'preview', $inTrash);
             return $res;
         })->add($auth);
 

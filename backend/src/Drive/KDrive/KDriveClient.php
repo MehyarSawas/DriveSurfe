@@ -162,7 +162,7 @@ final class KDriveClient implements DriveInterface
     {
         $driveId = $this->getDriveId();
         $data = $this->get("{$driveId}/trash", ['per_page' => 100, 'with' => 'is_favorite']);
-        return $this->normalizeFiles($data['data'] ?? []);
+        return $this->normalizeFiles($data['data'] ?? [], true);
     }
 
     public function getUsage(): array
@@ -223,11 +223,12 @@ final class KDriveClient implements DriveInterface
         }
     }
 
-    public function proxyFile(string $fileId, string $type = 'thumbnail'): void
+    public function proxyFile(string $fileId, string $type = 'thumbnail', bool $inTrash = false): void
     {
         $driveId = $this->getDriveId();
         $token = $this->getToken();
-        $url = self::API_BASE . "/{$driveId}/files/{$fileId}/{$type}";
+        $segment = $inTrash ? 'trash' : 'files';
+        $url = self::API_BASE . "/{$driveId}/{$segment}/{$fileId}/{$type}";
 
         try {
             $response = $this->http->get($url, [
@@ -329,15 +330,17 @@ final class KDriveClient implements DriveInterface
         }
     }
 
-    private function normalizeFiles(array $files): array
+    private function normalizeFiles(array $files, bool $inTrash = false): array
     {
-        return array_map(fn($f) => $this->normalizeFile($f), $files);
+        return array_map(fn($f) => $this->normalizeFile($f, $inTrash), $files);
     }
 
-    private function normalizeFile(array $f): array
+    private function normalizeFile(array $f, bool $inTrash = false): array
     {
+        $id = (string) ($f['id'] ?? '');
+        $ctx = $inTrash ? '?context=trash' : '';
         return [
-            'id' => (string) ($f['id'] ?? ''),
+            'id' => $id,
             'name' => $f['name'] ?? '',
             'type' => $f['type'] ?? 'file',
             'mime_type' => $f['mime_type'] ?? '',
@@ -347,8 +350,8 @@ final class KDriveClient implements DriveInterface
             'is_dir' => ($f['type'] ?? '') === 'dir',
             'is_favorite' => $f['is_favorite'] ?? false,
             'parent_id' => (string) ($f['parent_id'] ?? '1'),
-            'thumbnail_url' => isset($f['id']) ? "/api/files/{$f['id']}/thumbnail" : null,
-            'preview_url' => isset($f['id']) ? "/api/files/{$f['id']}/preview" : null,
+            'thumbnail_url' => $id ? "/api/files/{$id}/thumbnail{$ctx}" : null,
+            'preview_url'   => $id ? "/api/files/{$id}/preview{$ctx}" : null,
             'extension' => strtolower(pathinfo($f['name'] ?? '', PATHINFO_EXTENSION)),
         ];
     }
