@@ -133,7 +133,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchStart(e: TouchEvent): void {
-    if (this.isPdf()) return;
     if (e.touches.length === 2) {
       this.isPinching = true;
       this.isSwiping = false;
@@ -152,7 +151,19 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchMove(e: TouchEvent): void {
-    if (this.isPdf()) return;
+    if (this.isPdf()) {
+      // Only track horizontal movement; don't preventDefault so PDF scrolls vertically
+      if (!this.isSwiping) return;
+      const t = e.touches[0];
+      const dx = t.clientX - this.touchStartX;
+      const dy = t.clientY - this.touchStartY;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        e.preventDefault();
+        this.touchCurrentX = t.clientX;
+        this.swipeOffsetX.set(dx);
+      }
+      return;
+    }
     e.preventDefault();
     if (this.isPinching && e.touches.length === 2) {
       const [t1, t2] = [e.touches[0], e.touches[1]];
@@ -182,7 +193,28 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchEnd(e?: TouchEvent): void {
-    if (this.isPdf()) return;
+    if (this.isPdf()) {
+      if (!this.isSwiping) return;
+      this.isSwiping = false;
+      const dx = this.touchCurrentX - this.touchStartX;
+      this.isTransitioning.set(true);
+      if (Math.abs(dx) > 80) {
+        if (dx < 0 && this.hasNext()) {
+          this.swipeOffsetX.set(-window.innerWidth);
+          setTimeout(() => { this.swipeOffsetX.set(0); this.isTransitioning.set(false); this.next.emit(); }, 250);
+        } else if (dx > 0 && this.hasPrev()) {
+          this.swipeOffsetX.set(window.innerWidth);
+          setTimeout(() => { this.swipeOffsetX.set(0); this.isTransitioning.set(false); this.prev.emit(); }, 250);
+        } else {
+          this.swipeOffsetX.set(0);
+          this.isTransitioning.set(false);
+        }
+      } else {
+        this.swipeOffsetX.set(0);
+        this.isTransitioning.set(false);
+      }
+      return;
+    }
     if (this.isPinching) {
       if (!e || e.touches.length < 2) this.isPinching = false;
       return;
