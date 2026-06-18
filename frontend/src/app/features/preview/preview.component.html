@@ -1,4 +1,4 @@
-<div class="preview-overlay" (click)="folderPanelOpen() ? folderPanelOpen.set(false) : close.emit()">
+<div class="preview-overlay" (click)="close.emit()">
 
   <!-- Header -->
   <header class="preview-header" (click)="$event.stopPropagation()">
@@ -109,6 +109,7 @@
       [startFolderName]="'Move to…'"
       (folderSelected)="onFolderSelected($event)"
       (closed)="folderPanelOpen.set(false)"
+      (click)="$event.stopPropagation()"
     />
   }
 
