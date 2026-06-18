@@ -9,24 +9,34 @@ use RuntimeException;
 
 final class KDriveClient implements DriveInterface
 {
-    private const API_BASE = 'https://api.infomaniak.com/2/drive';
+    private const API_V2 = 'https://api.infomaniak.com/2/drive';
+    private const API_V3 = 'https://api.infomaniak.com/3/drive';
+    private const API_BASE = self::API_V2;
 
     public function __construct(private readonly Client $http) {}
 
     public function listFiles(string $folderId = '1', array $options = []): array
     {
-        $driveId = $this->getDriveId();
-        $params = [
-            'per_page' => 100,
-            'order_by' => $options['sortBy'] ?? 'name',
-            'order_for' => [
-                $options['sortBy'] ?? 'name' => $options['sortDir'] ?? 'asc',
-            ],
-            'with' => 'is_favorite',
-        ];
+        $driveId  = $this->getDriveId();
+        $sortBy   = $options['sortBy'] ?? 'name';
+        $sortDir  = $options['sortDir'] ?? 'asc';
+        $files    = [];
+        $cursor   = null;
 
-        $data = $this->get("{$driveId}/files/{$folderId}/files", $params);
-        return $this->normalizeFiles($data['data'] ?? []);
+        do {
+            $params = [
+                'order_by'  => $sortBy,
+                'order_for' => [$sortBy => $sortDir],
+                'with'      => 'is_favorite',
+            ];
+            if ($cursor) $params['cursor'] = $cursor;
+
+            $data   = $this->get("{$driveId}/files/{$folderId}/files", $params, self::API_V3);
+            $files  = array_merge($files, $data['data'] ?? []);
+            $cursor = ($data['has_more'] ?? false) ? ($data['cursor'] ?? null) : null;
+        } while ($cursor);
+
+        return $this->normalizeFiles($files);
     }
 
     public function getFile(string $fileId): array
@@ -39,8 +49,18 @@ final class KDriveClient implements DriveInterface
     public function getFolderTree(): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->get("{$driveId}/files/1/files", ['type' => 'dir', 'per_page' => 500]);
-        return $this->buildTree($data['data'] ?? [], '1');
+        $dirs    = [];
+        $cursor  = null;
+
+        do {
+            $params = ['type' => 'dir'];
+            if ($cursor) $params['cursor'] = $cursor;
+            $data   = $this->get("{$driveId}/files/1/files", $params, self::API_V3);
+            $dirs   = array_merge($dirs, $data['data'] ?? []);
+            $cursor = ($data['has_more'] ?? false) ? ($data['cursor'] ?? null) : null;
+        } while ($cursor);
+
+        return $this->buildTree($dirs, '1');
     }
 
     public function search(string $query): array
