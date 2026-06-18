@@ -127,7 +127,8 @@ final class KDriveClient implements DriveInterface
     {
         $driveId = $this->getDriveId();
         $data = $this->post("{$driveId}/files/{$fileId}/move/{$destinationFolderId}", [], self::API_V3);
-        return isset($data['data']) ? $this->normalizeFile($data['data']) : [];
+        // Return raw kDrive response for debugging
+        return $data;
     }
 
     public function renameFile(string $fileId, string $name): array
@@ -289,9 +290,13 @@ final class KDriveClient implements DriveInterface
         try {
             $response = $this->http->post(($baseUrl ?? self::API_BASE) . "/{$path}", [
                 'headers' => ['Authorization' => "Bearer {$token}", 'Content-Type' => 'application/json'],
-                'json' => $body ?: null,
+                'json' => $body,
             ]);
-            return json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $data = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            if (($data['result'] ?? '') === 'error') {
+                throw new RuntimeException('kDrive: ' . json_encode($data['error'] ?? 'unknown'));
+            }
+            return $data;
         } catch (GuzzleException $e) {
             throw new RuntimeException("kDrive API error: " . $e->getMessage(), 0, $e);
         }
