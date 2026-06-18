@@ -81,9 +81,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     return this.isVideo() ? `/api/files/${f.id}/download` : `/api/files/${f.id}/preview`;
   });
 
-  readonly pdfSrc = computed((): SafeResourceUrl =>
-    this.sanitizer.bypassSecurityTrustResourceUrl(`/api/files/${this.file().id}/download`)
-  );
+  readonly pdfDataUrl = signal<SafeResourceUrl | null>(null);
 
   constructor(private zone: NgZone, private el: ElementRef, private sanitizer: DomSanitizer) {
     let prevFileId = '';
@@ -99,9 +97,30 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.isSwiping = false;
       if (isNewFile) {
         this.previewFailed.set(false);
-        if (!this.isVideo() && !this.isPdf()) this.isLoading.set(true);
+        if (this.isPdf()) {
+          this.pdfDataUrl.set(null);
+          this.loadPdfDataUrl(f.id);
+        } else if (!this.isVideo()) {
+          this.isLoading.set(true);
+        }
       }
     });
+  }
+
+  private loadPdfDataUrl(fileId: string): void {
+    fetch(`/api/files/${fileId}/download`)
+      .then(r => r.blob())
+      .then(blob => new Promise<string>(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      }))
+      .then(dataUrl => {
+        this.zone.run(() =>
+          this.pdfDataUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(dataUrl))
+        );
+      })
+      .catch(() => {});
   }
 
   ngAfterViewInit(): void {
