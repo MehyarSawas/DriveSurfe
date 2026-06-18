@@ -12,12 +12,15 @@
   padding: 8px;
   background: var(--color-surface);
 
-  &:hover {
-    background: var(--color-hover);
-    box-shadow: var(--shadow-sm);
+  /* hover only on pointer devices — prevents iOS double-tap */
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--color-hover);
+      box-shadow: var(--shadow-sm);
 
-    .actions { opacity: 1; }
-    .select-circle { opacity: 1; }
+      .menu-btn { opacity: 1; }
+      .select-circle { opacity: 1; }
+    }
   }
 
   &.selected {
@@ -32,6 +35,7 @@
   }
 }
 
+/* Select circle */
 .select-circle {
   position: absolute;
   top: 10px;
@@ -39,14 +43,14 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.85);
+  border: 2px solid rgba(255,255,255,0.9);
   background: rgba(0,0,0,0.25);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   transition: opacity var(--transition), background var(--transition);
-  z-index: 2;
+  z-index: 3;
   box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 
   &.checked {
@@ -61,11 +65,96 @@
     fill: white;
   }
 
-  @media (max-width: 768px) {
+  /* Always visible on touch devices */
+  @media (hover: none) {
     opacity: 1;
   }
 }
 
+/* Three-dot menu button */
+.menu-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  transition: background var(--transition), opacity var(--transition);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  opacity: 0.7;
+
+  svg {
+    width: 18px;
+    height: 18px;
+    fill: #555;
+  }
+
+  &:hover {
+    background: white;
+    opacity: 1;
+  }
+
+  /* Always fully visible on touch */
+  @media (hover: none) {
+    opacity: 1;
+  }
+}
+
+/* Dropdown menu */
+.file-menu {
+  position: absolute;
+  top: 36px;
+  right: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+  z-index: 100;
+  min-width: 140px;
+  overflow: hidden;
+  animation: menu-in 0.1s ease;
+}
+
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--color-text);
+  transition: background var(--transition);
+  white-space: nowrap;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    fill: var(--color-icon);
+    flex-shrink: 0;
+  }
+
+  &:hover { background: var(--color-hover); }
+
+  &.starred svg { fill: #fbbf24; }
+
+  &.danger {
+    color: var(--color-danger);
+    svg { fill: var(--color-danger); }
+    &:hover { background: #fce8e6; }
+  }
+}
+
+/* Thumbnail */
 .thumb {
   position: relative;
   width: 100%;
@@ -108,11 +197,7 @@
   align-items: center;
   justify-content: center;
 
-  svg {
-    width: 16px;
-    height: 16px;
-    fill: white;
-  }
+  svg { width: 16px; height: 16px; fill: white; }
 }
 
 .file-info {
@@ -133,42 +218,4 @@
 .file-meta {
   font-size: 11px;
   color: var(--color-text-secondary);
-}
-
-.actions {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity var(--transition);
-  background: rgba(255,255,255,0.9);
-  border-radius: var(--radius-sm);
-  padding: 2px;
-}
-
-.action-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background var(--transition);
-
-  svg {
-    width: 16px;
-    height: 16px;
-    fill: var(--color-icon);
-  }
-
-  &:hover { background: var(--color-hover); }
-
-  &.starred svg { fill: #fbbf24; }
-
-  &.danger:hover {
-    background: #fce8e6;
-    svg { fill: var(--color-danger); }
-  }
 }

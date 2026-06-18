@@ -1,4 +1,6 @@
-import { Component, OnInit, inject, signal, computed, effect, HostListener } from '@angular/core';
+import {
+  Component, OnInit, inject, signal, computed, HostListener
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
@@ -35,6 +37,7 @@ export class FileBrowserComponent implements OnInit {
   readonly sortBy = signal<SortBy>('name');
   readonly sortDir = signal<SortDir>('asc');
   readonly filterType = signal<string>('');
+  readonly filterMenuOpen = signal(false);
   readonly sidebarOpen = signal(window.innerWidth > 768);
   readonly previewFile = signal<DriveFile | null>(null);
   readonly previewIndex = signal(0);
@@ -50,6 +53,8 @@ export class FileBrowserComponent implements OnInit {
     if (t) files = files.filter(f => f.is_dir || f.type === 'dir' || f.mime_type?.startsWith(t + '/'));
     return files;
   });
+
+  readonly selectedCount = computed(() => this.fileService.selectedIds().size);
 
   ngOnInit(): void {
     this.loadCurrentFolder();
@@ -124,6 +129,12 @@ export class FileBrowserComponent implements OnInit {
 
   setFilter(type: string): void {
     this.filterType.set(type);
+    this.filterMenuOpen.set(false);
+  }
+
+  toggleFilterMenu(e: Event): void {
+    e.stopPropagation();
+    this.filterMenuOpen.update(v => !v);
   }
 
   async showTrash(): Promise<void> {
@@ -152,13 +163,31 @@ export class FileBrowserComponent implements OnInit {
     }
   }
 
+  async bulkDelete(): Promise<void> {
+    const ids = [...this.fileService.selectedIds()];
+    await Promise.all(ids.map(id => this.fileService.delete(id)));
+    this.fileService.clearSelection();
+  }
+
+  bulkDownload(): void {
+    this.fileService.selectedIds().forEach(id => {
+      const file = this.displayFiles().find(f => f.id === id);
+      if (file) this.fileService.downloadFile(file.id, file.name);
+    });
+  }
+
   logout(): void {
     this.auth.logout();
   }
 
+  @HostListener('document:click')
+  onDocClick(): void {
+    this.filterMenuOpen.set(false);
+  }
+
   @HostListener('window:keydown', ['$event'])
   onKeyDown(e: KeyboardEvent): void {
-    if (this.previewFile()) return; // Preview handles its own keys
+    if (this.previewFile()) return;
 
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const selected = this.fileService.selectedIds();

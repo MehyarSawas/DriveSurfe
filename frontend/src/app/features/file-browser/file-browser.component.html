@@ -51,28 +51,74 @@
   <main class="main-content">
     <!-- Toolbar -->
     <header class="toolbar">
-      <button class="icon-btn menu-btn" (click)="sidebarOpen.update(v => !v)" title="Toggle sidebar">
-        <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
-      </button>
-
-      <ds-search-bar (search)="onSearch($event)" />
-
-      <div class="toolbar-actions">
-        <!-- Filter -->
-        <select class="filter-select" [value]="filterType()" (change)="setFilter($any($event.target).value)">
-          <option value="">All files</option>
-          <option value="image">Images</option>
-          <option value="video">Videos</option>
-        </select>
-
-        <!-- View toggle -->
-        <button class="icon-btn" [class.active]="viewMode() === 'grid'" (click)="viewMode.set('grid')" title="Grid view">
-          <svg viewBox="0 0 24 24"><path d="M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z"/></svg>
+      @if (selectedCount() === 0) {
+        <!-- Normal toolbar -->
+        <button class="icon-btn menu-btn" (click)="sidebarOpen.update(v => !v)" title="Toggle sidebar">
+          <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
         </button>
-        <button class="icon-btn" [class.active]="viewMode() === 'list'" (click)="viewMode.set('list')" title="List view">
-          <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
-        </button>
-      </div>
+
+        <ds-search-bar (search)="onSearch($event)" />
+
+        <div class="toolbar-actions">
+          <!-- Filter icon button -->
+          <div class="filter-wrapper" (click)="$event.stopPropagation()">
+            <button class="icon-btn filter-btn" [class.active]="filterType()" (click)="toggleFilterMenu($event)" title="Filter">
+              <svg viewBox="0 0 24 24"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+              @if (filterType()) {
+                <span class="filter-dot"></span>
+              }
+            </button>
+            @if (filterMenuOpen()) {
+              <div class="filter-dropdown">
+                <button class="filter-option" [class.selected]="filterType() === ''" (click)="setFilter('')">
+                  <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
+                  All files
+                  @if (filterType() === '') { <svg class="check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> }
+                </button>
+                <button class="filter-option" [class.selected]="filterType() === 'image'" (click)="setFilter('image')">
+                  <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                  Images
+                  @if (filterType() === 'image') { <svg class="check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> }
+                </button>
+                <button class="filter-option" [class.selected]="filterType() === 'video'" (click)="setFilter('video')">
+                  <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                  Videos
+                  @if (filterType() === 'video') { <svg class="check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> }
+                </button>
+              </div>
+            }
+          </div>
+
+          <!-- View toggle: single button on mobile, two on desktop -->
+          <button class="icon-btn view-toggle-mobile" (click)="viewMode.set(viewMode() === 'grid' ? 'list' : 'grid')" [title]="viewMode() === 'grid' ? 'List view' : 'Grid view'">
+            @if (viewMode() === 'grid') {
+              <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+            } @else {
+              <svg viewBox="0 0 24 24"><path d="M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z"/></svg>
+            }
+          </button>
+          <button class="icon-btn view-toggle-desktop" [class.active]="viewMode() === 'grid'" (click)="viewMode.set('grid')" title="Grid view">
+            <svg viewBox="0 0 24 24"><path d="M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z"/></svg>
+          </button>
+          <button class="icon-btn view-toggle-desktop" [class.active]="viewMode() === 'list'" (click)="viewMode.set('list')" title="List view">
+            <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+          </button>
+        </div>
+      } @else {
+        <!-- Bulk action toolbar -->
+        <span class="bulk-count">{{ selectedCount() }} selected</span>
+        <div class="bulk-actions">
+          <button class="icon-btn" (click)="bulkDownload()" title="Download selected">
+            <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          </button>
+          <button class="icon-btn danger" (click)="bulkDelete()" title="Delete selected">
+            <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          </button>
+          <button class="icon-btn" (click)="fileService.clearSelection()" title="Deselect all">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+      }
     </header>
 
     <!-- Breadcrumb -->
@@ -83,25 +129,25 @@
 
     <!-- Sort bar -->
     <div class="sort-bar">
-        <button class="sort-btn" (click)="toggleSort('name')">
-          Name
-          @if (sortBy() === 'name') {
-            <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
-          }
-        </button>
-        <button class="sort-btn" (click)="toggleSort('modified_at')">
-          Modified
-          @if (sortBy() === 'modified_at') {
-            <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
-          }
-        </button>
-        <button class="sort-btn" (click)="toggleSort('size')">
-          Size
-          @if (sortBy() === 'size') {
-            <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
-          }
-        </button>
-      </div>
+      <button class="sort-btn" (click)="toggleSort('name')">
+        Name
+        @if (sortBy() === 'name') {
+          <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+        }
+      </button>
+      <button class="sort-btn" (click)="toggleSort('modified_at')">
+        Modified
+        @if (sortBy() === 'modified_at') {
+          <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+        }
+      </button>
+      <button class="sort-btn" (click)="toggleSort('size')">
+        Size
+        @if (sortBy() === 'size') {
+          <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+        }
+      </button>
+    </div>
 
     <!-- File content -->
     <div class="file-content">
@@ -119,7 +165,6 @@
           [files]="displayFiles()"
           [selectedIds]="fileService.selectedIds()"
           (fileClick)="openPreview($event)"
-          (fileDblClick)="openPreview($event)"
           (selectToggle)="fileService.toggleSelect($event.id)"
           (favorite)="toggleFavorite($event)"
           (download)="fileService.downloadFile($event.id, $event.name)"

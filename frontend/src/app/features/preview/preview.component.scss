@@ -171,10 +171,34 @@
   text-align: center;
 }
 
+/* Image loading */
+.media-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255,255,255,0.2);
+  border-top-color: rgba(255,255,255,0.8);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.hidden { visibility: hidden; }
+
 /* Delete countdown toast */
 .delete-toast {
   position: absolute;
-  bottom: 72px;
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(20, 20, 20, 0.88);

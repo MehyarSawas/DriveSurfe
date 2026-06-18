@@ -47,7 +47,15 @@
       [class.transitioning]="isTransitioning()"
     >
       @if (isImage()) {
-        <img [src]="previewSrc()" [alt]="file().name" class="media-img" (dblclick)="resetZoom()" />
+        @if (isLoading()) {
+          <div class="media-loading">
+            <div class="media-spinner"></div>
+          </div>
+        }
+        <img [src]="previewSrc()" [alt]="file().name" class="media-img"
+             [class.hidden]="isLoading()"
+             (load)="onImageLoad()" (error)="onImageError()"
+             (dblclick)="resetZoom()" />
       } @else if (isVideo()) {
         <video [src]="previewSrc()" controls playsinline preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'">
           Your browser does not support video playback.

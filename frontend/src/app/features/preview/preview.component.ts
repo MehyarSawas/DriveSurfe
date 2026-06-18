@@ -29,6 +29,7 @@ export class PreviewComponent implements OnDestroy {
   readonly delete = output<DriveFile>();
 
   readonly zoom = signal(1);
+  readonly isLoading = signal(false);
   readonly deletePhase = signal<DeletePhase>('idle');
   readonly countdown = signal(10);
 
@@ -67,8 +68,12 @@ export class PreviewComponent implements OnDestroy {
       this.zoom.set(1);
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
+      if (this.isImage()) this.isLoading.set(true);
     });
   }
+
+  onImageLoad(): void { this.isLoading.set(false); }
+  onImageError(): void { this.isLoading.set(false); }
 
   ngOnDestroy(): void {
     this.clearCountdown();

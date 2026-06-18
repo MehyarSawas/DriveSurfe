@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { Component, input, output, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DriveFile } from '../../../../core/models/drive-file.model';
 
@@ -14,16 +14,22 @@ export class FileGridComponent {
   readonly selectedIds = input<Set<string>>(new Set());
 
   readonly fileClick = output<DriveFile>();
-  readonly fileDblClick = output<DriveFile>();
   readonly selectToggle = output<DriveFile>();
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();
 
   readonly failedThumbs = new Set<string>();
+  openMenuId: string | null = null;
 
-  onCardClick(file: DriveFile): void {
-    this.fileClick.emit(file);
+  @HostListener('document:click')
+  onDocClick(): void {
+    this.openMenuId = null;
+  }
+
+  toggleMenu(e: Event, fileId: string): void {
+    e.stopPropagation();
+    this.openMenuId = this.openMenuId === fileId ? null : fileId;
   }
 
   isSelected(id: string): boolean {

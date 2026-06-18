@@ -121,22 +121,107 @@
   flex-shrink: 0;
 }
 
-.filter-select {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 6px 28px 6px 8px;
-  font-size: 13px;
-  color: var(--color-text);
-  background: var(--color-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%23888' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 8px center;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  max-width: 90px;
+/* Filter icon + dropdown */
+.filter-wrapper {
+  position: relative;
+}
 
-  @media (max-width: 480px) {
-    max-width: 70px;
-    font-size: 12px;
-    padding: 5px 24px 5px 6px;
+.filter-btn {
+  position: relative;
+
+  &.active svg { fill: var(--color-primary); }
+}
+
+.filter-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  pointer-events: none;
+}
+
+.filter-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,0.15));
+  z-index: 50;
+  min-width: 150px;
+  overflow: hidden;
+  animation: dropdown-in 0.12s ease;
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--color-text);
+  transition: background var(--transition);
+
+  svg:first-child {
+    width: 18px;
+    height: 18px;
+    fill: var(--color-icon);
+    flex-shrink: 0;
+  }
+
+  .check {
+    width: 16px;
+    height: 16px;
+    fill: var(--color-primary);
+    margin-left: auto;
+  }
+
+  &:hover { background: var(--color-hover); }
+  &.selected { color: var(--color-primary); }
+}
+
+/* View toggle responsive */
+.view-toggle-mobile {
+  display: none;
+}
+
+.view-toggle-desktop {
+  display: flex;
+}
+
+@media (max-width: 600px) {
+  .view-toggle-mobile { display: flex; }
+  .view-toggle-desktop { display: none; }
+}
+
+/* Bulk action bar */
+.bulk-count {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+  flex-shrink: 0;
+}
+
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+
+  .icon-btn.danger {
+    color: var(--color-danger);
+    svg { fill: var(--color-danger); }
+    &:hover { background: #fce8e6; }
   }
 }
 
