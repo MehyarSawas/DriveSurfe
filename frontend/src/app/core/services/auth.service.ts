@@ -60,8 +60,9 @@ export class AuthService {
     return firstValueFrom(this.http.get<PasskeyInfo>('/api/auth/passkeys'));
   }
 
-  async registerPasskey(): Promise<void> {
-    const options = await firstValueFrom(this.http.get<any>('/api/auth/passkey/register/options'));
+  async registerPasskey(token?: string): Promise<void> {
+    const url = token ? `/api/auth/passkey/register/options?token=${encodeURIComponent(token)}` : '/api/auth/passkey/register/options';
+    const options = await firstValueFrom(this.http.get<any>(url));
 
     options.challenge = base64urlToBuffer(options.challenge);
     options.user.id = base64urlToBuffer(options.user.id);

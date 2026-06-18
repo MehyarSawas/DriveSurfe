@@ -27,6 +27,15 @@
             Sign in with passkey
           </button>
         }
+        @if (!hasPasskeys()) {
+          <input
+            class="token-input"
+            type="password"
+            placeholder="Registration token"
+            [ngModel]="registrationToken()" (ngModelChange)="registrationToken.set($event)"
+            autocomplete="off"
+          />
+        }
         <button class="passkey-btn" [class.secondary]="hasPasskeys()" (click)="register()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="11" width="18" height="11" rx="2"/>

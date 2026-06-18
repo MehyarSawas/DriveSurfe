@@ -1,10 +1,12 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'ds-login',
   standalone: true,
+  imports: [FormsModule],
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss'],
 })
@@ -15,6 +17,7 @@ export class LoginComponent implements OnInit {
   readonly hasPasskeys = signal(false);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly registrationToken = signal('');
 
   async ngOnInit(): Promise<void> {
     if (this.auth.isAuthenticated()) {
@@ -46,7 +49,7 @@ export class LoginComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     try {
-      await this.auth.registerPasskey();
+      await this.auth.registerPasskey(this.registrationToken() || undefined);
       this.router.navigate(['/']);
     } catch (e: any) {
       this.error.set(e?.error?.error ?? e?.message ?? 'Registration failed');

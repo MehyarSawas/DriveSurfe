@@ -161,6 +161,22 @@ h1 {
   to { transform: rotate(360deg); }
 }
 
+.token-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  font-size: 14px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: #1a73e8;
+  }
+}
+
 .error-msg {
   background: #fdecea;
   color: #c62828;

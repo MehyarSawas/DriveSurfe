@@ -53,8 +53,19 @@ final class AuthRoutes
             $passkeys = self::loadPasskeys();
             $sessionData = $session->get();
 
-            if (!empty($passkeys) && empty($sessionData['authenticated'])) {
+            $authenticated = !empty($sessionData['authenticated']);
+
+            if (!empty($passkeys) && !$authenticated) {
                 return self::jsonError($res, 'Passkey already registered. Log in first to add another device.', 403);
+            }
+
+            if (empty($passkeys) && !$authenticated) {
+                // No passkeys yet and not logged in — require the one-time registration token
+                $token = $_ENV['REGISTRATION_TOKEN'] ?? null;
+                $provided = $req->getQueryParams()['token'] ?? null;
+                if (!$token || $provided !== $token) {
+                    return self::jsonError($res, 'Registration token required', 403);
+                }
             }
 
             $webAuthn = self::makeWebAuthn();
