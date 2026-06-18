@@ -117,8 +117,7 @@ final class KDriveClient implements DriveInterface
     public function createFolder(string $parentId, string $name): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->post("{$driveId}/files/directory", [
-            'parent_directory_id' => (int) $parentId,
+        $data = $this->post("{$driveId}/files/{$parentId}/directory", [
             'name' => $name,
         ], self::API_V3);
         return $this->normalizeFile($data['data'] ?? []);
@@ -127,16 +126,14 @@ final class KDriveClient implements DriveInterface
     public function moveFile(string $fileId, string $destinationFolderId): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->post("{$driveId}/files/{$fileId}/move", [
-            'parent_directory_id' => (int) $destinationFolderId,
-        ], self::API_V3);
+        $data = $this->post("{$driveId}/files/{$fileId}/move/{$destinationFolderId}", [], self::API_V3);
         return isset($data['data']) ? $this->normalizeFile($data['data']) : [];
     }
 
     public function renameFile(string $fileId, string $name): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->patch("{$driveId}/files/{$fileId}", ['name' => $name], self::API_V3);
+        $data = $this->post("{$driveId}/files/{$fileId}/rename", ['name' => $name]);
         return isset($data['data']) ? $this->normalizeFile($data['data']) : [];
     }
 
