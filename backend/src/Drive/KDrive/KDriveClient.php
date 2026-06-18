@@ -229,6 +229,33 @@ final class KDriveClient implements DriveInterface
         }
     }
 
+    public function debugPreview(string $fileId): array
+    {
+        $driveId = $this->getDriveId();
+        $token   = $this->getToken();
+        $url     = self::API_BASE . "/{$driveId}/files/{$fileId}/preview";
+
+        try {
+            $response = $this->http->get($url, [
+                'headers'     => ['Authorization' => "Bearer {$token}"],
+                'http_errors' => false,
+                'stream'      => true,
+            ]);
+            $status      = $response->getStatusCode();
+            $contentType = $response->getHeaderLine('Content-Type');
+            $body        = $response->getBody()->read(512);
+            return [
+                'status'       => $status,
+                'content_type' => $contentType,
+                'body_preview' => base64_encode($body),
+                'body_text'    => mb_convert_encoding($body, 'UTF-8', 'UTF-8'),
+                'url'          => $url,
+            ];
+        } catch (\GuzzleHttp\Exception\GuzzleException $e) {
+            return ['error' => $e->getMessage(), 'url' => $url];
+        }
+    }
+
     public function proxyFile(string $fileId, string $type = 'thumbnail', bool $inTrash = false): void
     {
         $driveId = $this->getDriveId();

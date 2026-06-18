@@ -55,6 +55,10 @@ final class FileRoutes
             return $res;
         })->add($auth);
 
+        $group->get('/files/{id}/preview-debug', function (Request $req, Response $res, array $args) use ($drive): Response {
+            return self::json($res, $drive->debugPreview($args['id']));
+        })->add($auth);
+
         $group->get('/files/{id}/download', function (Request $req, Response $res, array $args) use ($drive): Response {
             $drive->proxyDownload($args['id']);
             return $res;
