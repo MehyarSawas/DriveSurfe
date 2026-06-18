@@ -102,6 +102,7 @@
   align-items: center;
   gap: 8px;
   padding: 0 12px;
+  padding-right: max(12px, env(safe-area-inset-right));
   height: var(--header-height);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
