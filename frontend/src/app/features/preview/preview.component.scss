@@ -85,6 +85,14 @@
   outline: none;
 }
 
+.media-pdf {
+  width: min(900px, 100vw);
+  height: calc(100vh - 120px);
+  border: none;
+  border-radius: 4px;
+  background: #fff;
+}
+
 .no-preview {
   display: flex;
   flex-direction: column;
