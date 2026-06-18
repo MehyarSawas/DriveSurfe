@@ -41,7 +41,7 @@ final class Application
             ),
             Client::class => fn() => new Client(['timeout' => 30]),
             KDriveClient::class => fn(Container $c) => new KDriveClient($c->get(Client::class)),
-            AuthMiddleware::class => fn() => new AuthMiddleware(),
+            AuthMiddleware::class => fn(Container $c) => new AuthMiddleware($c->get(SessionService::class)),
         ]);
 
         return $builder->build();
@@ -69,7 +69,7 @@ final class Application
 
     private function registerRoutes(Container $container): void
     {
-        $authRoutes = new AuthRoutes();
+        $authRoutes = new AuthRoutes($container);
         $fileRoutes = new FileRoutes($container);
         $actionRoutes = new ActionRoutes($container);
 

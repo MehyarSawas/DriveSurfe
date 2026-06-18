@@ -12,6 +12,7 @@ frontend/dist/
 *.env
 
 # PHP
+backend/passkeys.json
 backend/public/uploads/
 backend/cache/
 # composer.phar can optionally live in backend/ on the server — not committed
