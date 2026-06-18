@@ -13,6 +13,7 @@ export class FileService {
   private http = inject(HttpClient);
 
   readonly files = signal<DriveFile[]>([]);
+  readonly searchResults = signal<DriveFile[] | null>(null);
   readonly loading = signal(false);
   readonly currentFolderId = signal('1');
   readonly breadcrumb = signal<BreadcrumbItem[]>([{ id: '1', name: 'My Drive' }]);
@@ -90,9 +91,12 @@ export class FileService {
     } else {
       await firstValueFrom(this.http.post(`/api/files/${file.id}/favorite`, {}));
     }
-    this.files.update(files =>
-      files.map(f => f.id === file.id ? { ...f, is_favorite: !f.is_favorite } : f)
-    );
+    const update = (files: DriveFile[]) =>
+      files.map(f => f.id === file.id ? { ...f, is_favorite: !f.is_favorite } : f);
+    this.files.update(update);
+    if (this.searchResults() !== null) {
+      this.searchResults.update(r => r ? update(r) : r);
+    }
   }
 
   downloadFile(fileId: string, name: string): void {

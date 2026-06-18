@@ -38,15 +38,14 @@ export class FileBrowserComponent implements OnInit {
   readonly sidebarOpen = signal(window.innerWidth > 768);
   readonly previewFile = signal<DriveFile | null>(null);
   readonly previewIndex = signal(0);
-  readonly searchResults = signal<DriveFile[] | null>(null);
 
   readonly mediaFiles = computed(() => {
-    const files = this.searchResults() ?? this.fileService.files();
+    const files = this.fileService.searchResults() ?? this.fileService.files();
     return files.filter(f => !f.is_dir);
   });
 
   readonly displayFiles = computed(() => {
-    let files = this.searchResults() ?? this.fileService.files();
+    let files = this.fileService.searchResults() ?? this.fileService.files();
     const t = this.filterType();
     if (t) files = files.filter(f => f.is_dir || f.type === 'dir' || f.mime_type?.startsWith(t + '/'));
     return files;
@@ -63,16 +62,16 @@ export class FileBrowserComponent implements OnInit {
       sortBy: this.sortBy(),
       sortDir: this.sortDir(),
     });
-    this.searchResults.set(null);
+    this.fileService.searchResults.set(null);
   }
 
   async onSearch(query: string): Promise<void> {
     if (!query.trim()) {
-      this.searchResults.set(null);
+      this.fileService.searchResults.set(null);
       return;
     }
     const results = await this.fileService.search(query);
-    this.searchResults.set(results);
+    this.fileService.searchResults.set(results);
     this.fileService.breadcrumb.set([{ id: '__search__', name: `Search: "${query}"` }]);
   }
 
@@ -131,12 +130,12 @@ export class FileBrowserComponent implements OnInit {
     await this.fileService.loadTrash();
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
     this.fileService.currentFolderId.set('__trash__');
-    this.searchResults.set(null);
+    this.fileService.searchResults.set(null);
   }
 
   async showStarred(): Promise<void> {
     const results = await this.fileService.loadFavorites();
-    this.searchResults.set(results);
+    this.fileService.searchResults.set(results);
     this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
     this.fileService.currentFolderId.set('__starred__');
   }
