@@ -14,7 +14,11 @@ final class AuthMiddleware implements MiddlewareInterface
     {
         if (empty($_ENV['KDRIVE_TOKEN'])) {
             $response = new Response();
-            $response->getBody()->write(json_encode(['error' => 'Unauthenticated'], JSON_THROW_ON_ERROR));
+            $response->getBody()->write(json_encode([
+                'error' => 'Unauthenticated',
+                'debug_token_set' => isset($_ENV['KDRIVE_TOKEN']),
+                'debug_env_keys' => array_keys($_ENV),
+            ], JSON_THROW_ON_ERROR));
             return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
         }
 
