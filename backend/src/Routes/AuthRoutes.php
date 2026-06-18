@@ -147,7 +147,7 @@ final class AuthRoutes
                 $passkeys   = self::loadPasskeys();
                 $passkeys[] = [
                     'id'        => base64_encode((string) $credIdBin),
-                    'publicKey' => base64_encode(serialize($credential->publicKey)),
+                    'publicKey' => $credential->credentialPublicKey,
                     'counter'   => (int) ($credential->signCount ?? 0),
                     'name'      => 'Device ' . (count($passkeys) + 1),
                 ];
@@ -223,7 +223,7 @@ final class AuthRoutes
                     $clientDataJSON,
                     $authenticatorData,
                     $signature,
-                    unserialize(base64_decode($passkey['publicKey'])),
+                    $passkey['publicKey'],
                     $challenge,
                     $passkey['counter'],
                     'preferred'
