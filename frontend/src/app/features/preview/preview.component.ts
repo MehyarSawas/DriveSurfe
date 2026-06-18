@@ -44,6 +44,7 @@ export class PreviewComponent implements OnDestroy {
   readonly isTransitioning = signal(false);
 
   private countdownInterval?: ReturnType<typeof setInterval>;
+  private pendingDeleteFile: DriveFile | null = null;
 
   readonly isImage = computed(() => {
     const f = this.file();
@@ -59,12 +60,10 @@ export class PreviewComponent implements OnDestroy {
 
   constructor() {
     effect(() => {
-      // Reset state when file changes
       this.file();
       this.zoom.set(1);
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
-      this.cancelDelete();
     });
   }
 
@@ -163,13 +162,20 @@ export class PreviewComponent implements OnDestroy {
   }
 
   initiateDelete(): void {
+    if (this.deletePhase() === 'countdown' && this.pendingDeleteFile) {
+      // Confirm the previous pending delete immediately, then start fresh
+      this.clearCountdown();
+      this.delete.emit(this.pendingDeleteFile);
+    }
+    this.pendingDeleteFile = this.file();
     this.deletePhase.set('countdown');
     this.countdown.set(10);
     this.countdownInterval = setInterval(() => {
       const c = this.countdown() - 1;
       if (c <= 0) {
         this.clearCountdown();
-        this.delete.emit(this.file());
+        this.delete.emit(this.pendingDeleteFile!);
+        this.pendingDeleteFile = null;
         this.deletePhase.set('idle');
       } else {
         this.countdown.set(c);
@@ -181,6 +187,7 @@ export class PreviewComponent implements OnDestroy {
     this.clearCountdown();
     this.deletePhase.set('idle');
     this.countdown.set(10);
+    this.pendingDeleteFile = null;
   }
 
   private clearCountdown(): void {

@@ -82,15 +82,14 @@
     </div>
   </footer>
 
-  <!-- Delete countdown overlay -->
+  <!-- Delete countdown toast -->
   @if (deletePhase() === 'countdown') {
-    <div class="delete-overlay" (click)="$event.stopPropagation()">
-      <div class="delete-card">
-        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-        <p>Moving to trash in <strong>{{ countdown() }}s</strong></p>
-        <div class="progress-bar">
-          <div class="progress-fill" [style.width.%]="countdownPercent()"></div>
-        </div>
+    <div class="delete-toast" (click)="$event.stopPropagation()">
+      <div class="progress-bar">
+        <div class="progress-fill" [style.width.%]="countdownPercent()"></div>
+      </div>
+      <div class="toast-row">
+        <span class="toast-label">Moving to trash · {{ countdown() }}s</span>
         <button class="btn-undo" (click)="cancelDelete()">Undo</button>
       </div>
     </div>
