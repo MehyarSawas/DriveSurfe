@@ -85,7 +85,8 @@ final class FileRoutes
         $group->post('/files/{id}/move', function (Request $req, Response $res, array $args) use ($drive): Response {
             $body   = (array) $req->getParsedBody();
             $destId = $body['destination_folder_id'] ?? '';
-            return self::json($res, ['data' => $drive->moveFile($args['id'], $destId)]);
+            $drive->moveFile($args['id'], $destId);
+            return self::json($res, ['data' => true]);
         })->add($auth);
 
         $group->post('/files/{id}/rename', function (Request $req, Response $res, array $args) use ($drive): Response {
