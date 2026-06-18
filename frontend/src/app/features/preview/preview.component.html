@@ -1,4 +1,4 @@
-<div class="preview-overlay" (click)="close.emit()">
+<div class="preview-overlay" (click)="folderPanelOpen() ? folderPanelOpen.set(false) : close.emit()">
 
   <!-- Header -->
   <header class="preview-header" (click)="$event.stopPropagation()">
