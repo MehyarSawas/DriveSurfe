@@ -61,7 +61,7 @@ final class Application
             $response = $handler->handle($request);
             return $response
                 ->withHeader('Access-Control-Allow-Origin', $_ENV['APP_URL'] ?? '*')
-                ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+                ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Registration-Token')
                 ->withHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
                 ->withHeader('Access-Control-Allow-Credentials', 'true');
         });

@@ -61,8 +61,8 @@ export class AuthService {
   }
 
   async registerPasskey(token?: string): Promise<void> {
-    const url = token ? `/api/auth/passkey/register/options?token=${encodeURIComponent(token)}` : '/api/auth/passkey/register/options';
-    const options = await firstValueFrom(this.http.get<any>(url));
+    const headers = token ? { 'X-Registration-Token': token } : {};
+    const options = await firstValueFrom(this.http.get<any>('/api/auth/passkey/register/options', { headers }));
 
     options.challenge = base64urlToBuffer(options.challenge);
     options.user.id = base64urlToBuffer(options.user.id);

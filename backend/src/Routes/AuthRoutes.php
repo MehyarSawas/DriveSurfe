@@ -62,7 +62,7 @@ final class AuthRoutes
             if (empty($passkeys) && !$authenticated) {
                 // No passkeys yet and not logged in — require the one-time registration token
                 $token = $_ENV['REGISTRATION_TOKEN'] ?? null;
-                $provided = $req->getQueryParams()['token'] ?? null;
+                $provided = $req->getHeaderLine('X-Registration-Token') ?: null;
                 if (!$token || $provided !== $token) {
                     return self::jsonError($res, 'Registration token required', 403);
                 }
@@ -78,6 +78,7 @@ final class AuthRoutes
                 60,
                 true,
                 'preferred',
+                null,
                 $excludeIds
             );
 
@@ -140,7 +141,7 @@ final class AuthRoutes
 
             $webAuthn = self::makeWebAuthn();
             // Empty allowedCredentials = browser discovers passkeys for the domain (resident key flow)
-            $getArgs = $webAuthn->getGetArgs([], 60, true, false, false, false, 'preferred');
+            $getArgs = $webAuthn->getGetArgs([], 60, true, false, false, false, true, 'preferred');
 
             $session->update(['webauthn_challenge' => base64_encode($webAuthn->getChallenge())]);
 
@@ -186,7 +187,7 @@ final class AuthRoutes
                     $authenticatorData,
                     $signature,
                     $passkey['publicKey'],
-                    $credentialIdBin,
+                    $challenge,
                     $passkey['counter'],
                     'preferred'
                 );
