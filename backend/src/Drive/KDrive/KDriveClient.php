@@ -117,21 +117,26 @@ final class KDriveClient implements DriveInterface
     public function createFolder(string $parentId, string $name): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->post("{$driveId}/files", ['parent_id' => (int) $parentId, 'name' => $name, 'type' => 'dir']);
+        $data = $this->post("{$driveId}/files/directory", [
+            'parent_directory_id' => (int) $parentId,
+            'name' => $name,
+        ], self::API_V3);
         return $this->normalizeFile($data['data'] ?? []);
     }
 
     public function moveFile(string $fileId, string $destinationFolderId): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->post("{$driveId}/files/{$fileId}/move", ['destination_folder_id' => (int) $destinationFolderId]);
+        $data = $this->post("{$driveId}/files/{$fileId}/move", [
+            'parent_directory_id' => (int) $destinationFolderId,
+        ], self::API_V3);
         return isset($data['data']) ? $this->normalizeFile($data['data']) : [];
     }
 
     public function renameFile(string $fileId, string $name): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->post("{$driveId}/files/{$fileId}/rename", ['name' => $name]);
+        $data = $this->patch("{$driveId}/files/{$fileId}", ['name' => $name], self::API_V3);
         return isset($data['data']) ? $this->normalizeFile($data['data']) : [];
     }
 
@@ -281,11 +286,25 @@ final class KDriveClient implements DriveInterface
         }
     }
 
-    private function post(string $path, array $body = []): array
+    private function post(string $path, array $body = [], ?string $baseUrl = null): array
     {
         $token = $this->getToken();
         try {
-            $response = $this->http->post(self::API_BASE . "/{$path}", [
+            $response = $this->http->post(($baseUrl ?? self::API_BASE) . "/{$path}", [
+                'headers' => ['Authorization' => "Bearer {$token}", 'Content-Type' => 'application/json'],
+                'json' => $body ?: null,
+            ]);
+            return json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        } catch (GuzzleException $e) {
+            throw new RuntimeException("kDrive API error: " . $e->getMessage(), 0, $e);
+        }
+    }
+
+    private function patch(string $path, array $body = [], ?string $baseUrl = null): array
+    {
+        $token = $this->getToken();
+        try {
+            $response = $this->http->patch(($baseUrl ?? self::API_BASE) . "/{$path}", [
                 'headers' => ['Authorization' => "Bearer {$token}", 'Content-Type' => 'application/json'],
                 'json' => $body ?: null,
             ]);
