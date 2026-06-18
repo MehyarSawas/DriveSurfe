@@ -233,27 +233,31 @@ final class KDriveClient implements DriveInterface
     {
         $driveId = $this->getDriveId();
         $token   = $this->getToken();
-        $url     = self::API_BASE . "/{$driveId}/files/{$fileId}/preview";
+        $results = [];
 
-        try {
-            $response = $this->http->get($url, [
-                'headers'     => ['Authorization' => "Bearer {$token}"],
-                'http_errors' => false,
-                'stream'      => true,
-            ]);
-            $status      = $response->getStatusCode();
-            $contentType = $response->getHeaderLine('Content-Type');
-            $body        = $response->getBody()->read(512);
-            return [
-                'status'       => $status,
-                'content_type' => $contentType,
-                'body_preview' => base64_encode($body),
-                'body_text'    => mb_convert_encoding($body, 'UTF-8', 'UTF-8'),
-                'url'          => $url,
-            ];
-        } catch (\GuzzleHttp\Exception\GuzzleException $e) {
-            return ['error' => $e->getMessage(), 'url' => $url];
+        foreach (['v2' => self::API_V2, 'v3' => self::API_V3] as $version => $base) {
+            $url = "{$base}/{$driveId}/files/{$fileId}/preview";
+            try {
+                $response    = $this->http->get($url, [
+                    'headers'     => ['Authorization' => "Bearer {$token}"],
+                    'http_errors' => false,
+                    'stream'      => true,
+                ]);
+                $status      = $response->getStatusCode();
+                $contentType = $response->getHeaderLine('Content-Type');
+                $body        = $response->getBody()->read(512);
+                $results[$version] = [
+                    'url'          => $url,
+                    'status'       => $status,
+                    'content_type' => $contentType,
+                    'body_text'    => mb_convert_encoding($body, 'UTF-8', 'UTF-8'),
+                ];
+            } catch (\GuzzleHttp\Exception\GuzzleException $e) {
+                $results[$version] = ['url' => $url, 'error' => $e->getMessage()];
+            }
         }
+
+        return $results;
     }
 
     public function proxyFile(string $fileId, string $type = 'thumbnail', bool $inTrash = false): void
