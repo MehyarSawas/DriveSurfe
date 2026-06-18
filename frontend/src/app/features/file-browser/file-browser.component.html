@@ -120,7 +120,7 @@
           [selectedIds]="fileService.selectedIds()"
           (fileClick)="openPreview($event)"
           (fileDblClick)="openPreview($event)"
-          (favorite)="fileService.toggleFavorite($event)"
+          (favorite)="toggleFavorite($event)"
           (download)="fileService.downloadFile($event.id, $event.name)"
           (delete)="fileService.delete($event.id)"
         />
@@ -130,7 +130,7 @@
           [selectedIds]="fileService.selectedIds()"
           (fileClick)="openPreview($event)"
           (fileDblClick)="openPreview($event)"
-          (favorite)="fileService.toggleFavorite($event)"
+          (favorite)="toggleFavorite($event)"
           (download)="fileService.downloadFile($event.id, $event.name)"
           (delete)="fileService.delete($event.id)"
         />
@@ -148,7 +148,7 @@
     (close)="closePreview()"
     (prev)="navigatePreview(-1)"
     (next)="navigatePreview(1)"
-    (favorite)="fileService.toggleFavorite($event)"
+    (favorite)="toggleFavorite($event)"
     (download)="fileService.downloadFile($event.id, $event.name)"
     (delete)="deletePreviewFile($event)"
   />

@@ -145,6 +145,13 @@ export class FileBrowserComponent implements OnInit {
     this.loadCurrentFolder();
   }
 
+  async toggleFavorite(file: DriveFile): Promise<void> {
+    await this.fileService.toggleFavorite(file);
+    if (this.previewFile()?.id === file.id) {
+      this.previewFile.update(f => f ? { ...f, is_favorite: !file.is_favorite } : f);
+    }
+  }
+
   logout(): void {
     this.auth.logout();
   }
