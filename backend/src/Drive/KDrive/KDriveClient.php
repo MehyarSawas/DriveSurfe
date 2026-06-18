@@ -114,6 +114,27 @@ final class KDriveClient implements DriveInterface
         $this->deleteReq("{$driveId}/files/{$fileId}");
     }
 
+    public function createFolder(string $parentId, string $name): array
+    {
+        $driveId = $this->getDriveId();
+        $data = $this->post("{$driveId}/files", ['parent_id' => (int) $parentId, 'name' => $name, 'type' => 'dir']);
+        return $this->normalizeFile($data['data'] ?? []);
+    }
+
+    public function moveFile(string $fileId, string $destinationFolderId): array
+    {
+        $driveId = $this->getDriveId();
+        $data = $this->post("{$driveId}/files/{$fileId}/move", ['destination_folder_id' => (int) $destinationFolderId]);
+        return isset($data['data']) ? $this->normalizeFile($data['data']) : [];
+    }
+
+    public function renameFile(string $fileId, string $name): array
+    {
+        $driveId = $this->getDriveId();
+        $data = $this->post("{$driveId}/files/{$fileId}/rename", ['name' => $name]);
+        return isset($data['data']) ? $this->normalizeFile($data['data']) : [];
+    }
+
     public function listFavorites(): array
     {
         $driveId = $this->getDriveId();

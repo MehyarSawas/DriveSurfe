@@ -55,6 +55,12 @@ export class FileBrowserComponent implements OnInit {
   });
 
   readonly selectedCount = computed(() => this.fileService.selectedIds().size);
+  readonly folderDirs = computed(() => this.displayFiles().filter(f => f.is_dir));
+
+  showCreateFolder = signal(false);
+  newFolderName = signal('');
+  renamingFile = signal<DriveFile | null>(null);
+  renameValue = signal('');
 
   ngOnInit(): void {
     this.loadCurrentFolder();
@@ -174,6 +180,44 @@ export class FileBrowserComponent implements OnInit {
       const file = this.displayFiles().find(f => f.id === id);
       if (file) this.fileService.downloadFile(file.id, file.name);
     });
+  }
+
+  async submitCreateFolder(): Promise<void> {
+    const name = this.newFolderName().trim();
+    if (!name) return;
+    await this.fileService.createFolder(this.fileService.currentFolderId(), name);
+    this.showCreateFolder.set(false);
+    this.newFolderName.set('');
+  }
+
+  handleRename(file: DriveFile): void {
+    this.renamingFile.set(file);
+    this.renameValue.set(file.name);
+  }
+
+  async submitRename(): Promise<void> {
+    const file = this.renamingFile();
+    const name = this.renameValue().trim();
+    if (!file || !name) return;
+    await this.fileService.renameFile(file.id, name);
+    this.renamingFile.set(null);
+  }
+
+  async handleMove(event: {file: DriveFile, folderId: string}): Promise<void> {
+    await this.fileService.moveFile(event.file.id, event.folderId);
+    const files = this.mediaFiles();
+    if (files.length === 0) {
+      this.closePreview();
+    } else {
+      const idx = Math.min(this.previewIndex(), files.length - 1);
+      this.previewIndex.set(idx);
+      this.previewFile.set(files[idx]);
+    }
+  }
+
+  async handleCreateFolderFromPreview(event: {parentId: string, name: string, then: (f: DriveFile) => void}): Promise<void> {
+    const folder = await this.fileService.createFolder(event.parentId, event.name);
+    event.then(folder);
   }
 
   logout(): void {

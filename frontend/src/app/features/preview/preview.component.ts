@@ -3,6 +3,7 @@ import {
   ElementRef, ViewChild, OnDestroy, effect
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { DriveFile } from '../../core/models/drive-file.model';
 
 type DeletePhase = 'idle' | 'confirming' | 'countdown';
@@ -10,7 +11,7 @@ type DeletePhase = 'idle' | 'confirming' | 'countdown';
 @Component({
   selector: 'ds-preview',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],
 })
@@ -20,6 +21,8 @@ export class PreviewComponent implements OnDestroy {
   readonly file = input.required<DriveFile>();
   readonly hasPrev = input(false);
   readonly hasNext = input(false);
+  readonly folderDirs = input<DriveFile[]>([]);
+  readonly currentFolderId = input('');
 
   readonly close = output<void>();
   readonly prev = output<void>();
@@ -27,11 +30,18 @@ export class PreviewComponent implements OnDestroy {
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();
+  readonly moveFile = output<{file: DriveFile, folderId: string}>();
+  readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
 
   readonly zoom = signal(1);
   readonly isLoading = signal(false);
   readonly deletePhase = signal<DeletePhase>('idle');
   readonly countdown = signal(10);
+  readonly folderPanelOpen = signal(false);
+  readonly newFolderInputOpen = signal(false);
+  readonly newFolderName = signal('');
+  readonly localExtraFolders = signal<DriveFile[]>([]);
+  readonly allFolderDirs = computed(() => [...this.folderDirs(), ...this.localExtraFolders()]);
 
   // Swipe state
   private touchStartX = 0;
@@ -68,12 +78,35 @@ export class PreviewComponent implements OnDestroy {
       this.zoom.set(1);
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
+      this.folderPanelOpen.set(false);
+      this.newFolderInputOpen.set(false);
+      this.newFolderName.set('');
       if (this.isImage()) this.isLoading.set(true);
     });
   }
 
   onImageLoad(): void { this.isLoading.set(false); }
   onImageError(): void { this.isLoading.set(false); }
+
+  moveToFolder(folder: DriveFile): void {
+    this.moveFile.emit({ file: this.file(), folderId: folder.id });
+    this.folderPanelOpen.set(false);
+  }
+
+  submitNewFolder(): void {
+    const name = this.newFolderName().trim();
+    if (!name) return;
+    this.createFolder.emit({
+      parentId: this.currentFolderId(),
+      name,
+      then: (folder) => {
+        this.localExtraFolders.update(f => [...f, folder]);
+        this.moveToFolder(folder);
+      }
+    });
+    this.newFolderInputOpen.set(false);
+    this.newFolderName.set('');
+  }
 
   ngOnDestroy(): void {
     this.clearCountdown();
@@ -134,7 +167,12 @@ export class PreviewComponent implements OnDestroy {
 
     this.isTransitioning.set(true);
 
-    if (Math.abs(dy) > Math.abs(dx) && dy < -150) {
+    if (Math.abs(dy) > Math.abs(dx) && dy > 120) {
+      // Swipe down → show folder picker
+      this.swipeOffsetY.set(0);
+      this.isTransitioning.set(false);
+      this.folderPanelOpen.set(true);
+    } else if (Math.abs(dy) > Math.abs(dx) && dy < -150) {
       // Swipe up to delete
       this.swipeOffsetY.set(-window.innerHeight);
       setTimeout(() => {

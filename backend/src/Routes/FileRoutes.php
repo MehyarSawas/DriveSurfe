@@ -74,6 +74,25 @@ final class FileRoutes
         $group->get('/usage', function (Request $req, Response $res) use ($drive): Response {
             return self::json($res, ['data' => $drive->getUsage()]);
         })->add($auth);
+
+        $group->post('/folders', function (Request $req, Response $res) use ($drive): Response {
+            $body     = (array) $req->getParsedBody();
+            $parentId = $body['parent_id'] ?? '1';
+            $name     = $body['name'] ?? 'New Folder';
+            return self::json($res, ['data' => $drive->createFolder($parentId, $name)]);
+        })->add($auth);
+
+        $group->post('/files/{id}/move', function (Request $req, Response $res, array $args) use ($drive): Response {
+            $body   = (array) $req->getParsedBody();
+            $destId = $body['destination_folder_id'] ?? '';
+            return self::json($res, ['data' => $drive->moveFile($args['id'], $destId)]);
+        })->add($auth);
+
+        $group->post('/files/{id}/rename', function (Request $req, Response $res, array $args) use ($drive): Response {
+            $body = (array) $req->getParsedBody();
+            $name = $body['name'] ?? '';
+            return self::json($res, ['data' => $drive->renameFile($args['id'], $name)]);
+        })->add($auth);
     }
 
     private static function json(Response $response, array $data): Response

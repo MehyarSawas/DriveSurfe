@@ -15,6 +15,7 @@ export class FileGridComponent {
 
   readonly fileClick = output<DriveFile>();
   readonly selectToggle = output<DriveFile>();
+  readonly rename = output<DriveFile>();
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();

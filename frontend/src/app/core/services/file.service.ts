@@ -99,6 +99,33 @@ export class FileService {
     }
   }
 
+  async createFolder(parentId: string, name: string): Promise<DriveFile> {
+    const res = await firstValueFrom(
+      this.http.post<ApiResponse<DriveFile>>('/api/folders', { parent_id: parentId, name })
+    );
+    const folder = res.data;
+    this.files.update(files => [folder, ...files]);
+    return folder;
+  }
+
+  async moveFile(fileId: string, destinationFolderId: string): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/files/${fileId}/move`, { destination_folder_id: destinationFolderId }));
+    const update = (files: DriveFile[]) => files.filter(f => f.id !== fileId);
+    this.files.update(update);
+    if (this.searchResults() !== null) {
+      this.searchResults.update(r => r ? update(r) : r);
+    }
+  }
+
+  async renameFile(fileId: string, name: string): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/files/${fileId}/rename`, { name }));
+    const update = (files: DriveFile[]) => files.map(f => f.id === fileId ? { ...f, name } : f);
+    this.files.update(update);
+    if (this.searchResults() !== null) {
+      this.searchResults.update(r => r ? update(r) : r);
+    }
+  }
+
   downloadFile(fileId: string, name: string): void {
     const a = document.createElement('a');
     a.href = `/api/files/${fileId}/download`;
