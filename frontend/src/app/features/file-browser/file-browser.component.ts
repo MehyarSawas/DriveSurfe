@@ -79,9 +79,9 @@ export class FileBrowserComponent implements OnInit {
       await this.showStarred();
     } else if (folderId && folderId !== '1') {
       try {
-        const folder = await this.fileService.getFile(folderId);
+        const breadcrumb = await this.resolveBreadcrumb(folderId);
         this.fileService.currentFolderId.set(folderId);
-        this.fileService.breadcrumb.set([{ id: folderId, name: folder.name }]);
+        this.fileService.breadcrumb.set(breadcrumb);
         await this.loadCurrentFolder();
       } catch {
         // Folder no longer accessible — fall back to root
@@ -92,6 +92,21 @@ export class FileBrowserComponent implements OnInit {
       await this.loadCurrentFolder();
     }
     this.fileService.loadFolderTree();
+  }
+
+  // Walk up parent_id chain to build a full breadcrumb from root to folderId
+  private async resolveBreadcrumb(folderId: string): Promise<{ id: string; name: string }[]> {
+    const crumbs: { id: string; name: string }[] = [];
+    let currentId = folderId;
+    while (currentId && currentId !== '1') {
+      const folder = await this.fileService.getFile(currentId);
+      crumbs.unshift({ id: folder.id, name: folder.name });
+      const parentId = folder.parent_id;
+      if (!parentId || parentId === currentId || parentId === '0') break;
+      currentId = parentId;
+    }
+    crumbs.unshift({ id: '1', name: 'My Drive' });
+    return crumbs;
   }
 
   private syncUrl(folderId: string): void {
