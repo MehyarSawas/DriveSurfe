@@ -3,7 +3,6 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, ActivatedRoute } from '@angular/router';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DriveFile, SortBy, SortDir, ViewMode } from '../../core/models/drive-file.model';
@@ -35,8 +34,6 @@ import { FolderPickerComponent } from '../../shared/components/folder-picker/fol
 export class FileBrowserComponent implements OnInit {
   protected fileService = inject(FileService);
   protected auth = inject(AuthService);
-  private router = inject(Router);
-  private route = inject(ActivatedRoute);
 
   readonly viewMode = signal<ViewMode>('grid');
   readonly sortBy = signal<SortBy>('name');
@@ -75,7 +72,7 @@ export class FileBrowserComponent implements OnInit {
   movingFiles = signal<DriveFile[] | null>(null);
 
   async ngOnInit(): Promise<void> {
-    const folderId = this.route.snapshot.queryParamMap.get('folder');
+    const folderId = new URLSearchParams(window.location.search).get('folder');
     if (folderId === '__trash__') {
       await this.showTrash();
     } else if (folderId === '__starred__') {
@@ -98,12 +95,8 @@ export class FileBrowserComponent implements OnInit {
   }
 
   private syncUrl(folderId: string): void {
-    const params = folderId === '1' ? {} : { folder: folderId };
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: params,
-      replaceUrl: true,
-    });
+    const url = folderId === '1' ? '/' : `/?folder=${encodeURIComponent(folderId)}`;
+    window.history.replaceState(null, '', url);
   }
 
   private async loadCurrentFolder(): Promise<void> {
@@ -127,9 +120,8 @@ export class FileBrowserComponent implements OnInit {
 
   async openPreview(file: DriveFile): Promise<void> {
     if (file.is_dir) {
-      this.fileService.navigateToFolder(file.id, file.name);
+      this.navigateToFolder(file.id, file.name);
       if (window.innerWidth <= 768) this.sidebarOpen.set(false);
-      this.loadCurrentFolder();
       return;
     }
     const idx = this.mediaFiles().findIndex(f => f.id === file.id);

@@ -46,6 +46,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private touchCurrentY = 0;
   private isSwiping = false;
 
+  // Pinch-to-zoom state
+  private isPinching = false;
+  private pinchStartDist = 0;
+  private pinchStartZoom = 1;
+
   readonly swipeOffsetX = signal(0);
   readonly swipeOffsetY = signal(0);
   readonly isTransitioning = signal(false);
@@ -76,6 +81,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
       this.folderPanelOpen.set(false);
+      this.isPinching = false;
+      this.isSwiping = false;
       if (this.isImage()) this.isLoading.set(true);
     });
   }
@@ -113,6 +120,14 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchStart(e: TouchEvent): void {
+    if (e.touches.length === 2) {
+      this.isPinching = true;
+      this.isSwiping = false;
+      const [t1, t2] = [e.touches[0], e.touches[1]];
+      this.pinchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      this.pinchStartZoom = this.zoom();
+      return;
+    }
     const t = e.touches[0];
     this.touchStartX = t.clientX;
     this.touchStartY = t.clientY;
@@ -123,11 +138,21 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchMove(e: TouchEvent): void {
+    e.preventDefault();
+    if (this.isPinching && e.touches.length === 2) {
+      const [t1, t2] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const newZoom = Math.min(Math.max(this.pinchStartZoom * (dist / this.pinchStartDist), 0.25), 4);
+      this.zoom.set(newZoom);
+      return;
+    }
     if (!this.isSwiping) return;
-    e.preventDefault(); // prevent browser pull-to-refresh and scroll in all directions
     const t = e.touches[0];
     this.touchCurrentX = t.clientX;
     this.touchCurrentY = t.clientY;
+
+    // While zoomed in, don't drag the whole image off-screen via swipe gestures
+    if (this.zoom() > 1) return;
 
     const dx = t.clientX - this.touchStartX;
     const dy = t.clientY - this.touchStartY;
@@ -141,9 +166,20 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
-  onTouchEnd(): void {
+  onTouchEnd(e: TouchEvent): void {
+    if (this.isPinching) {
+      if (e.touches.length < 2) this.isPinching = false;
+      return;
+    }
     if (!this.isSwiping) return;
     this.isSwiping = false;
+
+    // While zoomed in, swipe gestures are disabled
+    if (this.zoom() > 1) {
+      this.swipeOffsetX.set(0);
+      this.swipeOffsetY.set(0);
+      return;
+    }
 
     const dx = this.touchCurrentX - this.touchStartX;
     const dy = this.touchCurrentY - this.touchStartY;
