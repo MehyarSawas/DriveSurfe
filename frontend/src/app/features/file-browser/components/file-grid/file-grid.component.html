@@ -14,8 +14,9 @@
 
       <!-- Thumbnail / Icon -->
       <div class="thumb">
-        @if (isMedia(file) && file.thumbnail_url) {
-          <img [src]="file.thumbnail_url" [alt]="file.name" loading="lazy" />
+        @if (isMedia(file) && file.thumbnail_url && !failedThumbs.has(file.id)) {
+          <img [src]="file.thumbnail_url" [alt]="file.name" loading="lazy"
+               (error)="failedThumbs.add(file.id)" />
           @if (isVideo(file)) {
             <div class="play-badge">
               <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>

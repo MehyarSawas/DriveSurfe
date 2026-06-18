@@ -19,6 +19,8 @@ export class FileListComponent {
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();
 
+  readonly failedThumbs = new Set<string>();
+
   isSelected(id: string): boolean {
     return this.selectedIds().has(id);
   }
