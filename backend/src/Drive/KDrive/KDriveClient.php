@@ -96,16 +96,21 @@ final class KDriveClient implements DriveInterface
     public function listFavorites(): array
     {
         $driveId = $this->getDriveId();
-        // kDrive search requires a non-empty query; use '*' to match everything then filter by is_favorite
+
+        // Try 1: dedicated favorites endpoint
         try {
-            $data = $this->get("{$driveId}/files/search", ['query' => '*', 'is_favorite' => 1, 'per_page' => 100]);
-        } catch (RuntimeException) {
-            // fallback: fetch all files from root and filter client-side
-            $data = $this->get("{$driveId}/files/1/files", ['per_page' => 500]);
-        }
-        $files = $this->normalizeFiles($data['data'] ?? []);
-        // ensure only favorites are returned (search may not filter server-side)
-        return array_values(array_filter($files, fn($f) => $f['is_favorite']));
+            $data = $this->get("{$driveId}/files/favorites", ['per_page' => 100]);
+            return $this->normalizeFiles($data['data'] ?? []);
+        } catch (RuntimeException) {}
+
+        // Try 2: search with a dot (matches almost all files) filtered by is_favorite
+        try {
+            $data = $this->get("{$driveId}/files/search", ['query' => '.', 'is_favorite' => 1, 'per_page' => 100]);
+            $files = $this->normalizeFiles($data['data'] ?? []);
+            return array_values(array_filter($files, fn($f) => $f['is_favorite']));
+        } catch (RuntimeException) {}
+
+        return [];
     }
 
     public function listTrash(): array
