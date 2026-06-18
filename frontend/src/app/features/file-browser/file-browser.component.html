@@ -172,6 +172,11 @@
       </button>
     </div>
 
+    <!-- Background-load progress bar -->
+    @if (fileService.loadingMore()) {
+      <div class="load-more-bar"><div class="load-more-fill"></div></div>
+    }
+
     <!-- File content -->
     <div class="file-content">
       @if (fileService.loading()) {

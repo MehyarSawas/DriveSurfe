@@ -269,6 +269,26 @@ ds-search-bar {
   padding: 16px;
 }
 
+.load-more-bar {
+  height: 3px;
+  background: var(--color-border);
+  overflow: hidden;
+  flex-shrink: 0;
+
+  .load-more-fill {
+    height: 100%;
+    width: 40%;
+    background: var(--color-primary);
+    border-radius: 2px;
+    animation: load-more-slide 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes load-more-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
 .loading {
   display: flex;
   justify-content: center;

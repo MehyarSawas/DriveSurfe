@@ -8,6 +8,12 @@ interface ApiResponse<T> {
   data: T;
 }
 
+interface FilesResponse {
+  data: DriveFile[];
+  cursor: string | null;
+  has_more: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FileService {
   private http = inject(HttpClient);
@@ -15,6 +21,7 @@ export class FileService {
   readonly files = signal<DriveFile[]>([]);
   readonly searchResults = signal<DriveFile[] | null>(null);
   readonly loading = signal(false);
+  readonly loadingMore = signal(false);
   readonly currentFolderId = signal(HOME_FOLDER_ID);
   readonly breadcrumb = signal<BreadcrumbItem[]>([{ id: HOME_FOLDER_ID, name: 'My Drive' }]);
   readonly folderTree = signal<FolderTreeNode | null>(null);
@@ -22,21 +29,36 @@ export class FileService {
 
   async loadFiles(options: FileListOptions): Promise<void> {
     this.loading.set(true);
-    try {
-      const params: Record<string, string> = {
-        folderId: options.folderId,
-        sortBy: options.sortBy,
-        sortDir: options.sortDir,
-      };
-      if (options.type) params['type'] = options.type;
+    this.loadingMore.set(false);
+    const params: Record<string, string> = {
+      folderId: options.folderId,
+      sortBy: options.sortBy,
+      sortDir: options.sortDir,
+    };
+    if (options.type) params['type'] = options.type;
 
-      const res = await firstValueFrom(
-        this.http.get<ApiResponse<DriveFile[]>>('/api/files', { params })
+    try {
+      const first = await firstValueFrom(
+        this.http.get<FilesResponse>('/api/files', { params })
       );
-      this.files.set(res.data);
+      this.files.set(first.data);
       this.currentFolderId.set(options.folderId);
+      this.loading.set(false);
+
+      if (first.has_more && first.cursor) {
+        this.loadingMore.set(true);
+        let cursor: string | null = first.cursor;
+        while (cursor) {
+          const page: FilesResponse = await firstValueFrom(
+            this.http.get<FilesResponse>('/api/files', { params: { ...params, cursor } })
+          );
+          this.files.update(f => [...f, ...page.data]);
+          cursor = page.has_more && page.cursor ? page.cursor : null;
+        }
+      }
     } finally {
       this.loading.set(false);
+      this.loadingMore.set(false);
     }
   }
 
@@ -129,10 +151,18 @@ export class FileService {
   }
 
   async fetchFolders(folderId: string): Promise<DriveFile[]> {
-    const res = await firstValueFrom(
-      this.http.get<ApiResponse<DriveFile[]>>(`/api/files?folderId=${folderId}`)
-    );
-    return (res.data ?? []).filter(f => f.is_dir);
+    const allFolders: DriveFile[] = [];
+    let cursor: string | null = null;
+    do {
+      const params: Record<string, string> = { folderId };
+      if (cursor) params['cursor'] = cursor;
+      const res = await firstValueFrom(
+        this.http.get<FilesResponse>('/api/files', { params })
+      );
+      allFolders.push(...res.data.filter(f => f.is_dir));
+      cursor = res.has_more && res.cursor ? res.cursor : null;
+    } while (cursor);
+    return allFolders;
   }
 
   async getFile(fileId: string): Promise<DriveFile> {

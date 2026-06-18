@@ -26,13 +26,17 @@ final class FileRoutes
         $auth  = $this->auth;
 
         $group->get('/files', function (Request $req, Response $res) use ($drive): Response {
-            $params   = $req->getQueryParams();
-            $folderId = $params['folderId'] ?? '1';
-            $files    = $drive->listFiles($folderId, [
-                'sortBy'  => $params['sortBy'] ?? 'name',
+            $params = $req->getQueryParams();
+            $result = $drive->listFiles($params['folderId'] ?? '5', [
+                'sortBy'  => $params['sortBy']  ?? 'name',
                 'sortDir' => $params['sortDir'] ?? 'asc',
+                'cursor'  => $params['cursor']  ?? null,
             ]);
-            return self::json($res, ['data' => $files]);
+            return self::json($res, [
+                'data'     => $result['files'],
+                'cursor'   => $result['cursor'],
+                'has_more' => $result['has_more'],
+            ]);
         })->add($auth);
 
         $group->get('/files/{id}', function (Request $req, Response $res, array $args) use ($drive): Response {

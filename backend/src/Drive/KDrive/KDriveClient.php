@@ -17,26 +17,27 @@ final class KDriveClient implements DriveInterface
 
     public function listFiles(string $folderId = '5', array $options = []): array
     {
-        $driveId  = $this->getDriveId();
-        $sortBy   = $options['sortBy'] ?? 'name';
-        $sortDir  = $options['sortDir'] ?? 'asc';
-        $files    = [];
-        $cursor   = null;
+        $driveId = $this->getDriveId();
+        $sortBy  = $options['sortBy'] ?? 'name';
+        $sortDir = $options['sortDir'] ?? 'asc';
+        $cursor  = $options['cursor'] ?? null;
 
-        do {
-            $params = [
-                'order_by'  => $sortBy,
-                'order_for' => [$sortBy => $sortDir],
-                'with'      => 'is_favorite',
-            ];
-            if ($cursor) $params['cursor'] = $cursor;
+        $params = [
+            'order_by'  => $sortBy,
+            'order_for' => [$sortBy => $sortDir],
+            'with'      => 'is_favorite',
+            'per_page'  => 200,
+        ];
+        if ($cursor) $params['cursor'] = $cursor;
 
-            $data   = $this->get("{$driveId}/files/{$folderId}/files", $params, self::API_V3);
-            $files  = array_merge($files, $data['data'] ?? []);
-            $cursor = ($data['has_more'] ?? false) ? ($data['cursor'] ?? null) : null;
-        } while ($cursor);
+        $data    = $this->get("{$driveId}/files/{$folderId}/files", $params, self::API_V3);
+        $hasMore = $data['has_more'] ?? false;
 
-        return $this->normalizeFiles($files);
+        return [
+            'files'    => $this->normalizeFiles($data['data'] ?? []),
+            'cursor'   => $hasMore ? ($data['cursor'] ?? null) : null,
+            'has_more' => $hasMore,
+        ];
     }
 
     public function getFile(string $fileId): array
