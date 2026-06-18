@@ -61,16 +61,7 @@
           Your browser does not support video playback.
         </video>
       } @else if (isPdf()) {
-        @if (!pdfDataUrl()) {
-          <div class="media-loading"><div class="media-spinner"></div></div>
-        } @else {
-          <object [attr.data]="pdfDataUrl()" type="application/pdf" class="media-pdf">
-            <div class="no-preview">
-              <p>PDF cannot be displayed</p>
-              <button class="btn-primary" (click)="download.emit(file())">Download</button>
-            </div>
-          </object>
-        }
+        <ds-pdf-viewer [fileId]="file().id" class="pdf-viewer-wrap" />
       } @else if (!previewFailed()) {
         @if (isLoading()) {
           <div class="media-loading">

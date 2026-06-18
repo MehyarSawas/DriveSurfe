@@ -4,16 +4,16 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { DriveFile } from '../../core/models/drive-file.model';
 import { FolderPickerComponent } from '../../shared/components/folder-picker/folder-picker.component';
+import { PdfViewerComponent } from '../../shared/components/pdf-viewer/pdf-viewer.component';
 
 type DeletePhase = 'idle' | 'confirming' | 'countdown';
 
 @Component({
   selector: 'ds-preview',
   standalone: true,
-  imports: [CommonModule, FormsModule, FolderPickerComponent],
+  imports: [CommonModule, FormsModule, FolderPickerComponent, PdfViewerComponent],
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],
 })
@@ -81,9 +81,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     return this.isVideo() ? `/api/files/${f.id}/download` : `/api/files/${f.id}/preview`;
   });
 
-  readonly pdfDataUrl = signal<SafeResourceUrl | null>(null);
-
-  constructor(private zone: NgZone, private el: ElementRef, private sanitizer: DomSanitizer) {
+  constructor(private zone: NgZone, private el: ElementRef) {
     let prevFileId = '';
     effect(() => {
       const f = this.file();
@@ -97,30 +95,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.isSwiping = false;
       if (isNewFile) {
         this.previewFailed.set(false);
-        if (this.isPdf()) {
-          this.pdfDataUrl.set(null);
-          this.loadPdfDataUrl(f.id);
-        } else if (!this.isVideo()) {
-          this.isLoading.set(true);
-        }
+        if (!this.isVideo() && !this.isPdf()) this.isLoading.set(true);
       }
     });
-  }
-
-  private loadPdfDataUrl(fileId: string): void {
-    fetch(`/api/files/${fileId}/download`)
-      .then(r => r.blob())
-      .then(blob => new Promise<string>(resolve => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-      }))
-      .then(dataUrl => {
-        this.zone.run(() =>
-          this.pdfDataUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(dataUrl))
-        );
-      })
-      .catch(() => {});
   }
 
   ngAfterViewInit(): void {
