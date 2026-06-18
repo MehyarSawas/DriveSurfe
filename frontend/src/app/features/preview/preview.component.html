@@ -47,7 +47,15 @@
     <div class="media-container"
       [style.transform]="mediaTransform()"
       [class.transitioning]="isTransitioning()"
+      [class.deleting]="deletePhase() === 'countdown'"
     >
+      @if (deletePhase() === 'countdown') {
+        <div class="delete-overlay" (click)="cancelDelete()">
+          <svg viewBox="0 0 24 24" class="delete-overlay-icon">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+        </div>
+      }
       @if (isVideo()) {
         <video [src]="previewSrc()" controls playsinline preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'">
           Your browser does not support video playback.
@@ -75,14 +83,6 @@
       <button class="nav-arrow right" (click)="next.emit()" title="Next (→)">
         <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
       </button>
-    }
-
-    @if (deletePhase() === 'countdown') {
-      <div class="delete-overlay" (click)="cancelDelete()">
-        <svg viewBox="0 0 24 24" class="delete-overlay-icon">
-          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-        </svg>
-      </div>
     }
   </div>
 
