@@ -4,7 +4,6 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { DriveFile } from '../../core/models/drive-file.model';
 import { FolderPickerComponent } from '../../shared/components/folder-picker/folder-picker.component';
 
@@ -71,21 +70,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     return f.mime_type.startsWith('video/') || ['mp4','mov','m4v'].includes(f.extension);
   });
 
-  readonly isPdf = computed(() => {
-    const f = this.file();
-    return f.mime_type === 'application/pdf' || f.extension === 'pdf';
-  });
-
   readonly previewSrc = computed(() => {
     const f = this.file();
     return this.isVideo() ? `/api/files/${f.id}/download` : `/api/files/${f.id}/preview`;
   });
 
-  readonly downloadSrc = computed((): SafeResourceUrl =>
-    this.sanitizer.bypassSecurityTrustResourceUrl(`/api/files/${this.file().id}/download`)
-  );
-
-  constructor(private zone: NgZone, private el: ElementRef, private sanitizer: DomSanitizer) {
+  constructor(private zone: NgZone, private el: ElementRef) {
     let prevFileId = '';
     effect(() => {
       const f = this.file();
@@ -99,7 +89,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.isSwiping = false;
       if (isNewFile) {
         this.previewFailed.set(false);
-        if (!this.isVideo() && !this.isPdf()) this.isLoading.set(true);
+        if (!this.isVideo()) this.isLoading.set(true);
       }
     });
   }

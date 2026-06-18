@@ -60,8 +60,6 @@
         <video [src]="previewSrc()" controls playsinline preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'">
           Your browser does not support video playback.
         </video>
-      } @else if (isPdf()) {
-        <iframe [src]="downloadSrc()" class="media-pdf" title="{{ file().name }}"></iframe>
       } @else if (!previewFailed()) {
         @if (isLoading()) {
           <div class="media-loading">
