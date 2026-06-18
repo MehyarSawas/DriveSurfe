@@ -68,15 +68,34 @@ export class FolderPickerComponent implements OnInit {
     this.loadFolders(folder.id);
   }
 
-  goBack(): void {
+  async goBack(): Promise<void> {
     const crumbs = this.breadcrumb();
     if (crumbs.length > 1) {
+      // Step back through our local navigation history
       this.breadcrumb.set(crumbs.slice(0, -1));
       this.loadFolders(crumbs[crumbs.length - 2].id);
     } else {
-      // Already at start of history — go up to root
-      this.breadcrumb.set([{ id: '1', name: 'My Drive' }]);
-      this.loadFolders('1');
+      // Beyond local history — resolve parent via API using parent_id
+      const currentId = crumbs[0]?.id;
+      if (!currentId || currentId === '1') return;
+      this.loading.set(true);
+      try {
+        const folder = await this.fileService.getFile(currentId);
+        const parentId = folder.parent_id;
+        if (!parentId || parentId === currentId || parentId === '0') {
+          // Reached root
+          this.breadcrumb.set([{ id: '1', name: 'My Drive' }]);
+          await this.loadFolders('1');
+          return;
+        }
+        const parentName = parentId === '1'
+          ? 'My Drive'
+          : (await this.fileService.getFile(parentId)).name;
+        this.breadcrumb.set([{ id: parentId, name: parentName }]);
+        await this.loadFolders(parentId);
+      } finally {
+        this.loading.set(false);
+      }
     }
   }
 
