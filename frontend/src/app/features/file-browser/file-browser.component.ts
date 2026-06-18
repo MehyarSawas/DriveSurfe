@@ -5,7 +5,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
-import { DriveFile, SortBy, SortDir, ViewMode } from '../../core/models/drive-file.model';
+import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID } from '../../core/models/drive-file.model';
 import { FileGridComponent } from './components/file-grid/file-grid.component';
 import { FileListComponent } from './components/file-list/file-list.component';
 import { FolderTreeComponent } from './components/folder-tree/folder-tree.component';
@@ -77,15 +77,15 @@ export class FileBrowserComponent implements OnInit {
       await this.showTrash();
     } else if (folderId === '__starred__') {
       await this.showStarred();
-    } else if (folderId && folderId !== '1') {
+    } else if (folderId && folderId !== HOME_FOLDER_ID) {
       try {
         const breadcrumb = await this.resolveBreadcrumb(folderId);
         this.fileService.currentFolderId.set(folderId);
         this.fileService.breadcrumb.set(breadcrumb);
         await this.loadCurrentFolder();
       } catch {
-        // Folder no longer accessible — fall back to root
-        this.syncUrl('1');
+        // Folder no longer accessible — fall back to home
+        this.syncUrl(HOME_FOLDER_ID);
         await this.loadCurrentFolder();
       }
     } else {
@@ -98,19 +98,19 @@ export class FileBrowserComponent implements OnInit {
   private async resolveBreadcrumb(folderId: string): Promise<{ id: string; name: string }[]> {
     const crumbs: { id: string; name: string }[] = [];
     let currentId = folderId;
-    while (currentId && currentId !== '1') {
+    while (currentId && currentId !== HOME_FOLDER_ID) {
       const folder = await this.fileService.getFile(currentId);
       crumbs.unshift({ id: folder.id, name: folder.name });
       const parentId = folder.parent_id;
       if (!parentId || parentId === currentId || parentId === '0') break;
       currentId = parentId;
     }
-    crumbs.unshift({ id: '1', name: 'My Drive' });
+    crumbs.unshift({ id: HOME_FOLDER_ID, name: 'My Drive' });
     return crumbs;
   }
 
   private syncUrl(folderId: string): void {
-    const url = folderId === '1' ? '/' : `/?folder=${encodeURIComponent(folderId)}`;
+    const url = folderId === HOME_FOLDER_ID ? '/' : `/?folder=${encodeURIComponent(folderId)}`;
     window.history.replaceState(null, '', url);
   }
 

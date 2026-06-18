@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { DriveFile, FileListOptions, BreadcrumbItem } from '../models/drive-file.model';
+import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID } from '../models/drive-file.model';
 import { FolderTreeNode, DriveUsage } from '../models/drive.model';
 
 interface ApiResponse<T> {
@@ -15,8 +15,8 @@ export class FileService {
   readonly files = signal<DriveFile[]>([]);
   readonly searchResults = signal<DriveFile[] | null>(null);
   readonly loading = signal(false);
-  readonly currentFolderId = signal('1');
-  readonly breadcrumb = signal<BreadcrumbItem[]>([{ id: '1', name: 'My Drive' }]);
+  readonly currentFolderId = signal(HOME_FOLDER_ID);
+  readonly breadcrumb = signal<BreadcrumbItem[]>([{ id: HOME_FOLDER_ID, name: 'My Drive' }]);
   readonly folderTree = signal<FolderTreeNode | null>(null);
   readonly selectedIds = signal<Set<string>>(new Set());
 
@@ -153,7 +153,7 @@ export class FileService {
     const crumbs = this.breadcrumb();
     const isVirtual = crumbs.length > 0 && crumbs[0].id.startsWith('__');
     if (isVirtual) {
-      this.breadcrumb.set(id === '1' ? [{ id: '1', name: 'My Drive' }] : [{ id: '1', name: 'My Drive' }, { id, name }]);
+      this.breadcrumb.set(id === HOME_FOLDER_ID ? [{ id: HOME_FOLDER_ID, name: 'My Drive' }] : [{ id: HOME_FOLDER_ID, name: 'My Drive' }, { id, name }]);
       this.currentFolderId.set(id);
       return;
     }

@@ -4,7 +4,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileService } from '../../../core/services/file.service';
-import { DriveFile } from '../../../core/models/drive-file.model';
+import { DriveFile, HOME_FOLDER_ID } from '../../../core/models/drive-file.model';
 
 interface Crumb { id: string; name: string; }
 
@@ -18,7 +18,7 @@ interface Crumb { id: string; name: string; }
 export class FolderPickerComponent implements OnInit {
   private fileService = inject(FileService);
 
-  readonly startFolderId = input<string>('1');
+  readonly startFolderId = input<string>(HOME_FOLDER_ID);
   readonly startFolderName = input<string>('My Drive');
   // Optional: pass the full breadcrumb path so back navigation walks up properly
   readonly startBreadcrumb = input<Crumb[]>([]);
@@ -33,14 +33,13 @@ export class FolderPickerComponent implements OnInit {
   readonly newFolderName = signal('');
   readonly creating = signal(false);
 
-  // Allow going back through history and up to root (id:'1') from any starting folder
   readonly canGoBack = computed(() => {
     const crumbs = this.breadcrumb();
-    return crumbs.length > 1 || (crumbs.length === 1 && crumbs[0].id !== '1');
+    return crumbs.length > 1 || (crumbs.length === 1 && crumbs[0].id !== HOME_FOLDER_ID);
   });
   readonly currentFolder = computed(() => {
     const crumbs = this.breadcrumb();
-    return crumbs.length > 0 ? crumbs[crumbs.length - 1] : { id: '1', name: 'My Drive' };
+    return crumbs.length > 0 ? crumbs[crumbs.length - 1] : { id: HOME_FOLDER_ID, name: 'My Drive' };
   });
 
   ngOnInit(): void {
@@ -77,20 +76,18 @@ export class FolderPickerComponent implements OnInit {
     } else {
       // Beyond local history — resolve parent via API using parent_id
       const currentId = crumbs[0]?.id;
-      if (!currentId || currentId === '1') return;
+      if (!currentId || currentId === HOME_FOLDER_ID) return;
       this.loading.set(true);
       try {
         const folder = await this.fileService.getFile(currentId);
         const parentId = folder.parent_id;
-        if (!parentId || parentId === currentId || parentId === '0') {
-          // Reached root
-          this.breadcrumb.set([{ id: '1', name: 'My Drive' }]);
-          await this.loadFolders('1');
+        if (!parentId || parentId === currentId || parentId === '0' || parentId === HOME_FOLDER_ID) {
+          // Reached home root
+          this.breadcrumb.set([{ id: HOME_FOLDER_ID, name: 'My Drive' }]);
+          await this.loadFolders(HOME_FOLDER_ID);
           return;
         }
-        const parentName = parentId === '1'
-          ? 'My Drive'
-          : (await this.fileService.getFile(parentId)).name;
+        const parentName = (await this.fileService.getFile(parentId)).name;
         this.breadcrumb.set([{ id: parentId, name: parentName }]);
         await this.loadFolders(parentId);
       } finally {

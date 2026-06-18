@@ -18,6 +18,9 @@ export type SortBy = 'name' | 'modified_at' | 'size';
 export type SortDir = 'asc' | 'desc';
 export type ViewMode = 'grid' | 'list';
 
+// kDrive personal-space root (the "private" system folder the native app hides)
+export const HOME_FOLDER_ID = '5';
+
 export interface FileListOptions {
   folderId: string;
   sortBy: SortBy;
