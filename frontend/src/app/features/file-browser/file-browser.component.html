@@ -15,7 +15,7 @@
     </div>
 
     <nav class="sidebar-nav">
-      <button class="nav-item" (click)="fileService.navigateToFolder('1', 'My Drive')">
+      <button class="nav-item" (click)="navigateToFolder('1', 'My Drive')">
         <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
         My Drive
       </button>
@@ -34,7 +34,7 @@
         <ds-folder-tree
           [tree]="fileService.folderTree()!"
           [currentFolderId]="fileService.currentFolderId()"
-          (folderSelected)="fileService.navigateToFolder($event.id, $event.name)"
+          (folderSelected)="navigateToFolder($event.id, $event.name)"
         />
       }
     </div>
@@ -78,7 +78,7 @@
     <!-- Breadcrumb -->
     <ds-breadcrumb
       [items]="fileService.breadcrumb()"
-      (navigate)="fileService.navigateToFolder($event.id, $event.name)"
+      (navigate)="navigateToFolder($event.id, $event.name)"
     />
 
     <!-- Sort bar (list view) -->

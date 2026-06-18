@@ -52,11 +52,6 @@ export class FileBrowserComponent implements OnInit {
   ngOnInit(): void {
     this.loadCurrentFolder();
     this.fileService.loadFolderTree();
-
-    effect(() => {
-      const folderId = this.fileService.currentFolderId();
-      this.loadCurrentFolder();
-    }, { allowSignalWrites: true });
   }
 
   private async loadCurrentFolder(): Promise<void> {
@@ -82,6 +77,7 @@ export class FileBrowserComponent implements OnInit {
     if (file.is_dir) {
       this.fileService.navigateToFolder(file.id, file.name);
       if (window.innerWidth <= 768) this.sidebarOpen.set(false);
+      this.loadCurrentFolder();
       return;
     }
     const idx = this.mediaFiles().findIndex(f => f.id === file.id);
@@ -140,6 +136,11 @@ export class FileBrowserComponent implements OnInit {
     const results = await this.fileService.search('is:starred');
     this.searchResults.set(results);
     this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
+  }
+
+  navigateToFolder(id: string, name: string): void {
+    this.fileService.navigateToFolder(id, name);
+    this.loadCurrentFolder();
   }
 
   logout(): void {
