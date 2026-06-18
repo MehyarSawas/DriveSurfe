@@ -44,6 +44,9 @@ export class FileBrowserComponent implements OnInit {
   readonly previewFile = signal<DriveFile | null>(null);
   readonly previewIndex = signal(0);
 
+  // Keeps Image objects alive so the browser caches their responses
+  private preloadCache = new Map<string, HTMLImageElement>();
+
   readonly mediaFiles = computed(() => {
     const files = this.fileService.searchResults() ?? this.fileService.files();
     return files.filter(f => !f.is_dir);
@@ -100,8 +103,10 @@ export class FileBrowserComponent implements OnInit {
       return;
     }
     const idx = this.mediaFiles().findIndex(f => f.id === file.id);
-    this.previewIndex.set(idx >= 0 ? idx : 0);
+    const resolvedIdx = idx >= 0 ? idx : 0;
+    this.previewIndex.set(resolvedIdx);
     this.previewFile.set(file);
+    this.preloadAdjacent(resolvedIdx);
     // Load parent folder's dirs for the move panel
     const crumbs = this.fileService.breadcrumb();
     const parentCrumb = crumbs.length >= 2 ? crumbs[crumbs.length - 2] : crumbs[0];
@@ -119,6 +124,33 @@ export class FileBrowserComponent implements OnInit {
     if (next >= 0 && next < files.length) {
       this.previewIndex.set(next);
       this.previewFile.set(files[next]);
+      this.preloadAdjacent(next);
+    }
+  }
+
+  private preloadAdjacent(index: number): void {
+    const files = this.mediaFiles();
+    const isImage = (f: DriveFile) =>
+      f.mime_type?.startsWith('image/') ||
+      ['jpg','jpeg','png','gif','webp','heic','heif'].some(e => f.extension === e);
+
+    const toPreload = [index - 1, index + 1, index + 2]
+      .filter(i => i >= 0 && i < files.length)
+      .map(i => files[i])
+      .filter(f => isImage(f));
+
+    // Evict entries not in the new set to keep memory bounded
+    const keepIds = new Set([files[index]?.id, ...toPreload.map(f => f.id)]);
+    for (const id of this.preloadCache.keys()) {
+      if (!keepIds.has(id)) this.preloadCache.delete(id);
+    }
+
+    for (const f of toPreload) {
+      if (!this.preloadCache.has(f.id)) {
+        const img = new Image();
+        img.src = `/api/files/${f.id}/preview`;
+        this.preloadCache.set(f.id, img);
+      }
     }
   }
 
