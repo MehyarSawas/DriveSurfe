@@ -126,6 +126,13 @@ export class FileService {
     }
   }
 
+  async fetchFolders(folderId: string): Promise<DriveFile[]> {
+    const res = await firstValueFrom(
+      this.http.get<ApiResponse<DriveFile[]>>(`/api/files?folderId=${folderId}`)
+    );
+    return (res.data ?? []).filter(f => f.is_dir);
+  }
+
   downloadFile(fileId: string, name: string): void {
     const a = document.createElement('a');
     a.href = `/api/files/${fileId}/download`;

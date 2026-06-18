@@ -61,6 +61,8 @@ export class FileBrowserComponent implements OnInit {
   newFolderName = signal('');
   renamingFile = signal<DriveFile | null>(null);
   renameValue = signal('');
+  previewFolderDirs = signal<DriveFile[]>([]);
+  previewParentFolderId = signal('');
 
   ngOnInit(): void {
     this.loadCurrentFolder();
@@ -86,7 +88,7 @@ export class FileBrowserComponent implements OnInit {
     this.fileService.breadcrumb.set([{ id: '__search__', name: `Search: "${query}"` }]);
   }
 
-  openPreview(file: DriveFile): void {
+  async openPreview(file: DriveFile): Promise<void> {
     if (file.is_dir) {
       this.fileService.navigateToFolder(file.id, file.name);
       if (window.innerWidth <= 768) this.sidebarOpen.set(false);
@@ -96,6 +98,11 @@ export class FileBrowserComponent implements OnInit {
     const idx = this.mediaFiles().findIndex(f => f.id === file.id);
     this.previewIndex.set(idx >= 0 ? idx : 0);
     this.previewFile.set(file);
+    // Load parent folder's dirs for the move panel
+    const crumbs = this.fileService.breadcrumb();
+    const parentId = crumbs.length >= 2 ? crumbs[crumbs.length - 2].id : '1';
+    this.previewParentFolderId.set(parentId);
+    this.previewFolderDirs.set(await this.fileService.fetchFolders(parentId));
   }
 
   closePreview(): void {

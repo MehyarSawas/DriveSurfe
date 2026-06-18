@@ -1,6 +1,6 @@
 import {
   Component, input, output, signal, computed, HostListener,
-  ElementRef, ViewChild, OnDestroy, effect
+  ElementRef, ViewChild, OnDestroy, AfterViewInit, NgZone, effect
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -15,7 +15,7 @@ type DeletePhase = 'idle' | 'confirming' | 'countdown';
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],
 })
-export class PreviewComponent implements OnDestroy {
+export class PreviewComponent implements OnDestroy, AfterViewInit {
   @ViewChild('mediaEl') mediaEl?: ElementRef<HTMLElement>;
 
   readonly file = input.required<DriveFile>();
@@ -56,6 +56,7 @@ export class PreviewComponent implements OnDestroy {
 
   private countdownInterval?: ReturnType<typeof setInterval>;
   private pendingDeleteFile: DriveFile | null = null;
+  private boundTouchMove!: (e: TouchEvent) => void;
 
   readonly isImage = computed(() => {
     const f = this.file();
@@ -72,7 +73,7 @@ export class PreviewComponent implements OnDestroy {
     return this.isVideo() ? `/api/files/${f.id}/download` : `/api/files/${f.id}/preview`;
   });
 
-  constructor() {
+  constructor(private zone: NgZone, private el: ElementRef) {
     effect(() => {
       this.file();
       this.zoom.set(1);
@@ -83,6 +84,11 @@ export class PreviewComponent implements OnDestroy {
       this.newFolderName.set('');
       if (this.isImage()) this.isLoading.set(true);
     });
+  }
+
+  ngAfterViewInit(): void {
+    this.boundTouchMove = (e: TouchEvent) => this.zone.run(() => this.onTouchMove(e));
+    this.el.nativeElement.addEventListener('touchmove', this.boundTouchMove, { passive: false });
   }
 
   onImageLoad(): void { this.isLoading.set(false); }
@@ -101,7 +107,6 @@ export class PreviewComponent implements OnDestroy {
       name,
       then: (folder) => {
         this.localExtraFolders.update(f => [...f, folder]);
-        this.moveToFolder(folder);
       }
     });
     this.newFolderInputOpen.set(false);
@@ -110,6 +115,9 @@ export class PreviewComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.clearCountdown();
+    if (this.boundTouchMove) {
+      this.el.nativeElement.removeEventListener('touchmove', this.boundTouchMove);
+    }
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -136,6 +144,7 @@ export class PreviewComponent implements OnDestroy {
 
   onTouchMove(e: TouchEvent): void {
     if (!this.isSwiping) return;
+    e.preventDefault(); // prevent browser pull-to-refresh and scroll in all directions
     const t = e.touches[0];
     this.touchCurrentX = t.clientX;
     this.touchCurrentY = t.clientY;
@@ -144,17 +153,11 @@ export class PreviewComponent implements OnDestroy {
     const dy = t.clientY - this.touchStartY;
 
     if (Math.abs(dy) > Math.abs(dx)) {
-      // Vertical swipe — only track upward
-      if (dy < 0) {
-        this.swipeOffsetY.set(dy);
-        this.swipeOffsetX.set(0);
-        e.preventDefault();
-      }
+      this.swipeOffsetY.set(dy);
+      this.swipeOffsetX.set(0);
     } else {
-      // Horizontal swipe
       this.swipeOffsetX.set(dx);
       this.swipeOffsetY.set(0);
-      e.preventDefault();
     }
   }
 
