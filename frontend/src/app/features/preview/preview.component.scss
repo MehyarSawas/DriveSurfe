@@ -199,23 +199,22 @@
 .delete-toast {
   position: absolute;
   bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 16px;
   background: rgba(20, 20, 20, 0.88);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 12px;
   padding: 8px 12px 10px;
-  min-width: 200px;
-  max-width: 300px;
+  min-width: 180px;
+  max-width: 260px;
   z-index: 10;
   pointer-events: auto;
   animation: toast-in 0.18s ease;
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .progress-bar {

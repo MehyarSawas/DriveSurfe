@@ -31,7 +31,11 @@ export class FolderPickerComponent implements OnInit {
   readonly newFolderName = signal('');
   readonly creating = signal(false);
 
-  readonly canGoBack = computed(() => this.breadcrumb().length > 1);
+  // Allow going back through history and up to root (id:'1') from any starting folder
+  readonly canGoBack = computed(() => {
+    const crumbs = this.breadcrumb();
+    return crumbs.length > 1 || (crumbs.length === 1 && crumbs[0].id !== '1');
+  });
   readonly currentFolder = computed(() => {
     const crumbs = this.breadcrumb();
     return crumbs.length > 0 ? crumbs[crumbs.length - 1] : { id: '1', name: 'My Drive' };
@@ -58,9 +62,14 @@ export class FolderPickerComponent implements OnInit {
 
   goBack(): void {
     const crumbs = this.breadcrumb();
-    if (crumbs.length <= 1) return;
-    this.breadcrumb.set(crumbs.slice(0, -1));
-    this.loadFolders(crumbs[crumbs.length - 2].id);
+    if (crumbs.length > 1) {
+      this.breadcrumb.set(crumbs.slice(0, -1));
+      this.loadFolders(crumbs[crumbs.length - 2].id);
+    } else {
+      // Already at start of history — go up to root
+      this.breadcrumb.set([{ id: '1', name: 'My Drive' }]);
+      this.loadFolders('1');
+    }
   }
 
   navigateToCrumb(index: number): void {
