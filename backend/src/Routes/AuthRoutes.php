@@ -82,7 +82,7 @@ final class AuthRoutes
                 $excludeIds
             );
 
-            $session->update(['webauthn_challenge' => base64_encode($webAuthn->getChallenge())]);
+            $session->update(['webauthn_challenge' => base64_encode($webAuthn->getChallenge()->getBinaryString())]);
 
             $res->getBody()->write(json_encode($createArgs->publicKey, JSON_THROW_ON_ERROR));
             return $res->withHeader('Content-Type', 'application/json');
@@ -143,7 +143,7 @@ final class AuthRoutes
             // Empty allowedCredentials = browser discovers passkeys for the domain (resident key flow)
             $getArgs = $webAuthn->getGetArgs([], 60, true, false, false, false, true, 'preferred');
 
-            $session->update(['webauthn_challenge' => base64_encode($webAuthn->getChallenge())]);
+            $session->update(['webauthn_challenge' => base64_encode($webAuthn->getChallenge()->getBinaryString())]);
 
             $res->getBody()->write(json_encode($getArgs->publicKey, JSON_THROW_ON_ERROR));
             return $res->withHeader('Content-Type', 'application/json');
