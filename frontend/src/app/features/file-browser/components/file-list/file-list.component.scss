@@ -13,10 +13,11 @@
   cursor: pointer;
   transition: background var(--transition);
 
-  &:hover {
-    background: var(--color-hover);
-
-    .col-actions { opacity: 1; }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--color-hover);
+      .col-actions { opacity: 1; }
+    }
   }
 
   &.selected {
@@ -58,11 +59,16 @@
 .file-icon { width: 24px; height: 24px; fill: var(--color-border); }
 .thumb-img { width: 32px; height: 32px; object-fit: cover; border-radius: 3px; }
 
+.col-name {
+  min-width: 0;
+}
+
 .file-name {
   font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
 }
 
 .col-type, .col-date, .col-size {
@@ -90,4 +96,28 @@
   &:hover { background: var(--color-border); }
   &.starred svg { fill: #fbbf24; }
   &.danger:hover { background: #fce8e6; svg { fill: var(--color-danger); } }
+}
+
+/* Mobile: collapse to icon + name + actions only */
+@media (max-width: 600px) {
+  .file-row {
+    grid-template-columns: 40px 36px 1fr auto;
+  }
+
+  .col-type,
+  .col-date,
+  .col-size {
+    display: none;
+  }
+
+  .col-actions {
+    opacity: 1;
+  }
+}
+
+/* Touch: always show actions */
+@media (hover: none) {
+  .col-actions {
+    opacity: 1;
+  }
 }

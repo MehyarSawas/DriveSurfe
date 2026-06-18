@@ -15,6 +15,7 @@ export class FileListComponent {
 
   readonly fileClick = output<DriveFile>();
   readonly fileDblClick = output<DriveFile>();
+  readonly selectToggle = output<DriveFile>();
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();
