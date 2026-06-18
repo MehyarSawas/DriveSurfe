@@ -72,25 +72,26 @@ export class FileBrowserComponent implements OnInit {
   movingFiles = signal<DriveFile[] | null>(null);
 
   async ngOnInit(): Promise<void> {
+    // Show spinner immediately before any async work
+    this.fileService.loading.set(true);
+
     const folderId = new URLSearchParams(window.location.search).get('folder');
     if (folderId === '__trash__') {
       await this.showTrash();
     } else if (folderId === '__starred__') {
       await this.showStarred();
     } else if (folderId && folderId !== HOME_FOLDER_ID) {
-      // Set the folder immediately so loadCurrentFolder uses the right ID
+      // Point the service at the right folder instantly
       this.fileService.currentFolderId.set(folderId);
-      // Resolve the full breadcrumb chain — failure is non-fatal
-      try {
-        const breadcrumb = await this.resolveBreadcrumb(folderId);
-        this.fileService.breadcrumb.set(breadcrumb);
-      } catch {
-        this.fileService.breadcrumb.set([
-          { id: HOME_FOLDER_ID, name: 'My Drive' },
-          { id: folderId, name: '…' },
-        ]);
+      // Load files and resolve breadcrumb in parallel — neither blocks the other
+      const [, breadcrumb] = await Promise.allSettled([
+        this.loadCurrentFolder(),
+        this.resolveBreadcrumb(folderId),
+      ]);
+      if (breadcrumb.status === 'fulfilled') {
+        this.fileService.breadcrumb.set(breadcrumb.value);
       }
-      await this.loadCurrentFolder();
+      // If breadcrumb failed we already have a minimal one from the service default
     } else {
       await this.loadCurrentFolder();
     }
