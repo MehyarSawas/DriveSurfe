@@ -98,6 +98,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.isPinching = false;
       this.isSwiping = false;
       if (isNewFile) {
+        this.clearCountdown();
+        this.deletePhase.set('idle');
+        this.pendingDeleteFile = null;
         this.previewFailed.set(false);
         if (!this.isVideo() && !this.isPdf()) this.isLoading.set(true);
       }
