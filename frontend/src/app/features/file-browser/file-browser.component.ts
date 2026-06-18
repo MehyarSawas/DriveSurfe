@@ -98,16 +98,22 @@ export class FileBrowserComponent implements OnInit {
     this.fileService.loadFolderTree();
   }
 
-  // Walk up parent_id chain to build a full breadcrumb from root to folderId
+  // Walk up parent_id chain to build a full breadcrumb from root to folderId.
+  // Never throws — individual getFile failures cause an early stop.
   private async resolveBreadcrumb(folderId: string): Promise<{ id: string; name: string }[]> {
     const crumbs: { id: string; name: string }[] = [];
     let currentId = folderId;
-    while (currentId && currentId !== HOME_FOLDER_ID) {
-      const folder = await this.fileService.getFile(currentId);
-      crumbs.unshift({ id: folder.id, name: folder.name });
-      const parentId = folder.parent_id;
-      if (!parentId || parentId === currentId || parentId === '0') break;
-      currentId = parentId;
+    while (currentId && currentId !== HOME_FOLDER_ID && currentId !== '1') {
+      try {
+        const folder = await this.fileService.getFile(currentId);
+        crumbs.unshift({ id: folder.id, name: folder.name });
+        const parentId = folder.parent_id;
+        // Stop at true kDrive root, home folder, self-reference, or missing parent
+        if (!parentId || parentId === currentId || parentId === '0' || parentId === '1') break;
+        currentId = parentId;
+      } catch {
+        break;
+      }
     }
     crumbs.unshift({ id: HOME_FOLDER_ID, name: 'My Drive' });
     return crumbs;
