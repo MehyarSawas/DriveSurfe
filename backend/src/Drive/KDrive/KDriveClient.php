@@ -26,7 +26,6 @@ final class KDriveClient implements DriveInterface
             'order_by'  => $sortBy,
             'order_for' => [$sortBy => $sortDir],
             'with'      => 'is_favorite',
-            'per_page'  => 200,
         ];
         if ($cursor) $params['cursor'] = $cursor;
 

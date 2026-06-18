@@ -56,6 +56,9 @@ export class FileService {
           cursor = page.has_more && page.cursor ? page.cursor : null;
         }
       }
+    } catch (err) {
+      console.error('loadFiles error:', err);
+      throw err;
     } finally {
       this.loading.set(false);
       this.loadingMore.set(false);
