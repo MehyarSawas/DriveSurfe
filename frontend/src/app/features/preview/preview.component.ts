@@ -166,9 +166,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
-  onTouchEnd(e: TouchEvent): void {
+  onTouchEnd(e?: TouchEvent): void {
     if (this.isPinching) {
-      if (e.touches.length < 2) this.isPinching = false;
+      if (!e || e.touches.length < 2) this.isPinching = false;
       return;
     }
     if (!this.isSwiping) return;
