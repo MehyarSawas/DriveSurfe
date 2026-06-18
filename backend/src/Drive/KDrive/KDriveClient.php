@@ -18,6 +18,12 @@ final class KDriveClient implements DriveInterface
         private readonly SessionService $session  // used for drive_id caching
     ) {}
 
+    public function rawListFiles(string $folderId = '1'): array
+    {
+        $driveId = $this->getDriveId();
+        return $this->get("{$driveId}/files/{$folderId}/files", ['per_page' => 5]);
+    }
+
     public function listFiles(string $folderId = '1', array $options = []): array
     {
         $driveId = $this->getDriveId();
