@@ -81,9 +81,8 @@
       (navigate)="navigateToFolder($event.id, $event.name)"
     />
 
-    <!-- Sort bar (list view) -->
-    @if (viewMode() === 'list') {
-      <div class="sort-bar">
+    <!-- Sort bar -->
+    <div class="sort-bar">
         <button class="sort-btn" (click)="toggleSort('name')">
           Name
           @if (sortBy() === 'name') {
@@ -103,7 +102,6 @@
           }
         </button>
       </div>
-    }
 
     <!-- File content -->
     <div class="file-content">
