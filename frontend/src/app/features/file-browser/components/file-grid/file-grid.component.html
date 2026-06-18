@@ -60,7 +60,7 @@
 
       <!-- Thumbnail / Icon -->
       <div class="thumb">
-        @if (isMedia(file) && file.thumbnail_url && !failedThumbs.has(file.id)) {
+        @if (!file.is_dir && file.thumbnail_url && !failedThumbs.has(file.id)) {
           <img [src]="file.thumbnail_url" [alt]="file.name" loading="lazy"
                (error)="failedThumbs.add(file.id)" />
           @if (isVideo(file)) {

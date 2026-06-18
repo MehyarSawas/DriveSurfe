@@ -35,6 +35,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   readonly zoom = signal(1);
   readonly isLoading = signal(false);
+  readonly previewFailed = signal(false);
   readonly deletePhase = signal<DeletePhase>('idle');
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
@@ -83,7 +84,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.folderPanelOpen.set(false);
       this.isPinching = false;
       this.isSwiping = false;
-      if (this.isImage()) this.isLoading.set(true);
+      this.previewFailed.set(false);
+      if (!this.isVideo()) this.isLoading.set(true);
     });
   }
 
@@ -93,7 +95,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onImageLoad(): void { this.isLoading.set(false); }
-  onImageError(): void { this.isLoading.set(false); }
+  onImageError(): void { this.isLoading.set(false); this.previewFailed.set(true); }
 
   onFolderSelected(folder: DriveFile): void {
     this.moveFile.emit({ file: this.file(), folderId: folder.id });
