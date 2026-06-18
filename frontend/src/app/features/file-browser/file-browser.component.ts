@@ -78,16 +78,19 @@ export class FileBrowserComponent implements OnInit {
     } else if (folderId === '__starred__') {
       await this.showStarred();
     } else if (folderId && folderId !== HOME_FOLDER_ID) {
+      // Set the folder immediately so loadCurrentFolder uses the right ID
+      this.fileService.currentFolderId.set(folderId);
+      // Resolve the full breadcrumb chain — failure is non-fatal
       try {
         const breadcrumb = await this.resolveBreadcrumb(folderId);
-        this.fileService.currentFolderId.set(folderId);
         this.fileService.breadcrumb.set(breadcrumb);
-        await this.loadCurrentFolder();
       } catch {
-        // Folder no longer accessible — fall back to home
-        this.syncUrl(HOME_FOLDER_ID);
-        await this.loadCurrentFolder();
+        this.fileService.breadcrumb.set([
+          { id: HOME_FOLDER_ID, name: 'My Drive' },
+          { id: folderId, name: '…' },
+        ]);
       }
+      await this.loadCurrentFolder();
     } else {
       await this.loadCurrentFolder();
     }

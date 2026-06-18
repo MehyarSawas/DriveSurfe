@@ -58,7 +58,6 @@ export class FileService {
       }
     } catch (err) {
       console.error('loadFiles error:', err);
-      throw err;
     } finally {
       this.loading.set(false);
       this.loadingMore.set(false);
