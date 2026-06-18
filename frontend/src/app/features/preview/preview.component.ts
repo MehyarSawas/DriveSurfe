@@ -56,7 +56,10 @@ export class PreviewComponent implements OnDestroy {
     return f.mime_type.startsWith('video/') || ['mp4','mov','m4v'].includes(f.extension);
   });
 
-  readonly previewSrc = computed(() => `/api/files/${this.file().id}/preview`);
+  readonly previewSrc = computed(() => {
+    const f = this.file();
+    return this.isVideo() ? `/api/files/${f.id}/download` : `/api/files/${f.id}/preview`;
+  });
 
   constructor() {
     effect(() => {

@@ -122,12 +122,13 @@
 .filter-select {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 6px 28px 6px 10px;
+  padding: 6px 32px 6px 10px;
   font-size: 13px;
   color: var(--color-text);
-  background: var(--color-surface);
+  background: var(--color-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%23888' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 10px center;
   cursor: pointer;
-  appearance: auto;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .icon-btn.active {

@@ -48,7 +48,7 @@ export class FileBrowserComponent implements OnInit {
   readonly displayFiles = computed(() => {
     let files = this.searchResults() ?? this.fileService.files();
     const t = this.filterType();
-    if (t) files = files.filter(f => f.mime_type?.startsWith(t + '/'));
+    if (t) files = files.filter(f => f.is_dir || f.mime_type?.startsWith(t + '/'));
     return files;
   });
 
