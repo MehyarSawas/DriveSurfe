@@ -58,7 +58,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly isTransitioning = signal(false);
 
   private countdownInterval?: ReturnType<typeof setInterval>;
-  private pendingDeleteFile: DriveFile | null = null;
+  readonly pendingDeleteFile = signal<DriveFile | null>(null);
   private boundTouchMove!: (e: TouchEvent) => void;
 
   readonly isImage = computed(() => {
@@ -98,9 +98,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.isPinching = false;
       this.isSwiping = false;
       if (isNewFile) {
-        this.clearCountdown();
-        this.deletePhase.set('idle');
-        this.pendingDeleteFile = null;
         this.previewFailed.set(false);
         if (!this.isVideo() && !this.isPdf()) this.isLoading.set(true);
       }
@@ -247,20 +244,20 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   initiateDelete(): void {
-    if (this.deletePhase() === 'countdown' && this.pendingDeleteFile) {
+    if (this.deletePhase() === 'countdown' && this.pendingDeleteFile()) {
       // Confirm the previous pending delete immediately, then start fresh
       this.clearCountdown();
-      this.delete.emit(this.pendingDeleteFile);
+      this.delete.emit(this.pendingDeleteFile()!);
     }
-    this.pendingDeleteFile = this.file();
+    this.pendingDeleteFile.set(this.file());
     this.deletePhase.set('countdown');
     this.countdown.set(10);
     this.countdownInterval = setInterval(() => {
       const c = this.countdown() - 1;
       if (c <= 0) {
         this.clearCountdown();
-        this.delete.emit(this.pendingDeleteFile!);
-        this.pendingDeleteFile = null;
+        this.delete.emit(this.pendingDeleteFile()!);
+        this.pendingDeleteFile.set(null);
         this.deletePhase.set('idle');
       } else {
         this.countdown.set(c);
@@ -272,7 +269,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.clearCountdown();
     this.deletePhase.set('idle');
     this.countdown.set(10);
-    this.pendingDeleteFile = null;
+    this.pendingDeleteFile.set(null);
   }
 
   private clearCountdown(): void {
