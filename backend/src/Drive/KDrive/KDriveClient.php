@@ -22,6 +22,7 @@ final class KDriveClient implements DriveInterface
             'order_for' => [
                 $options['sortBy'] ?? 'name' => $options['sortDir'] ?? 'asc',
             ],
+            'with' => 'is_favorite',
         ];
 
         $data = $this->get("{$driveId}/files/{$folderId}/files", $params);
@@ -45,7 +46,7 @@ final class KDriveClient implements DriveInterface
     public function search(string $query): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->get("{$driveId}/files/search", ['query' => $query, 'per_page' => 100]);
+        $data = $this->get("{$driveId}/files/search", ['query' => $query, 'per_page' => 100, 'with' => 'is_favorite']);
         return $this->normalizeFiles($data['data'] ?? []);
     }
 
@@ -117,7 +118,7 @@ final class KDriveClient implements DriveInterface
     public function listTrash(): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->get("{$driveId}/trash", ['per_page' => 100]);
+        $data = $this->get("{$driveId}/trash", ['per_page' => 100, 'with' => 'is_favorite']);
         return $this->normalizeFiles($data['data'] ?? []);
     }
 
