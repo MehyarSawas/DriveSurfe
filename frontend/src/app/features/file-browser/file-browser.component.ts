@@ -3,6 +3,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router, ActivatedRoute } from '@angular/router';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DriveFile, SortBy, SortDir, ViewMode } from '../../core/models/drive-file.model';
@@ -34,6 +35,8 @@ import { FolderPickerComponent } from '../../shared/components/folder-picker/fol
 export class FileBrowserComponent implements OnInit {
   protected fileService = inject(FileService);
   protected auth = inject(AuthService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
 
   readonly viewMode = signal<ViewMode>('grid');
   readonly sortBy = signal<SortBy>('name');
@@ -71,9 +74,36 @@ export class FileBrowserComponent implements OnInit {
   previewParentFolderName = signal('');
   movingFiles = signal<DriveFile[] | null>(null);
 
-  ngOnInit(): void {
-    this.loadCurrentFolder();
+  async ngOnInit(): Promise<void> {
+    const folderId = this.route.snapshot.queryParamMap.get('folder');
+    if (folderId === '__trash__') {
+      await this.showTrash();
+    } else if (folderId === '__starred__') {
+      await this.showStarred();
+    } else if (folderId && folderId !== '1') {
+      try {
+        const folder = await this.fileService.getFile(folderId);
+        this.fileService.currentFolderId.set(folderId);
+        this.fileService.breadcrumb.set([{ id: folderId, name: folder.name }]);
+        await this.loadCurrentFolder();
+      } catch {
+        // Folder no longer accessible — fall back to root
+        this.syncUrl('1');
+        await this.loadCurrentFolder();
+      }
+    } else {
+      await this.loadCurrentFolder();
+    }
     this.fileService.loadFolderTree();
+  }
+
+  private syncUrl(folderId: string): void {
+    const params = folderId === '1' ? {} : { folder: folderId };
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: params,
+      replaceUrl: true,
+    });
   }
 
   private async loadCurrentFolder(): Promise<void> {
@@ -191,6 +221,7 @@ export class FileBrowserComponent implements OnInit {
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
     this.fileService.currentFolderId.set('__trash__');
     this.fileService.searchResults.set(null);
+    this.syncUrl('__trash__');
   }
 
   async showStarred(): Promise<void> {
@@ -198,10 +229,12 @@ export class FileBrowserComponent implements OnInit {
     this.fileService.searchResults.set(results);
     this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
     this.fileService.currentFolderId.set('__starred__');
+    this.syncUrl('__starred__');
   }
 
   navigateToFolder(id: string, name: string): void {
     this.fileService.navigateToFolder(id, name);
+    this.syncUrl(id);
     this.loadCurrentFolder();
   }
 
