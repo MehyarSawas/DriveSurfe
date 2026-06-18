@@ -162,27 +162,41 @@ final class KDriveClient implements DriveInterface
         $name = rawurlencode($meta['data']['name'] ?? 'download');
         $mime = $meta['data']['mime_type'] ?? 'application/octet-stream';
 
+        $requestHeaders = ['Authorization' => "Bearer {$token}"];
+        $rangeHeader    = $_SERVER['HTTP_RANGE'] ?? null;
+        if ($rangeHeader) {
+            $requestHeaders['Range'] = $rangeHeader;
+        }
+
         try {
             $response = $this->http->get(
-                self::API_BASE . "/{$driveId}/files/{$fileId}/download",
-                ['headers' => ['Authorization' => "Bearer {$token}"], 'stream' => true]
+                self::API_V2 . "/{$driveId}/files/{$fileId}/download",
+                ['headers' => $requestHeaders, 'stream' => true, 'http_errors' => false]
             );
-        } catch (\GuzzleHttp\Exception\BadResponseException $e) {
-            http_response_code($e->getResponse()->getStatusCode());
+        } catch (\GuzzleHttp\Exception\GuzzleException $e) {
+            http_response_code(502);
             exit;
         }
+
+        $status = $response->getStatusCode();
+        http_response_code($status);
 
         header("Content-Type: {$mime}");
         header("Content-Disposition: inline; filename*=UTF-8''{$name}");
         header("Accept-Ranges: bytes");
+        header("Cache-Control: private, max-age=3600");
+
         if ($len = $response->getHeaderLine('Content-Length')) {
             header("Content-Length: {$len}");
         }
-        header("Cache-Control: private, max-age=3600");
+        if ($range = $response->getHeaderLine('Content-Range')) {
+            header("Content-Range: {$range}");
+        }
 
         $body = $response->getBody();
         while (!$body->eof()) {
             echo $body->read(65536);
+            if (connection_aborted()) break;
         }
     }
 

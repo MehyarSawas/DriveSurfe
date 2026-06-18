@@ -49,7 +49,7 @@
       @if (isImage()) {
         <img [src]="previewSrc()" [alt]="file().name" class="media-img" (dblclick)="resetZoom()" />
       } @else if (isVideo()) {
-        <video [src]="previewSrc()" controls class="media-video" [style.transform]="'scale(' + zoom() + ')'">
+        <video [src]="previewSrc()" controls playsinline preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'">
           Your browser does not support video playback.
         </video>
       } @else {
