@@ -40,12 +40,7 @@ final class Application
                 $_ENV['SESSION_KEY'] ?? 'fallback-key-change-me'
             ),
             Client::class => fn() => new Client(['timeout' => 30]),
-            KDriveClient::class => function (Container $c) {
-                return new KDriveClient(
-                    $c->get(Client::class),
-                    $c->get(SessionService::class)
-                );
-            },
+            KDriveClient::class => fn(Container $c) => new KDriveClient($c->get(Client::class)),
             AuthMiddleware::class => function (Container $c) {
                 return new AuthMiddleware($c->get(SessionService::class));
             },

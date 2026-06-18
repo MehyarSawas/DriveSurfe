@@ -3,7 +3,6 @@
 namespace DriveSurfe\Drive\KDrive;
 
 use DriveSurfe\Drive\DriveInterface;
-use DriveSurfe\Service\SessionService;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use RuntimeException;
@@ -11,12 +10,8 @@ use RuntimeException;
 final class KDriveClient implements DriveInterface
 {
     private const API_BASE = 'https://api.infomaniak.com/2/drive';
-    private const PROFILE_URL = 'https://api.infomaniak.com/1/profile';
 
-    public function __construct(
-        private readonly Client $http,
-        private readonly SessionService $session  // used for drive_id caching
-    ) {}
+    public function __construct(private readonly Client $http) {}
 
     public function rawListFiles(string $folderId = '1'): array
     {
@@ -149,16 +144,10 @@ final class KDriveClient implements DriveInterface
 
     private function getDriveId(): string
     {
-        $session = $this->session->get();
-        $driveId = $session['drive_id'] ?? null;
-
+        $driveId = $_ENV['KDRIVE_DRIVE_ID'] ?? null;
         if (!$driveId) {
-            $profile = $this->get('', [], self::PROFILE_URL . '?with=drives');
-            $drives = $profile['data']['drives']['data'] ?? [];
-            $driveId = (string) ($drives[0]['id'] ?? throw new RuntimeException('No kDrive found'));
-            $this->session->update(['drive_id' => $driveId]);
+            throw new RuntimeException('KDRIVE_DRIVE_ID not set in .env');
         }
-
         return $driveId;
     }
 
