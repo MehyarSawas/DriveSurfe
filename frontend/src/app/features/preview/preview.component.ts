@@ -133,6 +133,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchStart(e: TouchEvent): void {
+    if (this.isPdf()) return;
     if (e.touches.length === 2) {
       this.isPinching = true;
       this.isSwiping = false;
@@ -151,6 +152,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchMove(e: TouchEvent): void {
+    if (this.isPdf()) return;
     e.preventDefault();
     if (this.isPinching && e.touches.length === 2) {
       const [t1, t2] = [e.touches[0], e.touches[1]];
@@ -180,6 +182,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchEnd(e?: TouchEvent): void {
+    if (this.isPdf()) return;
     if (this.isPinching) {
       if (!e || e.touches.length < 2) this.isPinching = false;
       return;
