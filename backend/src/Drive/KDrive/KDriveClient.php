@@ -13,12 +13,6 @@ final class KDriveClient implements DriveInterface
 
     public function __construct(private readonly Client $http) {}
 
-    public function rawListFiles(string $folderId = '1'): array
-    {
-        $driveId = $this->getDriveId();
-        return $this->get("{$driveId}/files/{$folderId}/files", ['per_page' => 5]);
-    }
-
     public function listFiles(string $folderId = '1', array $options = []): array
     {
         $driveId = $this->getDriveId();

@@ -120,7 +120,7 @@
         <ds-file-grid
           [files]="displayFiles()"
           [selectedIds]="fileService.selectedIds()"
-          (fileClick)="fileService.toggleSelect($event.id)"
+          (fileClick)="openPreview($event)"
           (fileDblClick)="openPreview($event)"
           (favorite)="fileService.toggleFavorite($event)"
           (download)="fileService.downloadFile($event.id, $event.name)"
@@ -130,7 +130,7 @@
         <ds-file-list
           [files]="displayFiles()"
           [selectedIds]="fileService.selectedIds()"
-          (fileClick)="fileService.toggleSelect($event.id)"
+          (fileClick)="openPreview($event)"
           (fileDblClick)="openPreview($event)"
           (favorite)="fileService.toggleFavorite($event)"
           (download)="fileService.downloadFile($event.id, $event.name)"

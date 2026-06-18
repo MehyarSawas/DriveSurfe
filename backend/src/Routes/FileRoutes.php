@@ -25,11 +25,6 @@ final class FileRoutes
         $drive = $this->drive;
         $auth  = $this->auth;
 
-        $group->get('/debug-raw', function (Request $req, Response $res) use ($drive): Response {
-            $raw = $drive->rawListFiles('1');
-            return self::json($res, $raw);
-        });
-
         $group->get('/files', function (Request $req, Response $res) use ($drive): Response {
             $params   = $req->getQueryParams();
             $folderId = $params['folderId'] ?? '1';
