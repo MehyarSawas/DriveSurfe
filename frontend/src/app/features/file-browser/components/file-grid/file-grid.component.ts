@@ -15,11 +15,16 @@ export class FileGridComponent {
 
   readonly fileClick = output<DriveFile>();
   readonly fileDblClick = output<DriveFile>();
+  readonly selectToggle = output<DriveFile>();
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();
 
   readonly failedThumbs = new Set<string>();
+
+  onCardClick(file: DriveFile): void {
+    this.fileClick.emit(file);
+  }
 
   isSelected(id: string): boolean {
     return this.selectedIds().has(id);

@@ -4,12 +4,13 @@
       class="file-card"
       [class.selected]="isSelected(file.id)"
       [class.is-dir]="file.is_dir"
-      (click)="fileClick.emit(file)"
-      (dblclick)="fileDblClick.emit(file)"
+      (click)="onCardClick(file)"
     >
-      <!-- Checkbox -->
-      <div class="checkbox" [class.visible]="isSelected(file.id)" (click)="$event.stopPropagation(); fileClick.emit(file)">
-        <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+      <!-- Select circle -->
+      <div class="select-circle" [class.checked]="isSelected(file.id)" (click)="$event.stopPropagation(); selectToggle.emit(file)">
+        @if (isSelected(file.id)) {
+          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        }
       </div>
 
       <!-- Thumbnail / Icon -->

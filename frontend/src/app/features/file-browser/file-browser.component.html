@@ -120,6 +120,7 @@
           [selectedIds]="fileService.selectedIds()"
           (fileClick)="openPreview($event)"
           (fileDblClick)="openPreview($event)"
+          (selectToggle)="fileService.toggleSelect($event.id)"
           (favorite)="toggleFavorite($event)"
           (download)="fileService.downloadFile($event.id, $event.name)"
           (delete)="fileService.delete($event.id)"

@@ -1,6 +1,6 @@
 .file-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
 }
 
@@ -17,39 +17,52 @@
     box-shadow: var(--shadow-sm);
 
     .actions { opacity: 1; }
-    .checkbox { opacity: 1; }
+    .select-circle { opacity: 1; }
   }
 
   &.selected {
     background: var(--color-selected);
     outline: 2px solid var(--color-primary);
 
-    .checkbox { opacity: 1; background: var(--color-primary); }
+    .select-circle {
+      opacity: 1;
+      background: var(--color-primary);
+      border-color: var(--color-primary);
+    }
   }
 }
 
-.checkbox {
+.select-circle {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 20px;
-  height: 20px;
+  top: 10px;
+  left: 10px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 2px solid var(--color-border);
-  background: var(--color-surface);
+  border: 2px solid rgba(255,255,255,0.85);
+  background: rgba(0,0,0,0.25);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   transition: opacity var(--transition), background var(--transition);
   z-index: 2;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 
-  &.visible { opacity: 1; background: var(--color-primary); border-color: var(--color-primary); }
+  &.checked {
+    opacity: 1;
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+  }
 
   svg {
-    width: 12px;
-    height: 12px;
+    width: 13px;
+    height: 13px;
     fill: white;
+  }
+
+  @media (max-width: 768px) {
+    opacity: 1;
   }
 }
 
