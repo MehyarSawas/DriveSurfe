@@ -61,6 +61,7 @@ export class FileBrowserComponent implements OnInit {
 
   readonly selectedCount = computed(() => this.fileService.selectedIds().size);
   readonly folderDirs = computed(() => this.displayFiles().filter(f => f.is_dir));
+  readonly isTrash = computed(() => this.fileService.currentFolderId() === '__trash__');
 
   showCreateFolder = signal(false);
   newFolderName = signal('');
@@ -289,6 +290,16 @@ export class FileBrowserComponent implements OnInit {
         this.previewFile.set(remaining[idx]);
       }
     }
+  }
+
+  async handleRestore(file: DriveFile): Promise<void> {
+    await this.fileService.restoreFile(file.id);
+  }
+
+  async bulkRestore(): Promise<void> {
+    const ids = [...this.fileService.selectedIds()];
+    await Promise.all(ids.map(id => this.fileService.restoreFile(id)));
+    this.fileService.clearSelection();
   }
 
   async bulkDelete(): Promise<void> {

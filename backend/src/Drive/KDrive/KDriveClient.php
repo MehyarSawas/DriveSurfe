@@ -123,6 +123,12 @@ final class KDriveClient implements DriveInterface
         return $this->normalizeFile($data['data'] ?? []);
     }
 
+    public function restoreFile(string $fileId): void
+    {
+        $driveId = $this->getDriveId();
+        $this->post("{$driveId}/trash/{$fileId}/restore");
+    }
+
     public function moveFile(string $fileId, string $destinationFolderId): void
     {
         $driveId = $this->getDriveId();

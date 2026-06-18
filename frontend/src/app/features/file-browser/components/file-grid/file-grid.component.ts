@@ -13,8 +13,11 @@ export class FileGridComponent {
   readonly files = input.required<DriveFile[]>();
   readonly selectedIds = input<Set<string>>(new Set());
 
+  readonly trash = input(false);
+
   readonly fileClick = output<DriveFile>();
   readonly selectToggle = output<DriveFile>();
+  readonly restore = output<DriveFile>();
   readonly rename = output<DriveFile>();
   readonly move = output<DriveFile>();
   readonly favorite = output<DriveFile>();

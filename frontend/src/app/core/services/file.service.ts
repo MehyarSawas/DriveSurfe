@@ -104,6 +104,11 @@ export class FileService {
     return res.data;
   }
 
+  async restoreFile(fileId: string): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/files/${fileId}/restore`, {}));
+    this.files.update(files => files.filter(f => f.id !== fileId));
+  }
+
   async delete(fileId: string): Promise<void> {
     await firstValueFrom(this.http.delete(`/api/files/${fileId}`));
     this.files.update(files => files.filter(f => f.id !== fileId));

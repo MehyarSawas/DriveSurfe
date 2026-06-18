@@ -88,6 +88,11 @@ final class FileRoutes
             return self::json($res, ['data' => $drive->createFolder($parentId, $name)]);
         })->add($auth);
 
+        $group->post('/files/{id}/restore', function (Request $req, Response $res, array $args) use ($drive): Response {
+            $drive->restoreFile($args['id']);
+            return self::json($res, ['data' => true]);
+        })->add($auth);
+
         $group->post('/files/{id}/move', function (Request $req, Response $res, array $args) use ($drive): Response {
             $body   = (array) $req->getParsedBody();
             $destId = $body['destination_folder_id'] ?? '';
