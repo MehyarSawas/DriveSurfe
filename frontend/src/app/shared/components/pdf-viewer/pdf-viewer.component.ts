@@ -111,16 +111,20 @@ export class PdfViewerComponent implements OnChanges {
       this.loading.set(false);
 
       const containerWidth = this.pagesEl.nativeElement.clientWidth - 32;
+      const dpr = window.devicePixelRatio || 1;
 
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const unscaled = page.getViewport({ scale: 1 });
-        const scale = Math.min(containerWidth / unscaled.width, 2);
-        const viewport = page.getViewport({ scale });
+        const scale = containerWidth / unscaled.width;
+        const viewport = page.getViewport({ scale: scale * dpr });
 
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
+        // Display at logical size so it looks correct on screen
+        canvas.style.width = `${viewport.width / dpr}px`;
+        canvas.style.height = `${viewport.height / dpr}px`;
 
         const ctx = canvas.getContext('2d')!;
         await page.render({ canvasContext: ctx, viewport, canvas }).promise;
