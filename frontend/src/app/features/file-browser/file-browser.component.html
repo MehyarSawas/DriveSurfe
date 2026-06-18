@@ -232,8 +232,7 @@
 <!-- Move folder picker -->
 @if (movingFiles()) {
   <ds-folder-picker
-    [startFolderId]="fileService.currentFolderId()"
-    [startFolderName]="fileService.breadcrumb()[fileService.breadcrumb().length - 1]?.name ?? 'My Drive'"
+    [startBreadcrumb]="fileService.breadcrumb()"
     (folderSelected)="onPickerFolderSelected($event)"
     (closed)="movingFiles.set(null)"
   />

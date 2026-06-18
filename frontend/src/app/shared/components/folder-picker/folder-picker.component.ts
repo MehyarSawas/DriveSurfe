@@ -20,6 +20,8 @@ export class FolderPickerComponent implements OnInit {
 
   readonly startFolderId = input<string>('1');
   readonly startFolderName = input<string>('My Drive');
+  // Optional: pass the full breadcrumb path so back navigation walks up properly
+  readonly startBreadcrumb = input<Crumb[]>([]);
 
   readonly folderSelected = output<DriveFile>();
   readonly closed = output<void>();
@@ -42,8 +44,14 @@ export class FolderPickerComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.breadcrumb.set([{ id: this.startFolderId(), name: this.startFolderName() }]);
-    this.loadFolders(this.startFolderId());
+    const fullPath = this.startBreadcrumb();
+    if (fullPath.length > 0) {
+      this.breadcrumb.set(fullPath.map(c => ({ id: c.id, name: c.name })));
+      this.loadFolders(fullPath[fullPath.length - 1].id);
+    } else {
+      this.breadcrumb.set([{ id: this.startFolderId(), name: this.startFolderName() }]);
+      this.loadFolders(this.startFolderId());
+    }
   }
 
   private async loadFolders(folderId: string): Promise<void> {
