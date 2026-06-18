@@ -131,6 +131,39 @@ final class KDriveClient implements DriveInterface
         ];
     }
 
+    public function proxyDownload(string $fileId): void
+    {
+        $driveId = $this->getDriveId();
+        $token   = $this->getToken();
+
+        $meta = $this->get("{$driveId}/files/{$fileId}");
+        $name = rawurlencode($meta['data']['name'] ?? 'download');
+        $mime = $meta['data']['mime_type'] ?? 'application/octet-stream';
+
+        try {
+            $response = $this->http->get(
+                self::API_BASE . "/{$driveId}/files/{$fileId}/download",
+                ['headers' => ['Authorization' => "Bearer {$token}"], 'stream' => true]
+            );
+        } catch (\GuzzleHttp\Exception\BadResponseException $e) {
+            http_response_code($e->getResponse()->getStatusCode());
+            exit;
+        }
+
+        header("Content-Type: {$mime}");
+        header("Content-Disposition: inline; filename*=UTF-8''{$name}");
+        header("Accept-Ranges: bytes");
+        if ($len = $response->getHeaderLine('Content-Length')) {
+            header("Content-Length: {$len}");
+        }
+        header("Cache-Control: private, max-age=3600");
+
+        $body = $response->getBody();
+        while (!$body->eof()) {
+            echo $body->read(65536);
+        }
+    }
+
     public function proxyFile(string $fileId, string $type = 'thumbnail'): void
     {
         $driveId = $this->getDriveId();

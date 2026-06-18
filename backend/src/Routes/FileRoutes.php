@@ -50,13 +50,8 @@ final class FileRoutes
         })->add($auth);
 
         $group->get('/files/{id}/download', function (Request $req, Response $res, array $args) use ($drive): Response {
-            $stream = $drive->downloadStream($args['id']);
-            $file   = $drive->getFile($args['id']);
-            $name   = rawurlencode($file['name'] ?? 'download');
-            return $res
-                ->withHeader('Content-Type', 'application/octet-stream')
-                ->withHeader('Content-Disposition', "attachment; filename*=UTF-8''{$name}")
-                ->withBody(new \Slim\Psr7\Stream($stream));
+            $drive->proxyDownload($args['id']);
+            return $res;
         })->add($auth);
 
         $group->get('/folder-tree', function (Request $req, Response $res) use ($drive): Response {
