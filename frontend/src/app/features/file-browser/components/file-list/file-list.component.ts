@@ -27,7 +27,7 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   openMenuId: string | null = null;
 
   private isDragSelecting = false;
-  private dragVisited = new Set<string>();
+  private dragOrder: string[] = [];
   private boundDragMove!: (e: TouchEvent) => void;
   private boundDragEnd!: () => void;
 
@@ -46,10 +46,10 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   }
 
   onSelectTouchStart(e: TouchEvent, file: DriveFile): void {
+    e.preventDefault(); // stop synthetic click from double-toggling
     e.stopPropagation();
     this.isDragSelecting = true;
-    this.dragVisited.clear();
-    this.dragVisited.add(file.id);
+    this.dragOrder = [file.id];
     if (!this.isSelected(file.id)) this.selectToggle.emit(file);
   }
 
@@ -59,19 +59,27 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
     const touch = e.touches[0];
     const target = document.elementFromPoint(touch.clientX, touch.clientY);
     const row = target?.closest('[data-file-id]') as HTMLElement | null;
-    if (row) {
-      const fileId = row.dataset['fileId'];
-      if (fileId && !this.dragVisited.has(fileId)) {
-        this.dragVisited.add(fileId);
-        const file = this.files().find(f => f.id === fileId);
-        if (file && !this.isSelected(file.id)) this.selectToggle.emit(file);
+    if (!row) return;
+    const fileId = row.dataset['fileId'];
+    if (!fileId) return;
+
+    const idx = this.dragOrder.indexOf(fileId);
+    if (idx === -1) {
+      this.dragOrder.push(fileId);
+      const file = this.files().find(f => f.id === fileId);
+      if (file && !this.isSelected(file.id)) this.selectToggle.emit(file);
+    } else {
+      const toDeselect = this.dragOrder.splice(idx + 1);
+      for (const id of toDeselect) {
+        const file = this.files().find(f => f.id === id);
+        if (file && this.isSelected(file.id)) this.selectToggle.emit(file);
       }
     }
   }
 
   private onDragEnd(): void {
     this.isDragSelecting = false;
-    this.dragVisited.clear();
+    this.dragOrder = [];
   }
 
   @HostListener('document:click')
