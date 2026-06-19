@@ -56,7 +56,12 @@ final class AuthRoutes
             $authenticated = !empty($sessionData['authenticated']);
 
             if (!empty($passkeys) && !$authenticated) {
-                return self::jsonError($res, 'Passkey already registered. Log in first to add another device.', 403);
+                // Allow adding another device with the registration token
+                $token    = $_ENV['REGISTRATION_TOKEN'] ?? null;
+                $provided = $req->getHeaderLine('X-Registration-Token') ?: null;
+                if (empty($token) || !hash_equals($token, (string) $provided)) {
+                    return self::jsonError($res, 'Log in first or provide the registration token to add another device.', 403);
+                }
             }
 
             if (empty($passkeys) && !$authenticated) {
