@@ -11,10 +11,10 @@
     <p class="subtitle">Surf your cloud drives. Preview &amp; clean up media with swipe gestures.</p>
 
     <div class="providers">
-      @if (loading()) {
+      @if (loadingPhase()) {
         <div class="loading-indicator">
           <div class="spinner"></div>
-          <span>Please complete the biometric prompt…</span>
+          <span>{{ loadingPhase() === 'login' ? 'Complete the biometric prompt…' : 'Registering device…' }}</span>
         </div>
       } @else {
         @if (hasPasskeys()) {
@@ -26,8 +26,15 @@
             </svg>
             Sign in with passkey
           </button>
-        }
-        @if (!hasPasskeys()) {
+          <button class="passkey-btn secondary" (click)="addDevice()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              <circle cx="12" cy="16" r="1" fill="currentColor"/>
+            </svg>
+            Add this device
+          </button>
+        } @else {
           <input
             class="token-input"
             type="password"
@@ -35,15 +42,15 @@
             [ngModel]="registrationToken()" (ngModelChange)="registrationToken.set($event)"
             autocomplete="off"
           />
+          <button class="passkey-btn primary" (click)="register()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              <circle cx="12" cy="16" r="1" fill="currentColor"/>
+            </svg>
+            Register this device
+          </button>
         }
-        <button class="passkey-btn" [class.secondary]="hasPasskeys()" (click)="register()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            <circle cx="12" cy="16" r="1" fill="currentColor"/>
-          </svg>
-          {{ hasPasskeys() ? 'Register another device' : 'Register this device' }}
-        </button>
       }
 
       @if (error()) {
