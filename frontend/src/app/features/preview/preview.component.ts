@@ -52,6 +52,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private isPinching = false;
   private pinchStartDist = 0;
   private pinchStartZoom = 1;
+  private pinchStartMidX = 0;
+  private pinchStartMidY = 0;
+  private pinchStartTx = 0;
+  private pinchStartTy = 0;
+  private pinchCx = 0;
+  private pinchCy = 0;
 
   readonly swipeOffsetX = signal(0);
   readonly swipeOffsetY = signal(0);
@@ -139,6 +145,13 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       const [t1, t2] = [e.touches[0], e.touches[1]];
       this.pinchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
       this.pinchStartZoom = this.zoom();
+      this.pinchStartMidX = (t1.clientX + t2.clientX) / 2;
+      this.pinchStartMidY = (t1.clientY + t2.clientY) / 2;
+      this.pinchStartTx = this.swipeOffsetX();
+      this.pinchStartTy = this.swipeOffsetY();
+      const rect = (this.el.nativeElement.querySelector('.media-area') as HTMLElement)?.getBoundingClientRect();
+      this.pinchCx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+      this.pinchCy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
       return;
     }
     const t = e.touches[0];
@@ -168,8 +181,17 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     if (this.isPinching && e.touches.length === 2) {
       const [t1, t2] = [e.touches[0], e.touches[1]];
       const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-      const newZoom = Math.min(Math.max(this.pinchStartZoom * (dist / this.pinchStartDist), 0.25), 4);
+      const newZoom = Math.min(Math.max(this.pinchStartZoom * (dist / this.pinchStartDist), 0.5), 4);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      // Keep the image point under the pinch focal point fixed as zoom changes
+      const imageX = (this.pinchStartMidX - this.pinchCx - this.pinchStartTx) / this.pinchStartZoom;
+      const imageY = (this.pinchStartMidY - this.pinchCy - this.pinchStartTy) / this.pinchStartZoom;
+      const newTx = midX - this.pinchCx - imageX * newZoom;
+      const newTy = midY - this.pinchCy - imageY * newZoom;
       this.zoom.set(newZoom);
+      this.swipeOffsetX.set(newTx);
+      this.swipeOffsetY.set(newTy);
       return;
     }
     if (!this.isSwiping) return;
@@ -216,7 +238,14 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       return;
     }
     if (this.isPinching) {
-      if (!e || e.touches.length < 2) this.isPinching = false;
+      if (!e || e.touches.length < 2) {
+        this.isPinching = false;
+        if (this.zoom() <= 1) {
+          this.zoom.set(1);
+          this.swipeOffsetX.set(0);
+          this.swipeOffsetY.set(0);
+        }
+      }
       return;
     }
     if (!this.isSwiping) return;
