@@ -10,7 +10,7 @@ interface AuthState {
 
 interface PasskeyInfo {
   count: number;
-  names: string[];
+  has_passkeys: boolean;
 }
 
 function bufferToBase64url(buf: ArrayBuffer): string {

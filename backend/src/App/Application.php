@@ -37,7 +37,7 @@ final class Application
         $builder = new ContainerBuilder();
         $builder->addDefinitions([
             SessionService::class => fn() => new SessionService(
-                $_ENV['SESSION_KEY'] ?? 'fallback-key-change-me'
+                $_ENV['SESSION_KEY'] ?? throw new \RuntimeException('SESSION_KEY must be set in .env')
             ),
             Client::class => fn() => new Client(['timeout' => 30]),
             KDriveClient::class => fn(Container $c) => new KDriveClient($c->get(Client::class)),
@@ -49,21 +49,34 @@ final class Application
 
     private function registerMiddleware(): void
     {
+        $isDev = ($_ENV['APP_ENV'] ?? 'production') === 'development';
         $this->slim->addErrorMiddleware(
-            displayErrorDetails: true,
+            displayErrorDetails: $isDev,
             logErrors: true,
             logErrorDetails: true
         );
         $this->slim->addBodyParsingMiddleware();
 
-        // CORS
+        // Security + CORS headers
         $this->slim->add(function ($request, $handler) {
             $response = $handler->handle($request);
+
+            $appUrl = $_ENV['APP_URL'] ?? null;
+            if (!$appUrl) {
+                throw new \RuntimeException('APP_URL must be set in .env');
+            }
+            $origin = rtrim(parse_url($appUrl, PHP_URL_SCHEME) . '://' . parse_url($appUrl, PHP_URL_HOST), '/');
+
             return $response
-                ->withHeader('Access-Control-Allow-Origin', $_ENV['APP_URL'] ?? '*')
+                ->withHeader('Access-Control-Allow-Origin', $origin)
                 ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Registration-Token')
                 ->withHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-                ->withHeader('Access-Control-Allow-Credentials', 'true');
+                ->withHeader('Access-Control-Allow-Credentials', 'true')
+                ->withHeader('X-Content-Type-Options', 'nosniff')
+                ->withHeader('X-Frame-Options', 'DENY')
+                ->withHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+                ->withHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+                ->withHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
         });
     }
 

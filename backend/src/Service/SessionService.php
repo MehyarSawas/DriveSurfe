@@ -42,8 +42,8 @@ final class SessionService
                 'expires' => time() + self::COOKIE_TTL,
                 'path' => '/',
                 'httponly' => true,
-                'samesite' => 'Lax',
-                'secure' => isset($_SERVER['HTTPS']),
+                'samesite' => 'Strict',
+                'secure' => ($_ENV['APP_ENV'] ?? 'production') !== 'development',
             ]
         );
     }
@@ -60,15 +60,15 @@ final class SessionService
             'expires' => time() - 3600,
             'path' => '/',
             'httponly' => true,
-            'samesite' => 'Lax',
-            'secure' => isset($_SERVER['HTTPS']),
+            'samesite' => 'Strict',
+            'secure' => ($_ENV['APP_ENV'] ?? 'production') !== 'development',
         ]);
     }
 
     public function isAuthenticated(): bool
     {
         $session = $this->get();
-        return !empty($session['access_token']);
+        return !empty($session['authenticated']);
     }
 
     private function encrypt(string $data): string

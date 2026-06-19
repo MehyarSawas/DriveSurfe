@@ -44,7 +44,7 @@ final class AuthRoutes
             $passkeys = self::loadPasskeys();
             $res->getBody()->write(json_encode([
                 'count' => count($passkeys),
-                'names' => array_column($passkeys, 'name'),
+                'has_passkeys' => count($passkeys) > 0,
             ], JSON_THROW_ON_ERROR));
             return $res->withHeader('Content-Type', 'application/json');
         });
@@ -61,9 +61,9 @@ final class AuthRoutes
 
             if (empty($passkeys) && !$authenticated) {
                 // No passkeys yet and not logged in — require the one-time registration token
-                $token = $_ENV['REGISTRATION_TOKEN'] ?? null;
+                $token    = $_ENV['REGISTRATION_TOKEN'] ?? null;
                 $provided = $req->getHeaderLine('X-Registration-Token') ?: null;
-                if (!$token || $provided !== $token) {
+                if (empty($token) || !hash_equals($token, (string) $provided)) {
                     return self::jsonError($res, 'Registration token required', 403);
                 }
             }
@@ -120,6 +120,9 @@ final class AuthRoutes
             $sessionData = $session->get();
             $challengeB64 = $sessionData['webauthn_challenge'] ?? null;
 
+            // Consume challenge immediately (single-use regardless of outcome)
+            $session->update(['webauthn_challenge' => null]);
+
             if (!$challengeB64) {
                 return self::jsonError($res, 'No registration in progress', 400);
             }
@@ -152,12 +155,13 @@ final class AuthRoutes
                     'name'      => 'Device ' . (count($passkeys) + 1),
                 ];
                 self::savePasskeys($passkeys);
-                $session->update(['webauthn_challenge' => null, 'authenticated' => true]);
+                $session->update(['authenticated' => true]);
 
                 $res->getBody()->write(json_encode(['ok' => true], JSON_THROW_ON_ERROR));
                 return $res->withHeader('Content-Type', 'application/json');
             } catch (WebAuthnException $e) {
-                return self::jsonError($res, 'Registration failed: ' . $e->getMessage(), 400);
+                error_log('WebAuthn registration failed: ' . $e->getMessage());
+                return self::jsonError($res, 'Registration failed. Please try again.', 400);
             }
         });
 
@@ -191,6 +195,9 @@ final class AuthRoutes
             $sessionData  = $session->get();
             $challengeB64 = $sessionData['webauthn_challenge'] ?? null;
 
+            // Consume challenge immediately (single-use regardless of outcome)
+            $session->update(['webauthn_challenge' => null]);
+
             if (!$challengeB64) {
                 return self::jsonError($res, 'No login in progress', 400);
             }
@@ -202,7 +209,7 @@ final class AuthRoutes
             $passkey    = null;
             $passkeyIdx = null;
             foreach ($passkeys as $idx => $p) {
-                if (base64_decode($p['id']) === $credentialIdBin) {
+                if (hash_equals(base64_decode($p['id']), $credentialIdBin)) {
                     $passkey    = $p;
                     $passkeyIdx = $idx;
                     break;
@@ -210,7 +217,7 @@ final class AuthRoutes
             }
 
             if ($passkey === null) {
-                return self::jsonError($res, 'Unknown credential', 400);
+                return self::jsonError($res, 'Authentication failed', 401);
             }
 
             try {
@@ -229,18 +236,22 @@ final class AuthRoutes
                     'preferred'
                 );
 
-                // Update counter: bytes 33–36 of authenticatorData (big-endian uint32)
+                // Update sign counter: bytes 33–36 of authenticatorData (big-endian uint32)
                 if (strlen($authenticatorData) >= 37) {
-                    $passkeys[$passkeyIdx]['counter'] = unpack('N', substr($authenticatorData, 33, 4))[1];
-                    self::savePasskeys($passkeys);
+                    $newCounter = unpack('N', substr($authenticatorData, 33, 4))[1];
+                    if ($newCounter > $passkey['counter']) {
+                        $passkeys[$passkeyIdx]['counter'] = $newCounter;
+                        self::savePasskeys($passkeys);
+                    }
                 }
 
-                $session->update(['webauthn_challenge' => null, 'authenticated' => true]);
+                $session->update(['authenticated' => true]);
 
                 $res->getBody()->write(json_encode(['ok' => true], JSON_THROW_ON_ERROR));
                 return $res->withHeader('Content-Type', 'application/json');
             } catch (WebAuthnException $e) {
-                return self::jsonError($res, 'Authentication failed: ' . $e->getMessage(), 401);
+                error_log('WebAuthn login failed: ' . $e->getMessage());
+                return self::jsonError($res, 'Authentication failed', 401);
             }
         });
     }
@@ -263,7 +274,10 @@ final class AuthRoutes
 
     private static function savePasskeys(array $passkeys): void
     {
-        file_put_contents(self::PASSKEYS_FILE, json_encode($passkeys, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+        $json = json_encode($passkeys, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
+        $tmp  = self::PASSKEYS_FILE . '.tmp.' . bin2hex(random_bytes(4));
+        file_put_contents($tmp, $json, LOCK_EX);
+        rename($tmp, self::PASSKEYS_FILE);
     }
 
     private static function b64urlEncode(string $binary): string

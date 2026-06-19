@@ -193,7 +193,7 @@ final class KDriveClient implements DriveInterface
 
         $requestHeaders = ['Authorization' => "Bearer {$token}"];
         $rangeHeader    = $_SERVER['HTTP_RANGE'] ?? null;
-        if ($rangeHeader) {
+        if ($rangeHeader && preg_match('/^bytes=\d*-\d*$/', $rangeHeader)) {
             $requestHeaders['Range'] = $rangeHeader;
         }
 
@@ -210,7 +210,8 @@ final class KDriveClient implements DriveInterface
         $status = $response->getStatusCode();
         http_response_code($status);
 
-        header("Content-Type: {$mime}");
+        $safeMime = self::safeMimeType($mime);
+        header("Content-Type: {$safeMime}");
         header("Content-Disposition: inline; filename*=UTF-8''{$name}");
         header("Accept-Ranges: bytes");
         header("Cache-Control: private, max-age=3600");
@@ -232,28 +233,52 @@ final class KDriveClient implements DriveInterface
     public function proxyFile(string $fileId, string $type = 'thumbnail', bool $inTrash = false): void
     {
         $driveId = $this->getDriveId();
-        $token = $this->getToken();
+        $token   = $this->getToken();
         $segment = $inTrash ? 'trash' : 'files';
-        $url = self::API_BASE . "/{$driveId}/{$segment}/{$fileId}/{$type}";
+        $url     = self::API_BASE . "/{$driveId}/{$segment}/{$fileId}/{$type}";
 
         try {
             $response = $this->http->get($url, [
-                'headers' => ['Authorization' => "Bearer {$token}"],
-                'stream' => true,
+                'headers'     => ['Authorization' => "Bearer {$token}"],
+                'stream'      => true,
+                'http_errors' => false,
             ]);
-        } catch (\GuzzleHttp\Exception\BadResponseException $e) {
-            http_response_code($e->getResponse()->getStatusCode());
+        } catch (\GuzzleHttp\Exception\GuzzleException $e) {
+            error_log("proxyFile exception [{$type}:{$fileId}]: " . $e->getMessage());
+            http_response_code(502);
             exit;
         }
 
-        $contentType = $response->getHeaderLine('Content-Type') ?: 'application/octet-stream';
-        header("Content-Type: {$contentType}");
+        $status      = $response->getStatusCode();
+        $contentType = $response->getHeaderLine('Content-Type') ?: '';
+
+        if ($status < 200 || $status >= 300 || !str_starts_with($contentType, 'image/')) {
+            error_log("proxyFile non-image [{$type}:{$fileId}] status={$status} ct={$contentType}");
+            http_response_code(404);
+            exit;
+        }
+
+        header("Content-Type: " . self::safeMimeType($contentType));
+        header("X-Content-Type-Options: nosniff");
         header("Cache-Control: private, max-age=3600");
 
         $body = $response->getBody();
         while (!$body->eof()) {
             echo $body->read(8192);
         }
+    }
+
+    private static function safeMimeType(string $mime): string
+    {
+        $allowed = [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+            'image/heic', 'image/heif', 'image/avif',
+            'video/mp4', 'video/quicktime', 'video/x-m4v', 'video/webm',
+            'audio/mpeg', 'audio/mp4', 'audio/ogg',
+            'application/pdf',
+        ];
+        $base = strtolower(explode(';', $mime)[0]);
+        return in_array($base, $allowed, true) ? $base : 'application/octet-stream';
     }
 
     private function getDriveId(): string

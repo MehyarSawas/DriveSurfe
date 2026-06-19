@@ -76,7 +76,8 @@ export class FileBrowserComponent implements OnInit {
     // Show spinner immediately before any async work
     this.fileService.loading.set(true);
 
-    const folderId = new URLSearchParams(window.location.search).get('folder');
+    const rawFolderId = new URLSearchParams(window.location.search).get('folder');
+    const folderId = rawFolderId && /^(\d+|__trash__|__starred__)$/.test(rawFolderId) ? rawFolderId : null;
     if (folderId === '__trash__') {
       await this.showTrash();
     } else if (folderId === '__starred__') {

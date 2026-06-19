@@ -20,17 +20,36 @@ final class FileRoutes
         $this->auth = $container->get(AuthMiddleware::class);
     }
 
+    private static function validFileId(string $id): bool
+    {
+        return (bool) preg_match('/^\d+$/', $id);
+    }
+
+    private static function fileIdError(Response $res): Response
+    {
+        $res->getBody()->write(json_encode(['error' => 'Invalid file ID'], JSON_THROW_ON_ERROR));
+        return $res->withStatus(400)->withHeader('Content-Type', 'application/json');
+    }
+
     public function register(RouteCollectorProxy $group): void
     {
         $drive = $this->drive;
         $auth  = $this->auth;
 
         $group->get('/files', function (Request $req, Response $res) use ($drive): Response {
-            $params = $req->getQueryParams();
-            $result = $drive->listFiles($params['folderId'] ?? '5', [
-                'sortBy'  => $params['sortBy']  ?? 'name',
-                'sortDir' => $params['sortDir'] ?? 'asc',
-                'cursor'  => $params['cursor']  ?? null,
+            $params    = $req->getQueryParams();
+            $folderId  = $params['folderId'] ?? '5';
+            if ($folderId !== '5' && !self::validFileId($folderId)) {
+                return self::fileIdError($res);
+            }
+            $allowedSortBy  = ['name', 'size', 'last_modified_at', 'created_at', 'type'];
+            $allowedSortDir = ['asc', 'desc'];
+            $sortBy  = in_array($params['sortBy']  ?? '', $allowedSortBy,  true) ? $params['sortBy']  : 'name';
+            $sortDir = in_array($params['sortDir'] ?? '', $allowedSortDir, true) ? $params['sortDir'] : 'asc';
+            $result = $drive->listFiles($folderId, [
+                'sortBy'  => $sortBy,
+                'sortDir' => $sortDir,
+                'cursor'  => $params['cursor'] ?? null,
             ]);
             return self::json($res, [
                 'data'     => $result['files'],
@@ -40,23 +59,26 @@ final class FileRoutes
         })->add($auth);
 
         $group->get('/files/{id}', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
             return self::json($res, ['data' => $drive->getFile($args['id'])]);
         })->add($auth);
 
         $group->get('/files/{id}/thumbnail', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $inTrash = ($req->getQueryParams()['context'] ?? '') === 'trash';
             $drive->proxyFile($args['id'], 'thumbnail', $inTrash);
             return $res;
         })->add($auth);
 
         $group->get('/files/{id}/preview', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $inTrash = ($req->getQueryParams()['context'] ?? '') === 'trash';
             $drive->proxyFile($args['id'], 'preview', $inTrash);
             return $res;
         })->add($auth);
 
-
         $group->get('/files/{id}/download', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $drive->proxyDownload($args['id']);
             return $res;
         })->add($auth);
@@ -90,20 +112,28 @@ final class FileRoutes
         })->add($auth);
 
         $group->post('/files/{id}/restore', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $drive->restoreFile($args['id']);
             return self::json($res, ['data' => true]);
         })->add($auth);
 
         $group->post('/files/{id}/move', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $body   = (array) $req->getParsedBody();
             $destId = $body['destination_folder_id'] ?? '';
+            if (!self::validFileId($destId)) return self::fileIdError($res);
             $drive->moveFile($args['id'], $destId);
             return self::json($res, ['data' => true]);
         })->add($auth);
 
         $group->post('/files/{id}/rename', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $body = (array) $req->getParsedBody();
-            $name = $body['name'] ?? '';
+            $name = trim($body['name'] ?? '');
+            if ($name === '' || mb_strlen($name) > 255) {
+                $res->getBody()->write(json_encode(['error' => 'Invalid name'], JSON_THROW_ON_ERROR));
+                return $res->withStatus(400)->withHeader('Content-Type', 'application/json');
+            }
             return self::json($res, ['data' => $drive->renameFile($args['id'], $name)]);
         })->add($auth);
     }
