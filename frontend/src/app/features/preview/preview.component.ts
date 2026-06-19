@@ -64,7 +64,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly swipeOffsetY = signal(0);
   readonly isTransitioning = signal(false);
 
-  private countdownInterval?: ReturnType<typeof setInterval>;
+  private pendingIntervals = new Map<string, ReturnType<typeof setInterval>>();
+  private pendingCountdowns = new Map<string, number>();
   readonly pendingDeleteFile = signal<DriveFile | null>(null);
   private boundTouchMove!: (e: TouchEvent) => void;
 
@@ -103,6 +104,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       if (isNewFile) {
         this.previewFailed.set(false);
         if (!this.isVideo() && !this.isPdf()) this.isLoading.set(true);
+        // Restore countdown UI if this file has a pending delete
+        if (this.pendingIntervals.has(f.id)) {
+          this.deletePhase.set('countdown');
+          this.countdown.set(this.pendingCountdowns.get(f.id) ?? 10);
+          this.pendingDeleteFile.set(f);
+        } else {
+          this.deletePhase.set('idle');
+          this.countdown.set(10);
+          this.pendingDeleteFile.set(null);
+        }
       }
     });
   }
@@ -121,7 +132,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy(): void {
-    this.clearCountdown();
+    for (const interval of this.pendingIntervals.values()) clearInterval(interval);
+    this.pendingIntervals.clear();
     if (this.boundTouchMove) {
       this.el.nativeElement.removeEventListener('touchmove', this.boundTouchMove);
     }
@@ -305,40 +317,48 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   initiateDelete(): void {
-    if (this.deletePhase() === 'countdown' && this.pendingDeleteFile()) {
-      // Confirm the previous pending delete immediately, then start fresh
-      this.clearCountdown();
-      this.delete.emit(this.pendingDeleteFile()!);
+    const file = this.file();
+    const fileId = file.id;
+    // Clear any existing interval for this specific file (restart its countdown)
+    if (this.pendingIntervals.has(fileId)) {
+      clearInterval(this.pendingIntervals.get(fileId)!);
     }
-    this.pendingDeleteFile.set(this.file());
-    this.deleteStart.emit(this.file());
+    this.pendingCountdowns.set(fileId, 10);
+    this.pendingDeleteFile.set(file);
+    this.deleteStart.emit(file);
     this.deletePhase.set('countdown');
     this.countdown.set(10);
-    this.countdownInterval = setInterval(() => {
-      const c = this.countdown() - 1;
+    const interval = setInterval(() => {
+      const c = (this.pendingCountdowns.get(fileId) ?? 1) - 1;
       if (c <= 0) {
-        this.clearCountdown();
-        this.delete.emit(this.pendingDeleteFile()!);
-        this.pendingDeleteFile.set(null);
-        this.deletePhase.set('idle');
+        clearInterval(interval);
+        this.pendingIntervals.delete(fileId);
+        this.pendingCountdowns.delete(fileId);
+        this.delete.emit(file);
+        // Clear UI only if user is still on this file
+        if (this.file().id === fileId) {
+          this.deletePhase.set('idle');
+          this.countdown.set(10);
+          this.pendingDeleteFile.set(null);
+        }
       } else {
-        this.countdown.set(c);
+        this.pendingCountdowns.set(fileId, c);
+        if (this.file().id === fileId) this.countdown.set(c);
       }
     }, 1000);
+    this.pendingIntervals.set(fileId, interval);
   }
 
   cancelDelete(): void {
-    this.clearCountdown();
+    const fileId = this.file().id;
+    if (this.pendingIntervals.has(fileId)) {
+      clearInterval(this.pendingIntervals.get(fileId)!);
+      this.pendingIntervals.delete(fileId);
+      this.pendingCountdowns.delete(fileId);
+    }
     this.deletePhase.set('idle');
     this.countdown.set(10);
     this.pendingDeleteFile.set(null);
-  }
-
-  private clearCountdown(): void {
-    if (this.countdownInterval) {
-      clearInterval(this.countdownInterval);
-      this.countdownInterval = undefined;
-    }
   }
 
   zoomIn(): void { this.zoom.update(z => Math.min(z + 0.25, 4)); }
