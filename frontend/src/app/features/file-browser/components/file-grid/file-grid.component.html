@@ -1,4 +1,4 @@
-<div class="file-grid">
+<div class="file-grid" [class.large]="large()">
   @for (file of files(); track file.id) {
     <div
       class="file-card"

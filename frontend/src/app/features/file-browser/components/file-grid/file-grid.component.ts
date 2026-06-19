@@ -12,6 +12,7 @@ import { DriveFile } from '../../../../core/models/drive-file.model';
 export class FileGridComponent implements AfterViewInit, OnDestroy {
   readonly files = input.required<DriveFile[]>();
   readonly selectedIds = input<Set<string>>(new Set());
+  readonly large = input(false);
   readonly trash = input(false);
 
   readonly fileClick = output<DriveFile>();

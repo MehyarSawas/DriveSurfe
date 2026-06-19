@@ -97,16 +97,23 @@
 
           }
 
-          <!-- View toggle: single button on mobile, two on desktop -->
-          <button class="icon-btn view-toggle-mobile" (click)="viewMode.set(viewMode() === 'grid' ? 'list' : 'grid')" [title]="viewMode() === 'grid' ? 'Grid view' : 'List view'">
+          <!-- View toggle: single button on mobile (cycles grid→grid-large→list), three on desktop -->
+          <button class="icon-btn view-toggle-mobile"
+            (click)="viewMode.set(viewMode() === 'grid' ? 'grid-large' : viewMode() === 'grid-large' ? 'list' : 'grid')"
+            [title]="viewMode() === 'grid' ? 'Large grid' : viewMode() === 'grid-large' ? 'List view' : 'Grid view'">
             @if (viewMode() === 'grid') {
-              <svg viewBox="0 0 24 24"><path d="M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z"/></svg>
-            } @else {
+              <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/></svg>
+            } @else if (viewMode() === 'grid-large') {
               <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+            } @else {
+              <svg viewBox="0 0 24 24"><path d="M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z"/></svg>
             }
           </button>
           <button class="icon-btn view-toggle-desktop" [class.active]="viewMode() === 'grid'" (click)="viewMode.set('grid')" title="Grid view">
             <svg viewBox="0 0 24 24"><path d="M3 3v8h8V3H3zm6 6H5V5h4v4zm-6 4v8h8v-8H3zm6 6H5v-4h4v4zm4-16v8h8V3h-8zm6 6h-4V5h4v4zm-6 4v8h8v-8h-8zm6 6h-4v-4h4v4z"/></svg>
+          </button>
+          <button class="icon-btn view-toggle-desktop" [class.active]="viewMode() === 'grid-large'" (click)="viewMode.set('grid-large')" title="Large grid">
+            <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/></svg>
           </button>
           <button class="icon-btn view-toggle-desktop" [class.active]="viewMode() === 'list'" (click)="viewMode.set('list')" title="List view">
             <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
@@ -200,10 +207,11 @@
           <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
           <p>This folder is empty</p>
         </div>
-      } @else if (viewMode() === 'grid') {
+      } @else if (viewMode() === 'grid' || viewMode() === 'grid-large') {
         <ds-file-grid
           [files]="displayFiles()"
           [selectedIds]="fileService.selectedIds()"
+          [large]="viewMode() === 'grid-large'"
           [trash]="isTrash()"
           (fileClick)="openPreview($event)"
           (selectToggle)="fileService.toggleSelect($event.id)"
