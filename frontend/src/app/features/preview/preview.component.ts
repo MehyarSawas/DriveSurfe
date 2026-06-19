@@ -30,6 +30,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly next = output<void>();
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
+  readonly deleteStart = output<DriveFile>();
   readonly delete = output<DriveFile>();
   readonly moveFile = output<{file: DriveFile, folderId: string}>();
   readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
@@ -310,6 +311,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.delete.emit(this.pendingDeleteFile()!);
     }
     this.pendingDeleteFile.set(this.file());
+    this.deleteStart.emit(this.file());
     this.deletePhase.set('countdown');
     this.countdown.set(10);
     this.countdownInterval = setInterval(() => {

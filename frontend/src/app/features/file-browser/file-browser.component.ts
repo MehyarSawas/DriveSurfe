@@ -208,6 +208,16 @@ export class FileBrowserComponent implements OnInit {
     }
   }
 
+  navigateAfterDeleteStart(file: DriveFile): void {
+    const files = this.mediaFiles();
+    const idx = files.findIndex(f => f.id === file.id);
+    if (idx === -1) return;
+    const newIdx = idx < files.length - 1 ? idx + 1 : idx > 0 ? idx - 1 : -1;
+    if (newIdx === -1) return;
+    this.previewIndex.set(newIdx);
+    this.previewFile.set(files[newIdx]);
+  }
+
   async deletePreviewFile(file: DriveFile): Promise<void> {
     await this.fileService.delete(file.id);
     const files = this.mediaFiles();

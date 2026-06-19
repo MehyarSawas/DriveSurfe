@@ -279,6 +279,7 @@
     (next)="navigatePreview(1)"
     (favorite)="toggleFavorite($event)"
     (download)="fileService.downloadFile($event.id, $event.name)"
+    (deleteStart)="navigateAfterDeleteStart($event)"
     (delete)="deletePreviewFile($event)"
     (moveFile)="handleMove($event)"
     (createFolder)="handleCreateFolderFromPreview($event)"
