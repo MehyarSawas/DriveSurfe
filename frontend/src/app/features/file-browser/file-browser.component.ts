@@ -121,6 +121,11 @@ export class FileBrowserComponent implements OnInit {
     return crumbs;
   }
 
+  selectAll(): void {
+    const allIds = new Set(this.displayFiles().map(f => f.id));
+    this.fileService.selectedIds.set(allIds);
+  }
+
   private syncUrl(folderId: string): void {
     const url = folderId === HOME_FOLDER_ID ? '/' : `/?folder=${encodeURIComponent(folderId)}`;
     window.history.replaceState(null, '', url);

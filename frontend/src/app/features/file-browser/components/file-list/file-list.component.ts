@@ -1,4 +1,4 @@
-import { Component, input, output, HostListener } from '@angular/core';
+import { Component, input, output, HostListener, ElementRef, NgZone, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { DriveFile } from '../../../../core/models/drive-file.model';
 
@@ -9,10 +9,9 @@ import { DriveFile } from '../../../../core/models/drive-file.model';
   templateUrl: './file-list.component.html',
   styleUrls: ['./file-list.component.scss'],
 })
-export class FileListComponent {
+export class FileListComponent implements AfterViewInit, OnDestroy {
   readonly files = input.required<DriveFile[]>();
   readonly selectedIds = input<Set<string>>(new Set());
-
   readonly trash = input(false);
 
   readonly fileClick = output<DriveFile>();
@@ -26,6 +25,54 @@ export class FileListComponent {
 
   readonly failedThumbs = new Set<string>();
   openMenuId: string | null = null;
+
+  private isDragSelecting = false;
+  private dragVisited = new Set<string>();
+  private boundDragMove!: (e: TouchEvent) => void;
+  private boundDragEnd!: () => void;
+
+  constructor(private el: ElementRef, private zone: NgZone) {}
+
+  ngAfterViewInit(): void {
+    this.boundDragMove = (e: TouchEvent) => this.zone.run(() => this.onDragMove(e));
+    this.boundDragEnd  = () => this.zone.run(() => this.onDragEnd());
+    this.el.nativeElement.addEventListener('touchmove', this.boundDragMove, { passive: false });
+    this.el.nativeElement.addEventListener('touchend',  this.boundDragEnd);
+  }
+
+  ngOnDestroy(): void {
+    this.el.nativeElement.removeEventListener('touchmove', this.boundDragMove);
+    this.el.nativeElement.removeEventListener('touchend',  this.boundDragEnd);
+  }
+
+  onSelectTouchStart(e: TouchEvent, file: DriveFile): void {
+    e.stopPropagation();
+    this.isDragSelecting = true;
+    this.dragVisited.clear();
+    this.dragVisited.add(file.id);
+    if (!this.isSelected(file.id)) this.selectToggle.emit(file);
+  }
+
+  private onDragMove(e: TouchEvent): void {
+    if (!this.isDragSelecting) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    const row = target?.closest('[data-file-id]') as HTMLElement | null;
+    if (row) {
+      const fileId = row.dataset['fileId'];
+      if (fileId && !this.dragVisited.has(fileId)) {
+        this.dragVisited.add(fileId);
+        const file = this.files().find(f => f.id === fileId);
+        if (file && !this.isSelected(file.id)) this.selectToggle.emit(file);
+      }
+    }
+  }
+
+  private onDragEnd(): void {
+    this.isDragSelecting = false;
+    this.dragVisited.clear();
+  }
 
   @HostListener('document:click')
   onDocClick(): void { this.openMenuId = null; }

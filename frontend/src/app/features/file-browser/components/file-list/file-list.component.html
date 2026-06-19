@@ -2,12 +2,14 @@
   @for (file of files(); track file.id) {
     <div
       class="file-row"
+      [attr.data-file-id]="file.id"
       [class.selected]="isSelected(file.id)"
       (click)="fileClick.emit(file)"
       (dblclick)="fileDblClick.emit(file)"
     >
       <!-- Checkbox -->
-      <div class="col-check" (click)="$event.stopPropagation(); selectToggle.emit(file)">
+      <div class="col-check" (click)="$event.stopPropagation(); selectToggle.emit(file)"
+           (touchstart)="onSelectTouchStart($event, file)">
         <div class="checkbox" [class.checked]="isSelected(file.id)">
           @if (isSelected(file.id)) {
             <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>

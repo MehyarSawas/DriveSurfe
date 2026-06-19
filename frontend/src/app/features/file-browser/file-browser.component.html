@@ -114,6 +114,9 @@
         </div>
       } @else {
         <!-- Bulk action toolbar -->
+        <button class="icon-btn select-all-btn" (click)="selectAll()" [title]="'Select all (' + displayFiles().length + ')'">
+          <svg viewBox="0 0 24 24"><path d="M18 7l-1.41-1.41-6.34 6.34-2.83-2.83L6 10.5l4.24 4.24L18 7zM3 5h2V3H3v2zm0 4h2V7H3v2zm0 4h2v-2H3v2zm0 4h2v-2H3v2zm0 4h2v-2H3v2zm4-16v2h14V5H7zm0 8h14v-2H7v2zm0 8h14v-2H7v2z"/></svg>
+        </button>
         <span class="bulk-count">{{ selectedCount() }} selected</span>
         <div class="bulk-actions">
           @if (isTrash()) {
