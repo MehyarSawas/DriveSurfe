@@ -219,14 +219,25 @@ export class FileBrowserComponent implements OnInit {
   }
 
   async deletePreviewFile(file: DriveFile): Promise<void> {
+    const deletedIdx = this.mediaFiles().findIndex(f => f.id === file.id);
+    const currentFile = this.previewFile();
     await this.fileService.delete(file.id);
     const files = this.mediaFiles();
     if (files.length === 0) {
       this.closePreview();
-    } else {
-      const idx = Math.min(this.previewIndex(), files.length - 1);
+    } else if (currentFile?.id === file.id) {
+      // User is still on the deleted file — navigate away
+      const idx = Math.min(deletedIdx, files.length - 1);
       this.previewIndex.set(idx);
       this.previewFile.set(files[idx]);
+    } else {
+      // User already navigated away — just fix the index offset if needed
+      const currentIdx = files.findIndex(f => f.id === currentFile?.id);
+      if (currentIdx !== -1) {
+        this.previewIndex.set(currentIdx);
+      } else if (deletedIdx < this.previewIndex()) {
+        this.previewIndex.update(i => i - 1);
+      }
     }
   }
 
