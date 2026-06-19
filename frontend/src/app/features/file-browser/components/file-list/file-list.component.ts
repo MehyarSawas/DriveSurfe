@@ -50,7 +50,7 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
     e.stopPropagation();
     this.isDragSelecting = true;
     this.dragOrder = [file.id];
-    if (!this.isSelected(file.id)) this.selectToggle.emit(file);
+    this.selectToggle.emit(file); // always toggle on initial tap (select or deselect)
   }
 
   private onDragMove(e: TouchEvent): void {
