@@ -188,7 +188,7 @@ export class FileBrowserComponent implements OnInit {
       f.mime_type?.startsWith('image/') ||
       ['jpg','jpeg','png','gif','webp','heic','heif'].some(e => f.extension === e);
 
-    const toPreload = [index - 1, index + 1, index + 2]
+    const toPreload = [index - 2, index - 1, index + 1, index + 2, index + 3, index + 4, index + 5]
       .filter(i => i >= 0 && i < files.length)
       .map(i => files[i])
       .filter(f => isImage(f));
