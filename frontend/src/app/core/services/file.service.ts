@@ -27,7 +27,13 @@ export class FileService {
   readonly folderTree = signal<FolderTreeNode | null>(null);
   readonly selectedIds = signal<Set<string>>(new Set());
 
+  private abortController: AbortController | null = null;
+
   async loadFiles(options: FileListOptions): Promise<void> {
+    this.abortController?.abort();
+    this.abortController = new AbortController();
+    const { signal } = this.abortController;
+
     this.loading.set(true);
     this.loadingMore.set(false);
     const params: Record<string, string> = {
@@ -39,7 +45,7 @@ export class FileService {
 
     try {
       const first = await firstValueFrom(
-        this.http.get<FilesResponse>('/api/files', { params })
+        this.http.get<FilesResponse>('/api/files', { params, signal })
       );
       this.files.set(first.data);
       this.currentFolderId.set(options.folderId);
@@ -50,17 +56,20 @@ export class FileService {
         let cursor: string | null = first.cursor;
         while (cursor) {
           const page: FilesResponse = await firstValueFrom(
-            this.http.get<FilesResponse>('/api/files', { params: { ...params, cursor } })
+            this.http.get<FilesResponse>('/api/files', { params: { ...params, cursor }, signal })
           );
           this.files.update(f => [...f, ...page.data]);
           cursor = page.has_more && page.cursor ? page.cursor : null;
         }
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (signal.aborted) return;
       console.error('loadFiles error:', err);
     } finally {
-      this.loading.set(false);
-      this.loadingMore.set(false);
+      if (!signal.aborted) {
+        this.loading.set(false);
+        this.loadingMore.set(false);
+      }
     }
   }
 
