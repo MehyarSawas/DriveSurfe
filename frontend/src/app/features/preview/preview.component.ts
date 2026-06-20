@@ -42,6 +42,22 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
 
+  readonly swipeAction = computed<'delete' | 'move' | null>(() => {
+    const dy = this.swipeOffsetY();
+    if (dy < -30) return 'delete';
+    if (dy > 30) return 'move';
+    return null;
+  });
+
+  readonly swipeActionProgress = computed(() => {
+    const dy = this.swipeOffsetY();
+    const threshold = 30;
+    const full = 130;
+    const abs = Math.abs(dy);
+    if (abs < threshold) return 0;
+    return Math.min((abs - threshold) / (full - threshold), 1);
+  });
+
   // Swipe state
   private touchStartX = 0;
   private touchStartY = 0;
