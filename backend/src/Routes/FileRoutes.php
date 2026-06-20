@@ -63,6 +63,18 @@ final class FileRoutes
             return self::json($res, ['data' => $drive->getFile($args['id'])]);
         })->add($auth);
 
+        $group->get('/files/{id}/stats', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
+            $count = $drive->getFolderCount($args['id']);
+            $size  = $drive->getFolderSize($args['id']);
+            return self::json($res, ['data' => [
+                'count'       => $count['count'],
+                'files'       => $count['files'],
+                'directories' => $count['directories'],
+                'size'        => $size,
+            ]]);
+        })->add($auth);
+
         $group->get('/files/{id}/thumbnail', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $inTrash = ($req->getQueryParams()['context'] ?? '') === 'trash';

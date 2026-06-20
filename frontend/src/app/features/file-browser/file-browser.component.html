@@ -189,6 +189,24 @@
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>
+      @if (fileService.folderStats(); as stats) {
+        <div class="folder-stats">
+          <button class="stats-count" (click)="$event.stopPropagation(); statsPopoverOpen.set(!statsPopoverOpen())">
+            @if (fileService.loadingMore()) {
+              {{ fileService.files().length }} / {{ stats.count }} items
+            } @else {
+              {{ stats.count }} items
+            }
+            @if (statsPopoverOpen()) {
+              <div class="stats-popover">
+                <span>Files: {{ stats.files }}</span>
+                <span>Folders: {{ stats.directories }}</span>
+              </div>
+            }
+          </button>
+          · {{ formatSize(stats.size) }}
+        </div>
+      }
     </div>
 
     <!-- Background-load progress bar -->

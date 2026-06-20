@@ -263,6 +263,44 @@ ds-search-bar {
   }
 }
 
+.folder-stats {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  padding-left: 8px;
+}
+
+.stats-count {
+  position: relative;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+
+.stats-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--color-text);
+  white-space: nowrap;
+  z-index: 50;
+  text-decoration: none;
+}
+
 .file-content {
   flex: 1;
   overflow-y: auto;

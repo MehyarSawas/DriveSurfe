@@ -63,6 +63,7 @@ export class FileBrowserComponent implements OnInit {
   readonly folderDirs = computed(() => this.displayFiles().filter(f => f.is_dir));
   readonly isTrash = computed(() => this.fileService.currentFolderId() === '__trash__');
 
+  statsPopoverOpen = signal(false);
   showCreateFolder = signal(false);
   newFolderName = signal('');
   renamingFile = signal<DriveFile | null>(null);
@@ -132,12 +133,21 @@ export class FileBrowserComponent implements OnInit {
   }
 
   private async loadCurrentFolder(): Promise<void> {
+    const folderId = this.fileService.currentFolderId();
+    this.fileService.loadFolderStats(folderId);
     await this.fileService.loadFiles({
-      folderId: this.fileService.currentFolderId(),
+      folderId,
       sortBy: this.sortBy(),
       sortDir: this.sortDir(),
     });
     this.fileService.searchResults.set(null);
+  }
+
+  formatSize(bytes: number): string {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
   }
 
   async onSearch(query: string): Promise<void> {
@@ -386,6 +396,7 @@ export class FileBrowserComponent implements OnInit {
   @HostListener('document:click')
   onDocClick(): void {
     this.filterMenuOpen.set(false);
+    this.statsPopoverOpen.set(false);
   }
 
   @HostListener('window:keydown', ['$event'])

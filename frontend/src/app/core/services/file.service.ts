@@ -8,6 +8,13 @@ interface ApiResponse<T> {
   data: T;
 }
 
+export interface FolderStats {
+  count: number;
+  files: number;
+  directories: number;
+  size: number;
+}
+
 interface FilesResponse {
   data: DriveFile[];
   cursor: string | null;
@@ -26,10 +33,12 @@ export class FileService {
   readonly breadcrumb = signal<BreadcrumbItem[]>([{ id: HOME_FOLDER_ID, name: 'My Drive' }]);
   readonly folderTree = signal<FolderTreeNode | null>(null);
   readonly selectedIds = signal<Set<string>>(new Set());
+  readonly folderStats = signal<FolderStats | null>(null);
 
   private loadGeneration = 0;
 
   async loadFiles(options: FileListOptions): Promise<void> {
+    this.folderStats.set(null);
     const generation = ++this.loadGeneration;
 
     this.loading.set(true);
@@ -71,6 +80,15 @@ export class FileService {
         this.loadingMore.set(false);
       }
     }
+  }
+
+  async loadFolderStats(folderId: string): Promise<void> {
+    try {
+      const res = await firstValueFrom(
+        this.http.get<ApiResponse<FolderStats>>(`/api/files/${folderId}/stats`)
+      );
+      this.folderStats.set(res.data);
+    } catch { /* non-critical */ }
   }
 
   async loadFolderTree(): Promise<void> {
