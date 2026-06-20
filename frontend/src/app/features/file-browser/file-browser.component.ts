@@ -193,18 +193,23 @@ export class FileBrowserComponent implements OnInit {
       .map(i => files[i])
       .filter(f => isImage(f));
 
-    // Evict entries not in the new set to keep memory bounded
-    const keepIds = new Set([files[index]?.id, ...toPreload.map(f => f.id)]);
-    for (const id of this.preloadCache.keys()) {
-      if (!keepIds.has(id)) this.preloadCache.delete(id);
+    // Only add images not already cached
+    const toAdd = toPreload.filter(f => !this.preloadCache.has(f.id));
+
+    // Evict oldest entries when cache would exceed 20
+    if (this.preloadCache.size + toAdd.length > 20) {
+      const evictCount = this.preloadCache.size + toAdd.length - 20;
+      let i = 0;
+      for (const id of this.preloadCache.keys()) {
+        if (i++ >= evictCount) break;
+        this.preloadCache.delete(id);
+      }
     }
 
-    for (const f of toPreload) {
-      if (!this.preloadCache.has(f.id)) {
-        const img = new Image();
-        img.src = `/api/files/${f.id}/preview`;
-        this.preloadCache.set(f.id, img);
-      }
+    for (const f of toAdd) {
+      const img = new Image();
+      img.src = `/api/files/${f.id}/preview`;
+      this.preloadCache.set(f.id, img);
     }
   }
 
@@ -216,6 +221,7 @@ export class FileBrowserComponent implements OnInit {
     if (newIdx === -1) return;
     this.previewIndex.set(newIdx);
     this.previewFile.set(files[newIdx]);
+    this.preloadAdjacent(newIdx);
   }
 
   async deletePreviewFile(file: DriveFile): Promise<void> {
