@@ -177,9 +177,9 @@
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>
-      <button class="sort-btn" (click)="toggleSort('modified_at')">
+      <button class="sort-btn" (click)="toggleSort('last_modified_at')">
         Modified
-        @if (sortBy() === 'modified_at') {
+        @if (sortBy() === 'last_modified_at') {
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>

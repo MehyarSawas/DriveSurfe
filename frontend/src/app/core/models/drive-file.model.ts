@@ -14,7 +14,7 @@ export interface DriveFile {
   extension: string;
 }
 
-export type SortBy = 'name' | 'modified_at' | 'size';
+export type SortBy = 'name' | 'last_modified_at' | 'size';
 export type SortDir = 'asc' | 'desc';
 export type ViewMode = 'grid' | 'grid-large' | 'list';
 
