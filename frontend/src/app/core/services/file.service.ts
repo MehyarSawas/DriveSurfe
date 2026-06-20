@@ -27,12 +27,10 @@ export class FileService {
   readonly folderTree = signal<FolderTreeNode | null>(null);
   readonly selectedIds = signal<Set<string>>(new Set());
 
-  private abortController: AbortController | null = null;
+  private loadGeneration = 0;
 
   async loadFiles(options: FileListOptions): Promise<void> {
-    this.abortController?.abort();
-    this.abortController = new AbortController();
-    const { signal } = this.abortController;
+    const generation = ++this.loadGeneration;
 
     this.loading.set(true);
     this.loadingMore.set(false);
@@ -45,8 +43,9 @@ export class FileService {
 
     try {
       const first = await firstValueFrom(
-        this.http.get<FilesResponse>('/api/files', { params, signal })
+        this.http.get<FilesResponse>('/api/files', { params })
       );
+      if (generation !== this.loadGeneration) return;
       this.files.set(first.data);
       this.currentFolderId.set(options.folderId);
       this.loading.set(false);
@@ -56,17 +55,18 @@ export class FileService {
         let cursor: string | null = first.cursor;
         while (cursor) {
           const page: FilesResponse = await firstValueFrom(
-            this.http.get<FilesResponse>('/api/files', { params: { ...params, cursor }, signal })
+            this.http.get<FilesResponse>('/api/files', { params: { ...params, cursor } })
           );
+          if (generation !== this.loadGeneration) return;
           this.files.update(f => [...f, ...page.data]);
           cursor = page.has_more && page.cursor ? page.cursor : null;
         }
       }
-    } catch (err: any) {
-      if (signal.aborted) return;
+    } catch (err) {
+      if (generation !== this.loadGeneration) return;
       console.error('loadFiles error:', err);
     } finally {
-      if (!signal.aborted) {
+      if (generation === this.loadGeneration) {
         this.loading.set(false);
         this.loadingMore.set(false);
       }
