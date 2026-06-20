@@ -182,10 +182,10 @@ final class KDriveClient implements DriveInterface
         ];
     }
 
-    public function getFolderCount(string $folderId): array
+    public function getFolderCount(string $folderId, string $depth = 'folder'): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->get("{$driveId}/files/{$folderId}/count", ['depth' => 'unlimited'], self::API_V3);
+        $data = $this->get("{$driveId}/files/{$folderId}/count", ['depth' => $depth], self::API_V3);
         return $data['data'] ?? ['count' => 0, 'files' => 0, 'directories' => 0];
     }
 

@@ -28,7 +28,7 @@ interface DriveInterface
 
     public function getUsage(): array;
 
-    public function getFolderCount(string $folderId): array;
+    public function getFolderCount(string $folderId, string $depth = 'folder'): array;
 
     public function getFolderSize(string $folderId): int;
 }

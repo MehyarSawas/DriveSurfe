@@ -12,6 +12,9 @@ export interface FolderStats {
   count: number;
   files: number;
   directories: number;
+  total_count: number;
+  total_files: number;
+  total_directories: number;
   size: number;
 }
 

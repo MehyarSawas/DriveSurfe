@@ -65,13 +65,17 @@ final class FileRoutes
 
         $group->get('/files/{id}/stats', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
-            $count = $drive->getFolderCount($args['id']);
-            $size  = $drive->getFolderSize($args['id']);
+            $direct = $drive->getFolderCount($args['id'], 'folder');
+            $total  = $drive->getFolderCount($args['id'], 'unlimited');
+            $size   = $drive->getFolderSize($args['id']);
             return self::json($res, ['data' => [
-                'count'       => $count['count'],
-                'files'       => $count['files'],
-                'directories' => $count['directories'],
-                'size'        => $size,
+                'count'             => $direct['count'],
+                'files'             => $direct['files'],
+                'directories'       => $direct['directories'],
+                'total_count'       => $total['count'],
+                'total_files'       => $total['files'],
+                'total_directories' => $total['directories'],
+                'size'              => $size,
             ]]);
         })->add($auth);
 

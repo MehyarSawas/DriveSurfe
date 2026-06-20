@@ -199,8 +199,17 @@
             }
             @if (statsPopoverOpen()) {
               <div class="stats-popover">
-                <span>Files: {{ stats.files }}</span>
-                <span>Folders: {{ stats.directories }}</span>
+                <div class="stats-popover-section">
+                  <span class="stats-label">This folder</span>
+                  <span>{{ stats.files }} files</span>
+                  <span>{{ stats.directories }} folders</span>
+                </div>
+                <div class="stats-popover-divider"></div>
+                <div class="stats-popover-section">
+                  <span class="stats-label">Total (incl. subfolders)</span>
+                  <span>{{ stats.total_files }} files</span>
+                  <span>{{ stats.total_directories }} folders</span>
+                </div>
               </div>
             }
           </button>
