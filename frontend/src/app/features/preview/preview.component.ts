@@ -415,8 +415,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.pendingDeleteFile.set(file);
     this.deleteStart.emit(file);
     this.deletePhase.set('countdown');
-    this.countdown.set(10);
-    let c = 10;
+    this.countdown.set(5);
+    let c = 5;
     this.pendingInterval = setInterval(() => {
       if (!this.alive) return;
       c--;
@@ -450,6 +450,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   countdownPercent(): number {
-    return (this.countdown() / 10) * 100;
+    return (this.countdown() / 5) * 100;
   }
 }
