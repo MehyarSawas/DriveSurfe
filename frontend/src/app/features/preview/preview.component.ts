@@ -160,7 +160,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   ngAfterViewInit(): void {
     this.boundTouchMove = (e: TouchEvent) => this.zone.run(() => this.onTouchMove(e));
     this.el.nativeElement.addEventListener('touchmove', this.boundTouchMove, { passive: false });
-    this._fsHandler = () => this.zone.run(() => this.isFullscreen.set(!!document.fullscreenElement));
+    this._fsHandler = () => this.zone.run(() => {
+      if (!document.fullscreenElement) this.isFullscreen.set(false);
+    });
     document.addEventListener('fullscreenchange', this._fsHandler);
   }
 
@@ -399,15 +401,20 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   toggleFullscreen(): void {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
+    if (this.isFullscreen()) {
+      this.isFullscreen.set(false);
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     } else {
-      document.exitFullscreen().catch(() => {});
+      this.isFullscreen.set(true);
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
     }
   }
 
   requestClose(): void {
     this.alive = false;
+    this.isFullscreen.set(false);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     this.flushPending();
     this.close.emit();

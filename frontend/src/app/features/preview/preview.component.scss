@@ -13,6 +13,26 @@
   background: #000;
 }
 
+.preview-overlay.is-fullscreen {
+  background: #000;
+
+  .preview-header,
+  .preview-footer,
+  .thumb-strip {
+    display: none;
+  }
+
+  .media-img,
+  .media-video {
+    max-height: 100dvh;
+    max-width: 100dvw;
+  }
+
+  .pdf-viewer-wrap {
+    height: 100dvh;
+  }
+}
+
 /* Header */
 .preview-header {
   display: flex;
