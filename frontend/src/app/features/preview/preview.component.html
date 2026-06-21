@@ -27,6 +27,13 @@
       <button class="icon-btn danger" (click)="initiateDelete()" title="Delete">
         <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
       </button>
+      <button class="icon-btn" [class.active]="thumbnailBarOpen()" (click)="toggleThumbnailBar()" title="Toggle thumbnail bar">
+        @if (thumbnailBarOpen()) {
+          <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"/></svg>
+        } @else {
+          <svg viewBox="0 0 24 24"><path d="M2 5h20v14H2V5zm2 2v10h16V7H4zm2 2h12v6H6V9z"/></svg>
+        }
+      </button>
     </div>
   </header>
 
@@ -101,6 +108,23 @@
       </button>
     }
   </div>
+
+  <!-- Thumbnail strip -->
+  @if (thumbnailBarOpen() && files().length > 1) {
+    <div class="thumb-strip" #thumbStrip (click)="$event.stopPropagation()">
+      @for (f of files(); track f.id; let i = $index) {
+        <button class="thumb-item" [class.active]="i === currentIndex()" (click)="jumpTo.emit(f)">
+          @if (f.thumbnail_url) {
+            <img [src]="thumbnailUrl(f)" [alt]="f.name" loading="lazy" />
+          } @else {
+            <div class="thumb-placeholder">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+            </div>
+          }
+        </button>
+      }
+    </div>
+  }
 
   <!-- Footer -->
   <footer class="preview-footer" (click)="$event.stopPropagation()">

@@ -183,6 +183,14 @@ export class FileBrowserComponent implements OnInit {
     this.previewFile.set(null);
   }
 
+  jumpToFile(file: DriveFile): void {
+    const idx = this.mediaFiles().findIndex(f => f.id === file.id);
+    if (idx === -1) return;
+    this.previewIndex.set(idx);
+    this.previewFile.set(file);
+    this.preloadAdjacent(idx);
+  }
+
   navigatePreview(delta: number): void {
     const files = this.mediaFiles();
     const next = this.previewIndex() + delta;

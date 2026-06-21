@@ -19,15 +19,19 @@ type DeletePhase = 'idle' | 'confirming' | 'countdown';
 })
 export class PreviewComponent implements OnDestroy, AfterViewInit {
   @ViewChild('mediaEl') mediaEl?: ElementRef<HTMLElement>;
+  @ViewChild('thumbStrip') thumbStrip?: ElementRef<HTMLElement>;
 
   readonly file = input.required<DriveFile>();
   readonly hasPrev = input(false);
   readonly hasNext = input(false);
   readonly currentFolderId = input('');
+  readonly files = input<DriveFile[]>([]);
+  readonly currentIndex = input(0);
 
   readonly close = output<void>();
   readonly prev = output<void>();
   readonly next = output<void>();
+  readonly jumpTo = output<DriveFile>();
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly deleteStart = output<DriveFile>();
@@ -41,6 +45,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly deletePhase = signal<DeletePhase>('idle');
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
+  readonly thumbnailBarOpen = signal(false);
 
   readonly swipeAction = computed<'delete' | 'move' | null>(() => {
     if (this.isTwoFingerTouch() || this.zoom() !== 1) return null;
@@ -143,11 +148,41 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         }
       }
     });
+
+    effect(() => {
+      this.currentIndex(); // track
+      if (this.thumbnailBarOpen()) {
+        setTimeout(() => this.scrollThumbToCenter(), 0);
+      }
+    });
   }
 
   ngAfterViewInit(): void {
     this.boundTouchMove = (e: TouchEvent) => this.zone.run(() => this.onTouchMove(e));
     this.el.nativeElement.addEventListener('touchmove', this.boundTouchMove, { passive: false });
+  }
+
+  thumbnailUrl(file: DriveFile): string {
+    return file.thumbnail_url ?? `/api/files/${file.id}/thumbnail`;
+  }
+
+  toggleThumbnailBar(): void {
+    this.thumbnailBarOpen.update(v => !v);
+    if (this.thumbnailBarOpen()) {
+      setTimeout(() => this.scrollThumbToCenter(), 0);
+    }
+  }
+
+  private scrollThumbToCenter(): void {
+    const strip = this.thumbStrip?.nativeElement;
+    if (!strip) return;
+    const idx = this.currentIndex();
+    const thumb = strip.children[idx] as HTMLElement | undefined;
+    if (!thumb) return;
+    const stripW = strip.offsetWidth;
+    const thumbLeft = thumb.offsetLeft;
+    const thumbW = thumb.offsetWidth;
+    strip.scrollTo({ left: thumbLeft - stripW / 2 + thumbW / 2, behavior: 'smooth' });
   }
 
   onImageLoad(): void { this.isLoading.set(false); }
