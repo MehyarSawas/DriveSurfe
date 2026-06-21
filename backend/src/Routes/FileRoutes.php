@@ -88,8 +88,14 @@ final class FileRoutes
 
         $group->get('/files/{id}/preview', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
-            $inTrash = ($req->getQueryParams()['context'] ?? '') === 'trash';
-            $drive->proxyFile($args['id'], 'preview', $inTrash);
+            $params = $req->getQueryParams();
+            $inTrash = ($params['context'] ?? '') === 'trash';
+            $query = ['quality' => 90];
+            foreach (['width', 'height'] as $k) {
+                $v = (int) ($params[$k] ?? 0);
+                if ($v >= 10 && $v <= 10000) $query[$k] = $v;
+            }
+            $drive->proxyFile($args['id'], 'preview', $inTrash, $query);
             return $res;
         })->add($auth);
 

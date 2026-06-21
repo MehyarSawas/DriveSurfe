@@ -244,12 +244,13 @@ final class KDriveClient implements DriveInterface
         }
     }
 
-    public function proxyFile(string $fileId, string $type = 'thumbnail', bool $inTrash = false): void
+    public function proxyFile(string $fileId, string $type = 'thumbnail', bool $inTrash = false, array $query = []): void
     {
         $driveId = $this->getDriveId();
         $token   = $this->getToken();
         $segment = $inTrash ? 'trash' : 'files';
         $url     = self::API_BASE . "/{$driveId}/{$segment}/{$fileId}/{$type}";
+        if ($query) $url .= '?' . http_build_query($query);
 
         try {
             $response = $this->http->get($url, [

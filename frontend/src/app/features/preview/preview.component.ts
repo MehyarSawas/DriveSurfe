@@ -102,7 +102,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   readonly previewSrc = computed(() => {
     const f = this.file();
-    return this.isVideo() ? `/api/files/${f.id}/download` : `/api/files/${f.id}/preview`;
+    if (this.isVideo()) return `/api/files/${f.id}/download`;
+    const w = Math.min(window.screen.width * window.devicePixelRatio, 10000) | 0;
+    const h = Math.min(window.screen.height * window.devicePixelRatio, 10000) | 0;
+    return `/api/files/${f.id}/preview?width=${w}&height=${h}`;
   });
 
   constructor(private zone: NgZone, private el: ElementRef) {
