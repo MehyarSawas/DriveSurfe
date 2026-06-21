@@ -39,7 +39,8 @@
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  height: 56px;
+  padding-top: env(safe-area-inset-top);
+  height: calc(56px + env(safe-area-inset-top));
   background: rgba(0,0,0,0.6);
   flex-shrink: 0;
   backdrop-filter: blur(8px);
