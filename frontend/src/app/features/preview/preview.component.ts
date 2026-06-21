@@ -85,6 +85,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   private pendingIntervals = new Map<string, ReturnType<typeof setInterval>>();
   private pendingCountdowns = new Map<string, number>();
+  private alive = true;
   readonly pendingDeleteFile = signal<DriveFile | null>(null);
   private boundTouchMove!: (e: TouchEvent) => void;
 
@@ -156,9 +157,17 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.folderPanelOpen.set(false);
   }
 
-  ngOnDestroy(): void {
+  cancelAllPending(): void {
     for (const interval of this.pendingIntervals.values()) clearInterval(interval);
     this.pendingIntervals.clear();
+    this.pendingCountdowns.clear();
+    this.deletePhase.set('idle');
+    this.pendingDeleteFile.set(null);
+  }
+
+  ngOnDestroy(): void {
+    this.alive = false;
+    this.cancelAllPending();
     if (this.boundTouchMove) {
       this.el.nativeElement.removeEventListener('touchmove', this.boundTouchMove);
     }
@@ -169,7 +178,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     switch (e.key) {
       case 'ArrowLeft': this.prev.emit(); break;
       case 'ArrowRight': this.next.emit(); break;
-      case 'Escape': this.close.emit(); break;
+      case 'Escape': this.cancelAllPending(); this.close.emit(); break;
       case 'Delete': this.initiateDelete(); break;
       case '+': case '=': this.zoomIn(); break;
       case '-': this.zoomOut(); break;
@@ -356,6 +365,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.deletePhase.set('countdown');
     this.countdown.set(10);
     const interval = setInterval(() => {
+      if (!this.alive) return;
       const c = (this.pendingCountdowns.get(fileId) ?? 1) - 1;
       if (c <= 0) {
         clearInterval(interval);
