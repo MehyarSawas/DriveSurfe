@@ -43,7 +43,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly folderPanelOpen = signal(false);
 
   readonly swipeAction = computed<'delete' | 'move' | null>(() => {
-    if (this.zoom() > 1) return null;
+    if (this.isTwoFingerTouch()) return null;
     const dy = this.swipeOffsetY();
     if (dy < -30) return 'delete';
     if (dy > 30) return 'move';
@@ -51,7 +51,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   });
 
   readonly swipeActionProgress = computed(() => {
-    if (this.zoom() > 1) return 0;
+    if (this.isTwoFingerTouch()) return 0;
     const dy = this.swipeOffsetY();
     const threshold = 30;
     const full = 130;
@@ -66,6 +66,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private touchCurrentX = 0;
   private touchCurrentY = 0;
   private isSwiping = false;
+  readonly isTwoFingerTouch = signal(false);
 
   // Pinch-to-zoom state
   private isPinching = false;
@@ -173,6 +174,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchStart(e: TouchEvent): void {
+    this.isTwoFingerTouch.set(e.touches.length >= 2);
     if (e.touches.length === 2) {
       this.isPinching = true;
       this.isSwiping = false;
@@ -249,6 +251,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchEnd(e?: TouchEvent): void {
+    if (!e || e.touches.length === 0) this.isTwoFingerTouch.set(false);
     if (this.isPdf()) {
       if (!this.isSwiping) return;
       this.isSwiping = false;
