@@ -43,6 +43,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly folderPanelOpen = signal(false);
 
   readonly swipeAction = computed<'delete' | 'move' | null>(() => {
+    if (this.zoom() > 1) return null;
     const dy = this.swipeOffsetY();
     if (dy < -30) return 'delete';
     if (dy > 30) return 'move';
@@ -50,6 +51,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   });
 
   readonly swipeActionProgress = computed(() => {
+    if (this.zoom() > 1) return 0;
     const dy = this.swipeOffsetY();
     const threshold = 30;
     const full = 130;
