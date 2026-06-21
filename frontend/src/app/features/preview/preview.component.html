@@ -127,20 +127,6 @@
     />
   }
 
-  <!-- Close with pending deletes confirm -->
-  @if (showCloseConfirm()) {
-    <div class="close-confirm-backdrop" (click)="dismissCloseConfirm()">
-      <div class="close-confirm-dialog" (click)="$event.stopPropagation()">
-        <p class="close-confirm-title">Delete {{ pendingCount }} item{{ pendingCount > 1 ? 's' : '' }}?</p>
-        <p class="close-confirm-sub">You have pending deletions. Delete them now or keep them?</p>
-        <div class="close-confirm-actions">
-          <button class="btn-cancel-deletes" (click)="cancelAllPending(); close.emit()">Keep (cancel deletes)</button>
-          <button class="btn-confirm-deletes" (click)="confirmDeleteAndClose()">Delete all</button>
-        </div>
-      </div>
-    </div>
-  }
-
   <!-- Delete countdown toast -->
   @if (deletePhase() === 'countdown') {
     <div class="delete-toast" (click)="$event.stopPropagation()">

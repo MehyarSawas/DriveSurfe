@@ -88,8 +88,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private pendingDeleteFiles = new Map<string, DriveFile>();
   private alive = true;
   readonly pendingDeleteFile = signal<DriveFile | null>(null);
-  readonly showCloseConfirm = signal(false);
-  get pendingCount(): number { return this.pendingIntervals.size; }
   private boundTouchMove!: (e: TouchEvent) => void;
 
   readonly isImage = computed(() => {
@@ -357,15 +355,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   requestClose(): void {
-    if (this.pendingIntervals.size > 0) {
-      this.showCloseConfirm.set(true);
-    } else {
-      this.cancelAllPending();
-      this.close.emit();
-    }
-  }
-
-  confirmDeleteAndClose(): void {
     this.alive = false;
     for (const interval of this.pendingIntervals.values()) clearInterval(interval);
     this.pendingIntervals.clear();
@@ -374,12 +363,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.delete.emit(file);
     }
     this.pendingDeleteFiles.clear();
-    this.showCloseConfirm.set(false);
     this.close.emit();
-  }
-
-  dismissCloseConfirm(): void {
-    this.showCloseConfirm.set(false);
   }
 
   initiateDelete(): void {
