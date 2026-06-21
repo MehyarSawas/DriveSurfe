@@ -245,7 +245,7 @@
           (restore)="handleRestore($event)"
           (favorite)="toggleFavorite($event)"
           (download)="fileService.downloadFile($event.id, $event.name)"
-          (delete)="fileService.delete($event.id)"
+          (delete)="fileService.delete($event)"
           (rename)="handleRename($event)"
           (move)="openMoveForFile($event)"
         />
@@ -260,7 +260,7 @@
           (restore)="handleRestore($event)"
           (favorite)="toggleFavorite($event)"
           (download)="fileService.downloadFile($event.id, $event.name)"
-          (delete)="fileService.delete($event.id)"
+          (delete)="fileService.delete($event)"
           (move)="openMoveForFile($event)"
         />
       }

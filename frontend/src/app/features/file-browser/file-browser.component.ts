@@ -243,7 +243,7 @@ export class FileBrowserComponent implements OnInit {
   async deletePreviewFile(file: DriveFile): Promise<void> {
     const deletedIdx = this.mediaFiles().findIndex(f => f.id === file.id);
     const currentFile = this.previewFile();
-    await this.fileService.delete(file.id);
+    await this.fileService.delete(file);
     const files = this.mediaFiles();
     if (files.length === 0) {
       this.closePreview();
@@ -352,8 +352,8 @@ export class FileBrowserComponent implements OnInit {
   }
 
   async bulkDelete(): Promise<void> {
-    const ids = [...this.fileService.selectedIds()];
-    await Promise.all(ids.map(id => this.fileService.delete(id)));
+    const files = this.displayFiles().filter(f => this.fileService.selectedIds().has(f.id));
+    await Promise.all(files.map(f => this.fileService.delete(f)));
     this.fileService.clearSelection();
   }
 
@@ -412,7 +412,8 @@ export class FileBrowserComponent implements OnInit {
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const selected = this.fileService.selectedIds();
       if (selected.size > 0) {
-        selected.forEach(id => this.fileService.delete(id));
+        const files = this.displayFiles().filter(f => selected.has(f.id));
+        files.forEach(f => this.fileService.delete(f));
         this.fileService.clearSelection();
       }
     }

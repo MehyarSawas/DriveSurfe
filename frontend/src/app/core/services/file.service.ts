@@ -139,9 +139,23 @@ export class FileService {
     this.files.update(files => files.filter(f => f.id !== fileId));
   }
 
-  async delete(fileId: string): Promise<void> {
-    await firstValueFrom(this.http.delete(`/api/files/${fileId}`));
-    this.files.update(files => files.filter(f => f.id !== fileId));
+  async delete(file: DriveFile): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/files/${file.id}`));
+    this.files.update(files => files.filter(f => f.id !== file.id));
+    this.folderStats.update(s => {
+      if (!s) return s;
+      const isDir = file.is_dir;
+      return {
+        ...s,
+        count:             s.count - 1,
+        files:             isDir ? s.files : s.files - 1,
+        directories:       isDir ? s.directories - 1 : s.directories,
+        total_count:       s.total_count - 1,
+        total_files:       isDir ? s.total_files : s.total_files - 1,
+        total_directories: isDir ? s.total_directories - 1 : s.total_directories,
+        size:              isDir ? s.size : Math.max(0, s.size - (file.size ?? 0)),
+      };
+    });
   }
 
   async toggleFavorite(file: DriveFile): Promise<void> {
