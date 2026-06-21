@@ -376,9 +376,26 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
+  readonly showCloseConfirm = signal(false);
+
   requestClose(): void {
+    if (this.pendingFile) {
+      this.showCloseConfirm.set(true);
+    } else {
+      this.close.emit();
+    }
+  }
+
+  confirmCloseAndDelete(): void {
     this.alive = false;
     this.flushPending();
+    this.showCloseConfirm.set(false);
+    this.close.emit();
+  }
+
+  cancelCloseAndKeep(): void {
+    this.showCloseConfirm.set(false);
+    this.clearPending();
     this.close.emit();
   }
 

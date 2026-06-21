@@ -151,6 +151,20 @@
     />
   }
 
+  <!-- Close with pending delete confirm -->
+  @if (showCloseConfirm()) {
+    <div class="close-confirm-backdrop" (click)="$event.stopPropagation()">
+      <div class="close-confirm-dialog">
+        <p class="close-confirm-title">Delete "{{ pendingDeleteFile()?.name }}"?</p>
+        <p class="close-confirm-sub">The countdown was still running.</p>
+        <div class="close-confirm-actions">
+          <button class="btn-cancel-deletes" (click)="cancelCloseAndKeep()">Don't delete</button>
+          <button class="btn-confirm-deletes" (click)="confirmCloseAndDelete()">Delete</button>
+        </div>
+      </div>
+    </div>
+  }
+
   <!-- Delete countdown toast -->
   @if (deletePhase() === 'countdown') {
     <div class="delete-toast" (click)="$event.stopPropagation()">
