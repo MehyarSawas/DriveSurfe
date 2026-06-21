@@ -30,6 +30,13 @@
       <button class="icon-btn danger" (click)="initiateDelete()" title="Delete">
         <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
       </button>
+      <button class="icon-btn" (click)="toggleFullscreen()" [title]="isFullscreen() ? 'Exit fullscreen' : 'Fullscreen'">
+        @if (isFullscreen()) {
+          <svg viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
+        } @else {
+          <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+        }
+      </button>
       <button class="icon-btn" [class.active]="thumbnailBarOpen()" (click)="toggleThumbnailBar()" title="Toggle thumbnail bar">
         @if (thumbnailBarOpen()) {
           <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"/></svg>
@@ -81,7 +88,7 @@
         </div>
       }
       @if (isVideo()) {
-        <video [src]="previewSrc()" [attr.poster]="file().thumbnail_url" controls playsinline preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'">
+        <video [src]="previewSrc()" [attr.poster]="file().thumbnail_url" controls playsinline autoplay preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'" (dblclick)="toggleFullscreen()">
           Your browser does not support video playback.
         </video>
       } @else if (isPdf()) {
@@ -95,7 +102,7 @@
         <img [src]="previewSrc()" [alt]="file().name" class="media-img"
              [class.hidden]="isLoading()"
              (load)="onImageLoad()" (error)="onImageError()"
-             (dblclick)="resetZoom()" />
+             (dblclick)="toggleFullscreen()" />
       } @else {
         <div class="no-preview">
           <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>

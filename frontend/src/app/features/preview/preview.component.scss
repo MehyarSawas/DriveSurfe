@@ -8,6 +8,11 @@
   color: white;
 }
 
+:fullscreen .preview-overlay,
+:-webkit-full-screen .preview-overlay {
+  background: #000;
+}
+
 /* Header */
 .preview-header {
   display: flex;

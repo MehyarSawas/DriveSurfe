@@ -49,6 +49,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly thumbnailBarOpen = signal(false);
   readonly sessionSaved = signal(false);
   private sessionSavedTimer: ReturnType<typeof setTimeout> | null = null;
+  readonly isFullscreen = signal(false);
+  private _fsHandler!: () => void;
 
   readonly swipeAction = computed<'delete' | 'move' | null>(() => {
     if (this.isTwoFingerTouch() || this.zoom() !== 1) return null;
@@ -71,6 +73,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   // Swipe state
   private touchStartX = 0;
   private touchStartY = 0;
+  private touchStartTime = 0;
   private touchCurrentX = 0;
   private touchCurrentY = 0;
   private isSwiping = false;
@@ -157,6 +160,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   ngAfterViewInit(): void {
     this.boundTouchMove = (e: TouchEvent) => this.zone.run(() => this.onTouchMove(e));
     this.el.nativeElement.addEventListener('touchmove', this.boundTouchMove, { passive: false });
+    this._fsHandler = () => this.zone.run(() => this.isFullscreen.set(!!document.fullscreenElement));
+    document.addEventListener('fullscreenchange', this._fsHandler);
   }
 
   thumbnailUrl(file: DriveFile): string {
@@ -201,6 +206,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     if (this.boundTouchMove) {
       this.el.nativeElement.removeEventListener('touchmove', this.boundTouchMove);
     }
+    if (this._fsHandler) {
+      document.removeEventListener('fullscreenchange', this._fsHandler);
+    }
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -210,6 +218,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       case 'ArrowRight': this.next.emit(); break;
       case 'Escape': this.requestClose(); break;
       case 'Delete': this.initiateDelete(); break;
+      case 'f': case 'F': this.toggleFullscreen(); break;
       case '+': case '=': this.zoomIn(); break;
       case '-': this.zoomOut(); break;
     }
@@ -237,6 +246,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.touchStartY = t.clientY;
     this.touchCurrentX = t.clientX;
     this.touchCurrentY = t.clientY;
+    this.touchStartTime = Date.now();
     this.isSwiping = true;
     this.isTransitioning.set(false);
   }
@@ -379,11 +389,26 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     } else {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
+      // Tap detection: short touch with minimal movement → toggle fullscreen
+      const elapsed = Date.now() - this.touchStartTime;
+      const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
+      if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
+        this.toggleFullscreen();
+      }
+    }
+  }
+
+  toggleFullscreen(): void {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
     }
   }
 
   requestClose(): void {
     this.alive = false;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     this.flushPending();
     this.close.emit();
   }
