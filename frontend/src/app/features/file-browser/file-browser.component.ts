@@ -1,11 +1,11 @@
 import {
   Component, OnInit, inject, signal, computed, HostListener
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
-import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID } from '../../core/models/drive-file.model';
+import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession } from '../../core/models/drive-file.model';
 import { FileGridComponent } from './components/file-grid/file-grid.component';
 import { FileListComponent } from './components/file-list/file-list.component';
 import { FolderTreeComponent } from './components/folder-tree/folder-tree.component';
@@ -19,6 +19,7 @@ import { FolderPickerComponent } from '../../shared/components/folder-picker/fol
   standalone: true,
   imports: [
     CommonModule,
+    DatePipe,
     FormsModule,
     FileGridComponent,
     FileListComponent,
@@ -100,6 +101,7 @@ export class FileBrowserComponent implements OnInit {
       await this.loadCurrentFolder();
     }
     this.fileService.loadFolderTree();
+    this.fileService.loadSessions();
   }
 
   // Walk up parent_id chain to build a full breadcrumb from root to folderId.
@@ -181,6 +183,27 @@ export class FileBrowserComponent implements OnInit {
 
   closePreview(): void {
     this.previewFile.set(null);
+  }
+
+  async saveCurrentSession(): Promise<void> {
+    const file = this.previewFile();
+    if (!file) return;
+    const crumbs = this.fileService.breadcrumb();
+    const folderCrumb = crumbs[crumbs.length - 1];
+    await this.fileService.saveSession({
+      file_id: file.id,
+      file_name: file.name,
+      folder_id: folderCrumb?.id ?? this.fileService.currentFolderId(),
+      folder_name: folderCrumb?.name ?? 'My Drive',
+      thumbnail_url: file.thumbnail_url,
+    });
+  }
+
+  async openSession(session: PreviewSession): Promise<void> {
+    this.navigateToFolder(session.folder_id, session.folder_name);
+    if (window.innerWidth <= 768) this.sidebarOpen.set(false);
+    const file = await this.fileService.getFile(session.file_id);
+    this.openPreview(file);
   }
 
   jumpToFile(file: DriveFile): void {

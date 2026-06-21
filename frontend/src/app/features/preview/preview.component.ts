@@ -32,6 +32,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly prev = output<void>();
   readonly next = output<void>();
   readonly jumpTo = output<DriveFile>();
+  readonly saveSession = output<void>();
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly deleteStart = output<DriveFile>();

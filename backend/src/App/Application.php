@@ -9,6 +9,7 @@ use DriveSurfe\Middleware\AuthMiddleware;
 use DriveSurfe\Routes\ActionRoutes;
 use DriveSurfe\Routes\AuthRoutes;
 use DriveSurfe\Routes\FileRoutes;
+use DriveSurfe\Routes\SessionRoutes;
 use DriveSurfe\Service\SessionService;
 use GuzzleHttp\Client;
 use Slim\Factory\AppFactory;
@@ -82,14 +83,16 @@ final class Application
 
     private function registerRoutes(Container $container): void
     {
-        $authRoutes = new AuthRoutes($container);
-        $fileRoutes = new FileRoutes($container);
-        $actionRoutes = new ActionRoutes($container);
+        $authRoutes    = new AuthRoutes($container);
+        $fileRoutes    = new FileRoutes($container);
+        $actionRoutes  = new ActionRoutes($container);
+        $sessionRoutes = new SessionRoutes($container);
 
-        $this->slim->group('/api', function ($group) use ($authRoutes, $fileRoutes, $actionRoutes) {
+        $this->slim->group('/api', function ($group) use ($authRoutes, $fileRoutes, $actionRoutes, $sessionRoutes) {
             $authRoutes->register($group);
             $fileRoutes->register($group);
             $actionRoutes->register($group);
+            $sessionRoutes->register($group);
         });
     }
 }

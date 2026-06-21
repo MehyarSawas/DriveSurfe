@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID } from '../models/drive-file.model';
+import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID, PreviewSession } from '../models/drive-file.model';
 import { FolderTreeNode, DriveUsage } from '../models/drive.model';
 
 interface ApiResponse<T> {
@@ -37,6 +37,7 @@ export class FileService {
   readonly folderTree = signal<FolderTreeNode | null>(null);
   readonly selectedIds = signal<Set<string>>(new Set());
   readonly folderStats = signal<FolderStats | null>(null);
+  readonly sessions = signal<PreviewSession[]>([]);
 
   private loadGeneration = 0;
 
@@ -92,6 +93,23 @@ export class FileService {
       );
       this.folderStats.set(res.data);
     } catch { /* non-critical */ }
+  }
+
+  async loadSessions(): Promise<void> {
+    try {
+      const res = await firstValueFrom(this.http.get<PreviewSession[]>('/api/sessions'));
+      this.sessions.set(Array.isArray(res) ? res : []);
+    } catch { /* non-critical */ }
+  }
+
+  async saveSession(s: Omit<PreviewSession, 'id' | 'saved_at'>): Promise<void> {
+    await firstValueFrom(this.http.post('/api/sessions', s));
+    this.loadSessions();
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    this.sessions.update(list => list.filter(s => s.id !== id));
+    await firstValueFrom(this.http.delete(`/api/sessions/${id}`));
   }
 
   async loadFolderTree(): Promise<void> {

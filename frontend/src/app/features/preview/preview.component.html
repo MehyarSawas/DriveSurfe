@@ -24,6 +24,9 @@
       <button class="icon-btn" (click)="folderPanelOpen.set(true)" title="Move to folder">
         <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-5 7h-2v2H9v-2H7v-2h2V9h2v2h2v2z"/></svg>
       </button>
+      <button class="icon-btn" (click)="saveSession.emit()" title="Save position">
+        <svg viewBox="0 0 24 24"><path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21 7 19c.96.71 2.27 1 3.47.67A4 4 0 0 0 13 17a4 4 0 0 0-3-3.87V11h3V9h-3V7.5a2.5 2.5 0 1 0-2 0V9H5v2h3v2.13A4 4 0 0 0 5 17a4 4 0 0 0 2.53 3.67L6 22l1.89 1.18C10.1 19.17 12 13 17 8z"/></svg>
+      </button>
       <button class="icon-btn danger" (click)="initiateDelete()" title="Delete">
         <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
       </button>

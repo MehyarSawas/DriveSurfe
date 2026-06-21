@@ -28,6 +28,16 @@ export interface FileListOptions {
   type?: string;
 }
 
+export interface PreviewSession {
+  id: string;
+  file_id: string;
+  file_name: string;
+  folder_id: string;
+  folder_name: string;
+  thumbnail_url: string | null;
+  saved_at: string;
+}
+
 export interface BreadcrumbItem {
   id: string;
   name: string;

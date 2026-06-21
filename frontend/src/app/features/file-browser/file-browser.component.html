@@ -29,6 +29,33 @@
       </button>
     </nav>
 
+    @if (fileService.sessions().length > 0) {
+      <div class="sidebar-sessions-wrap">
+        <div class="sidebar-section-title">
+          <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+          Preview Sessions
+        </div>
+        <div class="sessions-list">
+          @for (session of fileService.sessions(); track session.id) {
+            <div class="session-item" (click)="openSession(session)">
+              @if (session.thumbnail_url) {
+                <img class="session-thumb" [src]="session.thumbnail_url" [alt]="session.folder_name" />
+              } @else {
+                <div class="session-thumb-placeholder"></div>
+              }
+              <div class="session-info">
+                <span class="session-folder">{{ session.folder_name }}</span>
+                <span class="session-date">{{ session.saved_at | date:'MMM d · h:mm a' }}</span>
+              </div>
+              <button class="session-delete icon-btn" title="Remove" (click)="$event.stopPropagation(); fileService.deleteSession(session.id)">
+                <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
     <div class="sidebar-tree">
       @if (fileService.folderTree()) {
         <ds-folder-tree
@@ -325,6 +352,7 @@
     (prev)="navigatePreview(-1)"
     (next)="navigatePreview(1)"
     (jumpTo)="jumpToFile($event)"
+    (saveSession)="saveCurrentSession()"
     (favorite)="toggleFavorite($event)"
     (download)="fileService.downloadFile($event.id, $event.name)"
     (deleteStart)="navigateAfterDeleteStart($event)"
