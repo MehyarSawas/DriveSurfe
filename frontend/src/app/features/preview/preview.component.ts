@@ -47,6 +47,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
   readonly thumbnailBarOpen = signal(false);
+  readonly sessionSaved = signal(false);
+  private sessionSavedTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly swipeAction = computed<'delete' | 'move' | null>(() => {
     if (this.isTwoFingerTouch() || this.zoom() !== 1) return null;
@@ -195,6 +197,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   ngOnDestroy(): void {
     this.alive = false;
     this.clearPending();
+    if (this.sessionSavedTimer) clearTimeout(this.sessionSavedTimer);
     if (this.boundTouchMove) {
       this.el.nativeElement.removeEventListener('touchmove', this.boundTouchMove);
     }
@@ -437,6 +440,13 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   cancelDelete(): void {
     this.clearPending();
+  }
+
+  onSaveSession(): void {
+    this.saveSession.emit();
+    this.sessionSaved.set(true);
+    if (this.sessionSavedTimer) clearTimeout(this.sessionSavedTimer);
+    this.sessionSavedTimer = setTimeout(() => this.sessionSaved.set(false), 2000);
   }
 
   zoomIn(): void { this.zoom.update(z => Math.min(z + 0.25, 4)); }
