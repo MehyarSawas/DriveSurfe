@@ -40,6 +40,7 @@ export class FileBrowserComponent implements OnInit {
   readonly sortDir = signal<SortDir>('asc');
   readonly filterType = signal<string>('');
   readonly filterMenuOpen = signal(false);
+  readonly viewMenuOpen = signal(false);
   readonly sidebarOpen = signal(window.innerWidth > 768);
   readonly previewFile = signal<DriveFile | null>(null);
   readonly previewIndex = signal(0);
@@ -402,6 +403,7 @@ export class FileBrowserComponent implements OnInit {
   @HostListener('document:click')
   onDocClick(): void {
     this.filterMenuOpen.set(false);
+    this.viewMenuOpen.set(false);
     this.statsPopoverOpen.set(false);
   }
 
