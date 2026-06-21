@@ -43,7 +43,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly folderPanelOpen = signal(false);
 
   readonly swipeAction = computed<'delete' | 'move' | null>(() => {
-    if (this.isTwoFingerTouch()) return null;
+    if (this.isTwoFingerTouch() || this.zoom() !== 1) return null;
     const dy = this.swipeOffsetY();
     if (dy < -30) return 'delete';
     if (dy > 30) return 'move';
@@ -51,7 +51,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   });
 
   readonly swipeActionProgress = computed(() => {
-    if (this.isTwoFingerTouch()) return 0;
+    if (this.isTwoFingerTouch() || this.zoom() !== 1) return 0;
     const dy = this.swipeOffsetY();
     const threshold = 30;
     const full = 130;
@@ -105,11 +105,14 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   readonly previewSrc = computed(() => {
     const f = this.file();
-    if (this.isVideo()) return `/api/files/${f.id}/download`;
+    return this.isVideo() ? `/api/files/${f.id}/download` : this.imagePreviewUrl(f.id);
+  });
+
+  imagePreviewUrl(fileId: string): string {
     const w = Math.min(window.screen.width * window.devicePixelRatio, 10000) | 0;
     const h = Math.min(window.screen.height * window.devicePixelRatio, 10000) | 0;
-    return `/api/files/${f.id}/preview?width=${w}&height=${h}`;
-  });
+    return `/api/files/${fileId}/preview?width=${w}&height=${h}`;
+  }
 
   constructor(private zone: NgZone, private el: ElementRef) {
     let prevFileId = '';

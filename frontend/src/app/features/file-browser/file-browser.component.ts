@@ -192,6 +192,12 @@ export class FileBrowserComponent implements OnInit {
     }
   }
 
+  private previewUrl(fileId: string): string {
+    const w = Math.min(window.screen.width * window.devicePixelRatio, 10000) | 0;
+    const h = Math.min(window.screen.height * window.devicePixelRatio, 10000) | 0;
+    return `/api/files/${fileId}/preview?width=${w}&height=${h}`;
+  }
+
   private preloadAdjacent(index: number): void {
     const files = this.mediaFiles();
     const isImage = (f: DriveFile) =>
@@ -218,7 +224,7 @@ export class FileBrowserComponent implements OnInit {
 
     for (const f of toAdd) {
       const img = new Image();
-      img.src = `/api/files/${f.id}/preview`;
+      img.src = this.previewUrl(f.id);
       this.preloadCache.set(f.id, img);
     }
   }
