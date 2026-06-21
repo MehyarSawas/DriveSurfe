@@ -275,6 +275,70 @@
   50%       { transform: scale(1.1); opacity: 0.8; }
 }
 
+/* Close-with-pending-deletes confirm */
+.close-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.close-confirm-dialog {
+  background: var(--color-surface, #1e1e1e);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 14px;
+  padding: 24px 24px 20px;
+  max-width: 320px;
+  width: calc(100% - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.close-confirm-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.close-confirm-sub {
+  font-size: 14px;
+  color: rgba(255,255,255,0.6);
+  margin: 0 0 4px;
+}
+
+.close-confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.btn-cancel-deletes {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  text-align: center;
+}
+
+.btn-confirm-deletes {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  background: #d32f2f;
+  color: #fff;
+  text-align: center;
+}
+
 /* Delete countdown toast */
 .delete-toast {
   position: absolute;

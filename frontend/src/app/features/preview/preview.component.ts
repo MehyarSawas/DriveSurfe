@@ -85,8 +85,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   private pendingIntervals = new Map<string, ReturnType<typeof setInterval>>();
   private pendingCountdowns = new Map<string, number>();
+  private pendingDeleteFiles = new Map<string, DriveFile>();
   private alive = true;
   readonly pendingDeleteFile = signal<DriveFile | null>(null);
+  readonly showCloseConfirm = signal(false);
+  get pendingCount(): number { return this.pendingIntervals.size; }
   private boundTouchMove!: (e: TouchEvent) => void;
 
   readonly isImage = computed(() => {
@@ -161,6 +164,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     for (const interval of this.pendingIntervals.values()) clearInterval(interval);
     this.pendingIntervals.clear();
     this.pendingCountdowns.clear();
+    this.pendingDeleteFiles.clear();
     this.deletePhase.set('idle');
     this.pendingDeleteFile.set(null);
   }
@@ -178,7 +182,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     switch (e.key) {
       case 'ArrowLeft': this.prev.emit(); break;
       case 'ArrowRight': this.next.emit(); break;
-      case 'Escape': this.cancelAllPending(); this.close.emit(); break;
+      case 'Escape': this.requestClose(); break;
       case 'Delete': this.initiateDelete(); break;
       case '+': case '=': this.zoomIn(); break;
       case '-': this.zoomOut(); break;
@@ -352,6 +356,32 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
+  requestClose(): void {
+    if (this.pendingIntervals.size > 0) {
+      this.showCloseConfirm.set(true);
+    } else {
+      this.cancelAllPending();
+      this.close.emit();
+    }
+  }
+
+  confirmDeleteAndClose(): void {
+    this.alive = false;
+    for (const interval of this.pendingIntervals.values()) clearInterval(interval);
+    this.pendingIntervals.clear();
+    this.pendingCountdowns.clear();
+    for (const file of this.pendingDeleteFiles.values()) {
+      this.delete.emit(file);
+    }
+    this.pendingDeleteFiles.clear();
+    this.showCloseConfirm.set(false);
+    this.close.emit();
+  }
+
+  dismissCloseConfirm(): void {
+    this.showCloseConfirm.set(false);
+  }
+
   initiateDelete(): void {
     const file = this.file();
     const fileId = file.id;
@@ -360,6 +390,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       clearInterval(this.pendingIntervals.get(fileId)!);
     }
     this.pendingCountdowns.set(fileId, 10);
+    this.pendingDeleteFiles.set(fileId, file);
     this.pendingDeleteFile.set(file);
     this.deleteStart.emit(file);
     this.deletePhase.set('countdown');
@@ -371,6 +402,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         clearInterval(interval);
         this.pendingIntervals.delete(fileId);
         this.pendingCountdowns.delete(fileId);
+        this.pendingDeleteFiles.delete(fileId);
         this.delete.emit(file);
         // Clear UI only if user is still on this file
         if (this.file().id === fileId) {
@@ -392,6 +424,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       clearInterval(this.pendingIntervals.get(fileId)!);
       this.pendingIntervals.delete(fileId);
       this.pendingCountdowns.delete(fileId);
+      this.pendingDeleteFiles.delete(fileId);
     }
     this.deletePhase.set('idle');
     this.countdown.set(10);
