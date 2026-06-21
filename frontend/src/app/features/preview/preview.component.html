@@ -71,7 +71,7 @@
         </div>
       }
       @if (isVideo()) {
-        <video [src]="previewSrc()" controls playsinline preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'">
+        <video [src]="previewSrc()" [attr.poster]="file().thumbnail_url" controls playsinline preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'">
           Your browser does not support video playback.
         </video>
       } @else if (isPdf()) {
