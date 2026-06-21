@@ -334,71 +334,6 @@
   50%       { transform: scale(1.1); opacity: 0.8; }
 }
 
-/* Close confirm dialog */
-.close-confirm-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
-
-.close-confirm-dialog {
-  background: var(--color-surface, #1e1e1e);
-  border: 1px solid var(--color-border, #333);
-  border-radius: 14px;
-  padding: 24px 24px 20px;
-  max-width: 320px;
-  width: calc(100% - 48px);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.close-confirm-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.close-confirm-sub {
-  font-size: 13px;
-  color: rgba(255,255,255,0.5);
-  margin: 0 0 6px;
-}
-
-.close-confirm-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.btn-cancel-deletes {
-  flex: 1;
-  padding: 10px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  background: rgba(255,255,255,0.08);
-  color: #fff;
-}
-
-.btn-confirm-deletes {
-  flex: 1;
-  padding: 10px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  background: #d32f2f;
-  color: #fff;
-}
-
 /* Delete countdown toast */
 .delete-toast {
   position: absolute;
@@ -439,14 +374,34 @@
 .toast-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+}
+
+.toast-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .toast-label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-size: 12px;
   color: rgba(255,255,255,0.75);
+  min-width: 0;
+}
+
+.toast-filename {
+  font-size: 12px;
+  font-weight: 500;
+  color: #fff;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-undo {

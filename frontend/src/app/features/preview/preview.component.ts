@@ -135,9 +135,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       if (isNewFile) {
         this.previewFailed.set(false);
         if (!this.isVideo() && !this.isPdf()) this.isLoading.set(true);
-        this.deletePhase.set('idle');
-        this.countdown.set(10);
-        if (this.pendingFile?.id !== f.id) this.pendingDeleteFile.set(null);
+        if (!this.pendingInterval) {
+          this.deletePhase.set('idle');
+          this.countdown.set(10);
+          this.pendingDeleteFile.set(null);
+        }
       }
     });
 
@@ -376,26 +378,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
-  readonly showCloseConfirm = signal(false);
-
   requestClose(): void {
-    if (this.pendingFile) {
-      this.showCloseConfirm.set(true);
-    } else {
-      this.close.emit();
-    }
-  }
-
-  confirmCloseAndDelete(): void {
     this.alive = false;
     this.flushPending();
-    this.showCloseConfirm.set(false);
-    this.close.emit();
-  }
-
-  cancelCloseAndKeep(): void {
-    this.showCloseConfirm.set(false);
-    this.clearPending();
     this.close.emit();
   }
 
