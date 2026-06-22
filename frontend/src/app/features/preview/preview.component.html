@@ -121,18 +121,26 @@
 
   <!-- Thumbnail strip -->
   @if (thumbnailBarOpen() && files().length > 1) {
-    <div class="thumb-strip" #thumbStrip (click)="$event.stopPropagation()">
-      @for (f of files(); track f.id; let i = $index) {
-        <button class="thumb-item" [class.active]="i === currentIndex()" (click)="jumpTo.emit(f)">
-          @if (f.thumbnail_url) {
-            <img [src]="thumbnailUrl(f)" [alt]="f.name" loading="lazy" />
-          } @else {
-            <div class="thumb-placeholder">
-              <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-            </div>
-          }
-        </button>
-      }
+    <div class="thumb-strip-wrap" (click)="$event.stopPropagation()">
+      <button class="thumb-nav left" (click)="scrollThumbBy(-200)" [disabled]="thumbScrollLeft() <= 0">
+        <svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
+      </button>
+      <div class="thumb-strip" #thumbStrip (scroll)="onThumbScroll()">
+        @for (f of files(); track f.id; let i = $index) {
+          <button class="thumb-item" [class.active]="i === currentIndex()" (click)="jumpTo.emit(f)">
+            @if (f.thumbnail_url) {
+              <img [src]="thumbnailUrl(f)" [alt]="f.name" loading="lazy" />
+            } @else {
+              <div class="thumb-placeholder">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+              </div>
+            }
+          </button>
+        }
+      </div>
+      <button class="thumb-nav right" (click)="scrollThumbBy(200)" [disabled]="thumbAtEnd()">
+        <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+      </button>
     </div>
   }
 

@@ -209,15 +209,43 @@
 }
 
 /* Thumbnail strip */
+.thumb-strip-wrap {
+  display: flex;
+  align-items: center;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  position: relative;
+}
+
+.thumb-nav {
+  flex-shrink: 0;
+  width: 36px;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.7);
+  transition: background 0.15s, color 0.15s;
+  z-index: 2;
+
+  svg { width: 22px; height: 22px; fill: currentColor; }
+
+  &:hover:not(:disabled) {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+  }
+
+  &:disabled { opacity: 0.2; cursor: default; }
+}
+
 .thumb-strip {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 4px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 6px 12px;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(8px);
+  padding: 6px 4px;
   scroll-behavior: smooth;
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }

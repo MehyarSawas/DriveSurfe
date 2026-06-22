@@ -48,6 +48,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
   readonly thumbnailBarOpen = signal(false);
+  readonly thumbScrollLeft = signal(0);
+  readonly thumbAtEnd = signal(false);
   readonly sessionSaved = signal(false);
   private sessionSavedTimer: ReturnType<typeof setTimeout> | null = null;
   readonly isFullscreen = signal(false);
@@ -188,6 +190,23 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     const thumbLeft = thumb.offsetLeft;
     const thumbW = thumb.offsetWidth;
     strip.scrollTo({ left: thumbLeft - stripW / 2 + thumbW / 2, behavior: 'smooth' });
+    this.updateThumbScrollState(strip);
+  }
+
+  scrollThumbBy(px: number): void {
+    const strip = this.thumbStrip?.nativeElement;
+    if (!strip) return;
+    strip.scrollBy({ left: px, behavior: 'smooth' });
+  }
+
+  onThumbScroll(): void {
+    const strip = this.thumbStrip?.nativeElement;
+    if (strip) this.updateThumbScrollState(strip);
+  }
+
+  private updateThumbScrollState(strip: HTMLElement): void {
+    this.thumbScrollLeft.set(strip.scrollLeft);
+    this.thumbAtEnd.set(strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4);
   }
 
   onImageLoad(): void { this.isLoading.set(false); }
