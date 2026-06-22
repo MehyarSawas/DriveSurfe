@@ -176,6 +176,7 @@ export class FileBrowserComponent implements OnInit {
       if (window.innerWidth <= 768) this.sidebarOpen.set(false);
       return;
     }
+    this.fileService.previewOpen.set(true);
     this.previewFile.set(file);
     const idx = this.mediaFiles().findIndex(f => f.id === file.id);
     this.preloadAdjacent(idx >= 0 ? idx : 0);
@@ -188,6 +189,7 @@ export class FileBrowserComponent implements OnInit {
 
   closePreview(): void {
     this.previewFile.set(null);
+    this.fileService.previewOpen.set(false);
   }
 
   async saveCurrentSession(): Promise<void> {

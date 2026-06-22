@@ -37,9 +37,18 @@ export class FileService {
   readonly folderTree = signal<FolderTreeNode | null>(null);
   readonly selectedIds = signal<Set<string>>(new Set());
   readonly folderStats = signal<FolderStats | null>(null);
+  readonly previewOpen = signal(false);
   readonly sessions = signal<PreviewSession[]>([]);
 
   private loadGeneration = 0;
+
+  private waitWhilePreviewOpen(): Promise<void> {
+    if (!this.previewOpen()) return Promise.resolve();
+    return new Promise(resolve => {
+      const check = () => this.previewOpen() ? setTimeout(check, 150) : resolve();
+      setTimeout(check, 150);
+    });
+  }
 
   async loadFiles(options: FileListOptions): Promise<void> {
     this.folderStats.set(null);
@@ -67,6 +76,8 @@ export class FileService {
         this.loadingMore.set(true);
         let cursor: string | null = first.cursor;
         while (cursor) {
+          await this.waitWhilePreviewOpen();
+          if (generation !== this.loadGeneration) return;
           const page: FilesResponse = await firstValueFrom(
             this.http.get<FilesResponse>('/api/files', { params: { ...params, cursor } })
           );
