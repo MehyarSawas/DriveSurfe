@@ -205,9 +205,15 @@ export class FileBrowserComponent implements OnInit {
   }
 
   async openSession(session: PreviewSession): Promise<void> {
-    this.navigateToFolder(session.folder_id, session.folder_name);
+    this.fileService.navigateToFolder(session.folder_id, session.folder_name);
+    this.syncUrl(session.folder_id);
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
-    const file = await this.fileService.getFile(session.file_id);
+    // Load folder files and the target file in parallel, but wait for both
+    // before opening preview so mediaFiles() is populated and previewIndex computes correctly.
+    const [file] = await Promise.all([
+      this.fileService.getFile(session.file_id),
+      this.loadCurrentFolder(),
+    ]);
     this.openPreview(file);
   }
 
