@@ -259,7 +259,18 @@
   overflow: hidden;
   border: 2px solid transparent;
   opacity: 0.55;
+  position: relative;
   transition: opacity 0.15s, border-color 0.15s, transform 0.15s;
+
+  &.not-cached::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.08) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.2s infinite;
+    pointer-events: none;
+  }
 
   img {
     width: 100%;
@@ -351,6 +362,11 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .hidden { visibility: hidden; }

@@ -27,6 +27,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly currentFolderId = input('');
   readonly files = input<DriveFile[]>([]);
   readonly currentIndex = input(0);
+  readonly cachedIds = input<Set<string>>(new Set());
 
   readonly close = output<void>();
   readonly prev = output<void>();
@@ -39,6 +40,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly delete = output<DriveFile>();
   readonly undoDelete = output<string>();
   readonly moveFile = output<{file: DriveFile, folderId: string}>();
+  readonly stripScrolled = output<{from: number, to: number}>();
   readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
 
   readonly zoom = signal(1);
@@ -201,7 +203,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   onThumbScroll(): void {
     const strip = this.thumbStrip?.nativeElement;
-    if (strip) this.updateThumbScrollState(strip);
+    if (!strip) return;
+    this.updateThumbScrollState(strip);
+    const thumbW = 68;
+    const from = Math.floor(strip.scrollLeft / thumbW);
+    const to = Math.min(Math.ceil((strip.scrollLeft + strip.clientWidth) / thumbW), this.files().length - 1);
+    this.stripScrolled.emit({ from, to });
   }
 
   private updateThumbScrollState(strip: HTMLElement): void {

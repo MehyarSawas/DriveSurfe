@@ -127,7 +127,7 @@
       </button>
       <div class="thumb-strip" #thumbStrip (scroll)="onThumbScroll()">
         @for (f of files(); track f.id; let i = $index) {
-          <button class="thumb-item" [class.active]="i === currentIndex()" (click)="jumpTo.emit(f)">
+          <button class="thumb-item" [class.active]="i === currentIndex()" [class.not-cached]="f.thumbnail_url && !cachedIds().has(f.id)" (click)="jumpTo.emit(f)">
             @if (f.thumbnail_url) {
               <img [src]="thumbnailUrl(f)" [alt]="f.name" loading="lazy" />
             } @else {

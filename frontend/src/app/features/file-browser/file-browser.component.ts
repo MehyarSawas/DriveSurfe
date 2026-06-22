@@ -53,7 +53,75 @@ export class FileBrowserComponent implements OnInit {
   });
 
   // Keeps Image objects alive so the browser caches their responses
-  private preloadCache = new Map<string, HTMLImageElement>();
+  private preloadGen = 0;
+  private readonly preloadCache = new Map<string, HTMLImageElement>();
+  readonly cachedIds = signal<Set<string>>(new Set());
+
+  private isPreloadable(f: DriveFile): boolean {
+    return f.mime_type?.startsWith('image/') ||
+      ['jpg','jpeg','png','gif','webp','heic','heif'].some(e => f.extension === e);
+  }
+
+  private preloadBatch(indices: number[], files: DriveFile[]): void {
+    for (const i of indices) {
+      if (i < 0 || i >= files.length) continue;
+      const f = files[i];
+      if (!this.isPreloadable(f) || this.preloadCache.has(f.id)) continue;
+      const img = new Image();
+      img.src = this.previewUrl(f.id);
+      this.preloadCache.set(f.id, img);
+    }
+    if (this.preloadCache.size > 60) {
+      const evict = this.preloadCache.size - 60;
+      let n = 0;
+      for (const id of this.preloadCache.keys()) {
+        if (n++ >= evict) break;
+        this.preloadCache.delete(id);
+      }
+    }
+    this.cachedIds.set(new Set(this.preloadCache.keys()));
+  }
+
+  private async preloadStrip(fromIndex: number, gen: number): Promise<void> {
+    const files = this.mediaFiles();
+    const order: number[] = [];
+    let lo = fromIndex - 3, hi = fromIndex + 6;
+    while (lo >= 0 || hi < files.length) {
+      if (hi < files.length) order.push(hi++);
+      if (lo >= 0) order.push(lo--);
+    }
+    for (const i of order) {
+      if (gen !== this.preloadGen) return;
+      const f = files[i];
+      if (!this.isPreloadable(f) || this.preloadCache.has(f.id)) continue;
+      const img = new Image();
+      img.src = this.previewUrl(f.id);
+      this.preloadCache.set(f.id, img);
+      this.cachedIds.set(new Set(this.preloadCache.keys()));
+      await new Promise(r => setTimeout(r, 80));
+    }
+  }
+
+  private previewUrl(fileId: string): string {
+    const w = Math.min(window.screen.width * window.devicePixelRatio, 10000) | 0;
+    const h = Math.min(window.screen.height * window.devicePixelRatio, 10000) | 0;
+    return `/api/files/${fileId}/preview?width=${w}&height=${h}`;
+  }
+
+  private preloadAdjacent(index: number): void {
+    const gen = ++this.preloadGen;
+    const files = this.mediaFiles();
+    this.preloadBatch([index-2, index-1, index+1, index+2, index+3, index+4, index+5], files);
+    this.preloadStrip(index, gen);
+  }
+
+  onStripScrolled(range: {from: number, to: number}): void {
+    const gen = ++this.preloadGen;
+    const files = this.mediaFiles();
+    const indices = Array.from({length: range.to - range.from + 6}, (_, i) => range.from - 1 + i);
+    this.preloadBatch(indices, files);
+    this.preloadStrip(Math.floor((range.from + range.to) / 2), gen);
+  }
 
   readonly mediaFiles = computed(() => {
     const files = this.fileService.searchResults() ?? this.fileService.files();
@@ -211,8 +279,8 @@ export class FileBrowserComponent implements OnInit {
     this.syncUrl(session.folder_id);
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
     // Folder loads in background — don't block the preview on it.
-    // previewIndex is computed, so the strip auto-corrects when mediaFiles() populates.
-    this.loadCurrentFolder();
+    // Re-run preload after folder loads so strip has full file list.
+    this.loadCurrentFolder().then(() => this.preloadAdjacent(this.previewIndex()));
     const file = await this.fileService.getFile(session.file_id);
     this.openPreview(file);
   }
@@ -230,43 +298,6 @@ export class FileBrowserComponent implements OnInit {
     if (next >= 0 && next < files.length) {
       this.previewFile.set(files[next]);
       this.preloadAdjacent(next);
-    }
-  }
-
-  private previewUrl(fileId: string): string {
-    const w = Math.min(window.screen.width * window.devicePixelRatio, 10000) | 0;
-    const h = Math.min(window.screen.height * window.devicePixelRatio, 10000) | 0;
-    return `/api/files/${fileId}/preview?width=${w}&height=${h}`;
-  }
-
-  private preloadAdjacent(index: number): void {
-    const files = this.mediaFiles();
-    const isImage = (f: DriveFile) =>
-      f.mime_type?.startsWith('image/') ||
-      ['jpg','jpeg','png','gif','webp','heic','heif'].some(e => f.extension === e);
-
-    const toPreload = [index - 2, index - 1, index + 1, index + 2, index + 3, index + 4, index + 5]
-      .filter(i => i >= 0 && i < files.length)
-      .map(i => files[i])
-      .filter(f => isImage(f));
-
-    // Only add images not already cached
-    const toAdd = toPreload.filter(f => !this.preloadCache.has(f.id));
-
-    // Evict oldest entries when cache would exceed 20
-    if (this.preloadCache.size + toAdd.length > 20) {
-      const evictCount = this.preloadCache.size + toAdd.length - 20;
-      let i = 0;
-      for (const id of this.preloadCache.keys()) {
-        if (i++ >= evictCount) break;
-        this.preloadCache.delete(id);
-      }
-    }
-
-    for (const f of toAdd) {
-      const img = new Image();
-      img.src = this.previewUrl(f.id);
-      this.preloadCache.set(f.id, img);
     }
   }
 
