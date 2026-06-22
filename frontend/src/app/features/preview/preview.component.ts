@@ -154,7 +154,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
     effect(() => {
       this.currentIndex();
-      this.files().length; // re-scroll when list grows (e.g. session folder finishes loading)
       if (this.thumbnailBarOpen()) {
         setTimeout(() => this.scrollThumbToCenter(), 50);
       }
