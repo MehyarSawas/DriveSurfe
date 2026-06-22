@@ -44,10 +44,7 @@ export class FileService {
 
   private waitWhilePreviewOpen(): Promise<void> {
     if (!this.previewOpen()) return Promise.resolve();
-    return new Promise(resolve => {
-      const check = () => this.previewOpen() ? setTimeout(check, 150) : resolve();
-      setTimeout(check, 150);
-    });
+    return new Promise(r => setTimeout(r, 400));
   }
 
   async loadFiles(options: FileListOptions): Promise<void> {
