@@ -287,6 +287,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       }
       return;
     }
+    if (!this.isPinching && !this.isSwiping) return; // touch started outside media-area (e.g. strip)
     e.preventDefault();
     if (this.isPinching && e.touches.length === 2) {
       const [t1, t2] = [e.touches[0], e.touches[1]];
