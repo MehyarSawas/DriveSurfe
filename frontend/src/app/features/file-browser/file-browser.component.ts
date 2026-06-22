@@ -208,12 +208,10 @@ export class FileBrowserComponent implements OnInit {
     this.fileService.navigateToFolder(session.folder_id, session.folder_name);
     this.syncUrl(session.folder_id);
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
-    // Load folder files and the target file in parallel, but wait for both
-    // before opening preview so mediaFiles() is populated and previewIndex computes correctly.
-    const [file] = await Promise.all([
-      this.fileService.getFile(session.file_id),
-      this.loadCurrentFolder(),
-    ]);
+    // Folder loads in background — don't block the preview on it.
+    // previewIndex is computed, so the strip auto-corrects when mediaFiles() populates.
+    this.loadCurrentFolder();
+    const file = await this.fileService.getFile(session.file_id);
     this.openPreview(file);
   }
 
