@@ -357,7 +357,7 @@
     (download)="fileService.downloadFile($event.id, $event.name)"
     (deleteStart)="navigateAfterDeleteStart($event)"
     (delete)="deletePreviewFile($event)"
-    (undoDelete)="onUndoDelete()"
+    (undoDelete)="onUndoDelete($event)"
     (moveFile)="handleMove($event)"
     (createFolder)="handleCreateFolderFromPreview($event)"
   />

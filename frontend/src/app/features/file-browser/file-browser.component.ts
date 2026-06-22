@@ -44,7 +44,7 @@ export class FileBrowserComponent implements OnInit {
   readonly viewMenuOpen = signal(false);
   readonly sidebarOpen = signal(window.innerWidth > 768);
   readonly previewFile = signal<DriveFile | null>(null);
-  readonly pendingDeleteId = signal<string | null>(null);
+  readonly pendingDeleteIds = signal<Set<string>>(new Set());
 
   readonly previewIndex = computed(() => {
     const file = this.previewFile();
@@ -57,8 +57,8 @@ export class FileBrowserComponent implements OnInit {
 
   readonly mediaFiles = computed(() => {
     const files = this.fileService.searchResults() ?? this.fileService.files();
-    const pendingId = this.pendingDeleteId();
-    return files.filter(f => !f.is_dir && f.id !== pendingId);
+    const pending = this.pendingDeleteIds();
+    return files.filter(f => !f.is_dir && !pending.has(f.id));
   });
 
   readonly displayFiles = computed(() => {
@@ -269,24 +269,24 @@ export class FileBrowserComponent implements OnInit {
   }
 
   navigateAfterDeleteStart(file: DriveFile): void {
-    const files = this.mediaFiles(); // snapshot before filtering
+    const files = this.mediaFiles(); // snapshot before adding to pending set
     const idx = files.findIndex(f => f.id === file.id);
     if (idx === -1) return;
-    this.pendingDeleteId.set(file.id); // remove from list immediately
+    this.pendingDeleteIds.update(s => new Set([...s, file.id])); // remove from list immediately
     const filtered = this.mediaFiles();
-    if (filtered.length === 0) return; // only file — stay on it until countdown ends
+    if (filtered.length === 0) return; // last file — stay on it until countdown ends
     const newIdx = Math.min(idx, filtered.length - 1);
     this.previewFile.set(filtered[newIdx]);
     this.preloadAdjacent(newIdx);
   }
 
-  onUndoDelete(): void {
-    this.pendingDeleteId.set(null); // file reappears; previewIndex recomputes automatically
+  onUndoDelete(fileId: string): void {
+    this.pendingDeleteIds.update(s => { const n = new Set(s); n.delete(fileId); return n; });
   }
 
   async deletePreviewFile(file: DriveFile): Promise<void> {
     await this.fileService.delete(file);
-    this.pendingDeleteId.set(null); // file now truly gone from service
+    this.pendingDeleteIds.update(s => { const n = new Set(s); n.delete(file.id); return n; });
     if (this.mediaFiles().length === 0) {
       this.closePreview();
     }
