@@ -44,14 +44,21 @@ export class FileBrowserComponent implements OnInit {
   readonly viewMenuOpen = signal(false);
   readonly sidebarOpen = signal(window.innerWidth > 768);
   readonly previewFile = signal<DriveFile | null>(null);
-  readonly previewIndex = signal(0);
+  readonly pendingDeleteId = signal<string | null>(null);
+
+  readonly previewIndex = computed(() => {
+    const file = this.previewFile();
+    if (!file) return 0;
+    return Math.max(0, this.mediaFiles().findIndex(f => f.id === file.id));
+  });
 
   // Keeps Image objects alive so the browser caches their responses
   private preloadCache = new Map<string, HTMLImageElement>();
 
   readonly mediaFiles = computed(() => {
     const files = this.fileService.searchResults() ?? this.fileService.files();
-    return files.filter(f => !f.is_dir);
+    const pendingId = this.pendingDeleteId();
+    return files.filter(f => !f.is_dir && f.id !== pendingId);
   });
 
   readonly displayFiles = computed(() => {
@@ -169,11 +176,9 @@ export class FileBrowserComponent implements OnInit {
       if (window.innerWidth <= 768) this.sidebarOpen.set(false);
       return;
     }
-    const idx = this.mediaFiles().findIndex(f => f.id === file.id);
-    const resolvedIdx = idx >= 0 ? idx : 0;
-    this.previewIndex.set(resolvedIdx);
     this.previewFile.set(file);
-    this.preloadAdjacent(resolvedIdx);
+    const idx = this.mediaFiles().findIndex(f => f.id === file.id);
+    this.preloadAdjacent(idx >= 0 ? idx : 0);
     // Load parent folder's dirs for the move panel
     const crumbs = this.fileService.breadcrumb();
     const parentCrumb = crumbs.length >= 2 ? crumbs[crumbs.length - 2] : crumbs[0];
@@ -209,7 +214,6 @@ export class FileBrowserComponent implements OnInit {
   jumpToFile(file: DriveFile): void {
     const idx = this.mediaFiles().findIndex(f => f.id === file.id);
     if (idx === -1) return;
-    this.previewIndex.set(idx);
     this.previewFile.set(file);
     this.preloadAdjacent(idx);
   }
@@ -218,7 +222,6 @@ export class FileBrowserComponent implements OnInit {
     const files = this.mediaFiles();
     const next = this.previewIndex() + delta;
     if (next >= 0 && next < files.length) {
-      this.previewIndex.set(next);
       this.previewFile.set(files[next]);
       this.preloadAdjacent(next);
     }
@@ -262,36 +265,26 @@ export class FileBrowserComponent implements OnInit {
   }
 
   navigateAfterDeleteStart(file: DriveFile): void {
-    const files = this.mediaFiles();
+    const files = this.mediaFiles(); // snapshot before filtering
     const idx = files.findIndex(f => f.id === file.id);
     if (idx === -1) return;
-    const newIdx = idx < files.length - 1 ? idx + 1 : idx > 0 ? idx - 1 : -1;
-    if (newIdx === -1) return;
-    this.previewIndex.set(newIdx);
-    this.previewFile.set(files[newIdx]);
+    this.pendingDeleteId.set(file.id); // remove from list immediately
+    const filtered = this.mediaFiles();
+    if (filtered.length === 0) return; // only file — stay on it until countdown ends
+    const newIdx = Math.min(idx, filtered.length - 1);
+    this.previewFile.set(filtered[newIdx]);
     this.preloadAdjacent(newIdx);
   }
 
+  onUndoDelete(): void {
+    this.pendingDeleteId.set(null); // file reappears; previewIndex recomputes automatically
+  }
+
   async deletePreviewFile(file: DriveFile): Promise<void> {
-    const deletedIdx = this.mediaFiles().findIndex(f => f.id === file.id);
-    const currentFile = this.previewFile();
     await this.fileService.delete(file);
-    const files = this.mediaFiles();
-    if (files.length === 0) {
+    this.pendingDeleteId.set(null); // file now truly gone from service
+    if (this.mediaFiles().length === 0) {
       this.closePreview();
-    } else if (currentFile?.id === file.id) {
-      // User is still on the deleted file — navigate away
-      const idx = Math.min(deletedIdx, files.length - 1);
-      this.previewIndex.set(idx);
-      this.previewFile.set(files[idx]);
-    } else {
-      // User already navigated away — just fix the index offset if needed
-      const currentIdx = files.findIndex(f => f.id === currentFile?.id);
-      if (currentIdx !== -1) {
-        this.previewIndex.set(currentIdx);
-      } else if (deletedIdx < this.previewIndex()) {
-        this.previewIndex.update(i => i - 1);
-      }
     }
   }
 
@@ -367,7 +360,6 @@ export class FileBrowserComponent implements OnInit {
         this.closePreview();
       } else {
         const idx = Math.min(this.previewIndex(), remaining.length - 1);
-        this.previewIndex.set(idx);
         this.previewFile.set(remaining[idx]);
       }
     }

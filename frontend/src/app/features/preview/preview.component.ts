@@ -37,6 +37,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly download = output<DriveFile>();
   readonly deleteStart = output<DriveFile>();
   readonly delete = output<DriveFile>();
+  readonly undoDelete = output<void>();
   readonly moveFile = output<{file: DriveFile, folderId: string}>();
   readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
 
@@ -472,6 +473,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   cancelDelete(): void {
     this.clearPending();
+    this.undoDelete.emit();
   }
 
   onSaveSession(): void {
