@@ -55,6 +55,7 @@ export class FileBrowserComponent implements OnInit {
   // Keeps Image objects alive so the browser caches their responses
   private preloadGen = 0;
   private readonly preloadCache = new Map<string, HTMLImageElement>();
+  private readonly backgroundImages = new Set<HTMLImageElement>(); // in-flight strip/scroll loads
   readonly cachedIds = signal<Set<string>>(new Set());
 
   private isPreloadable(f: DriveFile): boolean {
@@ -62,7 +63,15 @@ export class FileBrowserComponent implements OnInit {
       ['jpg','jpeg','png','gif','webp','heic','heif'].some(e => f.extension === e);
   }
 
-  private preloadBatch(indices: number[], files: DriveFile[]): void {
+  // Abort all background in-flight requests so navigation is never blocked by strip preloads
+  private abortBackground(): void {
+    for (const img of this.backgroundImages) {
+      img.src = '';
+    }
+    this.backgroundImages.clear();
+  }
+
+  private preloadBatch(indices: number[], files: DriveFile[], isBackground = false): void {
     for (const i of indices) {
       if (i < 0 || i >= files.length) continue;
       const f = files[i];
@@ -70,6 +79,7 @@ export class FileBrowserComponent implements OnInit {
       const img = new Image();
       img.src = this.previewUrl(f.id);
       this.preloadCache.set(f.id, img);
+      if (isBackground) this.backgroundImages.add(img);
     }
     if (this.preloadCache.size > 60) {
       const evict = this.preloadCache.size - 60;
@@ -97,6 +107,7 @@ export class FileBrowserComponent implements OnInit {
       const img = new Image();
       img.src = this.previewUrl(f.id);
       this.preloadCache.set(f.id, img);
+      this.backgroundImages.add(img);
       this.cachedIds.set(new Set(this.preloadCache.keys()));
       await new Promise(r => setTimeout(r, 80));
     }
@@ -109,6 +120,7 @@ export class FileBrowserComponent implements OnInit {
   }
 
   private preloadAdjacent(index: number): void {
+    this.abortBackground(); // free connections before loading new window
     const gen = ++this.preloadGen;
     const files = this.mediaFiles();
     this.preloadBatch([index-2, index-1, index+1, index+2, index+3, index+4, index+5], files);
@@ -119,7 +131,7 @@ export class FileBrowserComponent implements OnInit {
     const gen = ++this.preloadGen;
     const files = this.mediaFiles();
     const indices = Array.from({length: range.to - range.from + 6}, (_, i) => range.from - 1 + i);
-    this.preloadBatch(indices, files);
+    this.preloadBatch(indices, files, true); // background — abortable on navigation
     this.preloadStrip(Math.floor((range.from + range.to) / 2), gen);
   }
 
