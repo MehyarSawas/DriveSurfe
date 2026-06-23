@@ -179,15 +179,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   toggleThumbnailBar(): void {
     this.thumbnailBarOpen.update(v => !v);
     if (this.thumbnailBarOpen()) {
-      requestAnimationFrame(() => this.scrollThumbToCenter());
+      // 'instant' so the strip never renders at position 0 before jumping
+      requestAnimationFrame(() => this.scrollThumbToCenter('instant'));
     }
   }
 
-  private scrollThumbToCenter(): void {
+  private scrollThumbToCenter(behavior: ScrollBehavior = 'smooth'): void {
     const strip = this.thumbStrip?.nativeElement;
     if (!strip) return;
     if (!strip.offsetWidth) {
-      requestAnimationFrame(() => this.scrollThumbToCenter());
+      requestAnimationFrame(() => this.scrollThumbToCenter(behavior));
       return;
     }
     const idx = this.currentIndex();
@@ -196,7 +197,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     const stripW = strip.offsetWidth;
     const thumbLeft = thumb.offsetLeft;
     const thumbW = thumb.offsetWidth;
-    strip.scrollTo({ left: thumbLeft - stripW / 2 + thumbW / 2, behavior: 'smooth' });
+    strip.scrollTo({ left: thumbLeft - stripW / 2 + thumbW / 2, behavior });
     this.updateThumbScrollState(strip);
   }
 
