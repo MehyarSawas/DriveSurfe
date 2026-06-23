@@ -349,6 +349,7 @@
     [currentIndex]="previewIndex()"
     [currentFolderId]="previewParentFolderId()"
     [cachedIds]="cachedIds()"
+    [sessionLoading]="sessionLoading()"
     (close)="closePreview()"
     (stripScrolled)="onStripScrolled($event)"
     (prev)="navigatePreview(-1)"

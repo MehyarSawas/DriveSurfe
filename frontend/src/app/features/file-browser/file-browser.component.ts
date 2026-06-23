@@ -45,6 +45,7 @@ export class FileBrowserComponent implements OnInit {
   readonly sidebarOpen = signal(window.innerWidth > 768);
   readonly previewFile = signal<DriveFile | null>(null);
   readonly pendingDeleteIds = signal<Set<string>>(new Set());
+  readonly sessionLoading = signal(false);
 
   readonly previewIndex = computed(() => {
     const file = this.previewFile();
@@ -287,14 +288,38 @@ export class FileBrowserComponent implements OnInit {
   }
 
   async openSession(session: PreviewSession): Promise<void> {
+    this.sessionLoading.set(true);
     this.fileService.navigateToFolder(session.folder_id, session.folder_name);
     this.syncUrl(session.folder_id);
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
-    // Folder loads in background — don't block the preview on it.
-    // Re-run preload after folder loads so strip has full file list.
     this.loadCurrentFolder().then(() => this.preloadAdjacent(this.previewIndex()));
     const file = await this.fileService.getFile(session.file_id);
     this.openPreview(file);
+    await this.waitForSessionReady(file.id);
+    this.sessionLoading.set(false);
+  }
+
+  private waitForSessionReady(fileId: string): Promise<void> {
+    const deadline = performance.now() + 5000;
+    return new Promise<void>(resolve => {
+      const check = () => {
+        const inList = this.mediaFiles().some(f => f.id === fileId);
+        if (!inList && performance.now() < deadline) { setTimeout(check, 50); return; }
+
+        const idx = this.previewIndex();
+        const files = this.mediaFiles();
+        const needed = [idx, idx+1, idx+2, idx+3, idx+4, idx+5]
+          .filter(i => i >= 0 && i < files.length)
+          .map(i => files[i].id);
+        const cached = this.cachedIds();
+        if (needed.every(id => cached.has(id)) || performance.now() >= deadline) {
+          resolve();
+        } else {
+          setTimeout(check, 50);
+        }
+      };
+      check();
+    });
   }
 
   jumpToFile(file: DriveFile): void {

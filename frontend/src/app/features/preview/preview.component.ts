@@ -28,6 +28,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly files = input<DriveFile[]>([]);
   readonly currentIndex = input(0);
   readonly cachedIds = input<Set<string>>(new Set());
+  readonly sessionLoading = input(false);
 
   readonly close = output<void>();
   readonly prev = output<void>();

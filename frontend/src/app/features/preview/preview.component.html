@@ -1,5 +1,12 @@
 <div class="preview-overlay" [class.is-fullscreen]="isFullscreen()" (click)="requestClose()">
 
+  <!-- Session loading overlay -->
+  @if (sessionLoading()) {
+    <div class="session-loading-overlay" (click)="$event.stopPropagation()">
+      <div class="media-spinner"></div>
+    </div>
+  }
+
   <!-- Header -->
   <header class="preview-header" (click)="$event.stopPropagation()">
     <button class="icon-btn" (click)="requestClose()" title="Close (Esc)">
