@@ -1,12 +1,5 @@
 <div class="preview-overlay" [class.is-fullscreen]="isFullscreen()" (click)="requestClose()">
 
-  <!-- Session loading overlay -->
-  @if (sessionLoading()) {
-    <div class="session-loading-overlay" (click)="$event.stopPropagation()">
-      <div class="media-spinner"></div>
-    </div>
-  }
-
   <!-- Header -->
   <header class="preview-header" (click)="$event.stopPropagation()">
     <button class="icon-btn" (click)="requestClose()" title="Close (Esc)">
@@ -200,6 +193,13 @@
         </span>
         <button class="btn-undo" (click)="cancelDelete()">Undo</button>
       </div>
+    </div>
+  }
+
+  <!-- Session loading overlay — last in DOM so it paints above header/footer backdrop-filter stacking contexts -->
+  @if (sessionLoading()) {
+    <div class="session-loading-overlay" (click)="$event.stopPropagation()">
+      <div class="media-spinner"></div>
     </div>
   }
 </div>

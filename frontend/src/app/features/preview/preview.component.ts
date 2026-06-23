@@ -57,6 +57,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private sessionSavedTimer: ReturnType<typeof setTimeout> | null = null;
   readonly isFullscreen = signal(false);
   private _fsHandler!: () => void;
+  private lastScrolledIndex = 0;
 
   readonly swipeAction = computed<'delete' | 'move' | null>(() => {
     if (this.isTwoFingerTouch() || this.zoom() !== 1) return null;
@@ -156,9 +157,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     });
 
     effect(() => {
-      this.currentIndex();
+      const idx = this.currentIndex();
       if (this.thumbnailBarOpen()) {
-        requestAnimationFrame(() => this.scrollThumbToCenter());
+        // instant for large jumps (folder loaded, index 0→200); smooth for navigation (±1)
+        const behavior: ScrollBehavior = Math.abs(idx - this.lastScrolledIndex) <= 2 ? 'smooth' : 'instant';
+        this.lastScrolledIndex = idx;
+        requestAnimationFrame(() => this.scrollThumbToCenter(behavior));
       }
     });
   }
