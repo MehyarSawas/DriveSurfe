@@ -157,7 +157,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     effect(() => {
       this.currentIndex();
       if (this.thumbnailBarOpen()) {
-        setTimeout(() => this.scrollThumbToCenter(), 50);
+        requestAnimationFrame(() => this.scrollThumbToCenter());
       }
     });
   }
@@ -178,13 +178,17 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   toggleThumbnailBar(): void {
     this.thumbnailBarOpen.update(v => !v);
     if (this.thumbnailBarOpen()) {
-      setTimeout(() => this.scrollThumbToCenter(), 0);
+      requestAnimationFrame(() => this.scrollThumbToCenter());
     }
   }
 
   private scrollThumbToCenter(): void {
     const strip = this.thumbStrip?.nativeElement;
     if (!strip) return;
+    if (!strip.offsetWidth) {
+      requestAnimationFrame(() => this.scrollThumbToCenter());
+      return;
+    }
     const idx = this.currentIndex();
     const thumb = strip.children[idx] as HTMLElement | undefined;
     if (!thumb) return;
