@@ -334,37 +334,41 @@ export class FileBrowserComponent implements OnInit {
     this.resolveBreadcrumb(session.folder_id).then(crumbs => this.fileService.breadcrumb.set(crumbs));
 
     const adjFiles = session.adjacent_files ?? [];
-    if (adjFiles.length) {
-      // Seed adjacent files — cancels any in-progress loadFiles so it won't overwrite
-      this.fileService.seedFiles(adjFiles);
-    }
-
-    // Fetch current file metadata and open preview
     const file = await this.fileService.getFile(session.file_id);
-    this.openPreview(file);
 
-    // Phase 1: current image fully downloaded
-    await this.preloadOneAndWait(file);
+    if (adjFiles.length) {
+      // New session: seed adjacent files, no folder load during preview
+      this.fileService.seedFiles(adjFiles);
+      this.openPreview(file);
 
-    // Phase 2: prev2 + next5 fully downloaded (only if we have adjacent data)
-    const idx = this.previewIndex();
-    const files = this.mediaFiles();
-    if (files.length > 1) {
+      // Phase 1: current image fully downloaded
+      await this.preloadOneAndWait(file);
+
+      // Phase 2: prev2 + next5 fully downloaded
+      const idx = this.previewIndex();
+      const files = this.mediaFiles();
       await Promise.all(
         [idx - 2, idx - 1, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5]
           .filter(i => i >= 0 && i < files.length)
           .map(i => this.preloadOneAndWait(files[i], 6000))
       );
-    }
 
-    // Spinner done — user can interact
-    this.sessionLoading.set(false);
+      this.sessionLoading.set(false);
 
-    // Phase 3: strip thumbnails ±10 at current position (fire-and-forget)
-    if (files.length > 1) {
+      // Phase 3: strip thumbnails ±10 (fire-and-forget)
       const stripIndices = Array.from({ length: 21 }, (_, i) => idx - 10 + i);
       this.preloadThumbsAndWait(stripIndices, files, 3000);
       this.preloadStrip(idx, ++this.preloadGen);
+
+    } else {
+      // Old session: seed just the current file, load folder pages in background
+      this.fileService.seedFiles([file]);
+      this.loadCurrentFolder();
+      this.openPreview(file);
+
+      // Phase 1 only in spinner (no adjacent data yet)
+      await this.preloadOneAndWait(file);
+      this.sessionLoading.set(false);
     }
   }
 
