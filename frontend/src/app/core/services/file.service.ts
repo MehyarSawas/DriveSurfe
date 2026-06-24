@@ -110,6 +110,13 @@ export class FileService {
     } catch { /* non-critical */ }
   }
 
+  /** Cancel any in-progress loadFiles pagination loop. */
+  cancelLoad(): void {
+    ++this.loadGeneration;
+    this.loading.set(false);
+    this.loadingMore.set(false);
+  }
+
   /** Seed a file list and cancel any in-progress loadFiles so it won't overwrite the seeded data. */
   seedFiles(files: DriveFile[]): void {
     ++this.loadGeneration;

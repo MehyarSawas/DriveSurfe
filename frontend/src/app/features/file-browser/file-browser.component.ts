@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, inject, signal, computed, HostListener
+  Component, OnInit, OnDestroy, inject, signal, computed, HostListener
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -32,7 +32,7 @@ import { FolderPickerComponent } from '../../shared/components/folder-picker/fol
   templateUrl: './file-browser.component.html',
   styleUrls: ['./file-browser.component.scss'],
 })
-export class FileBrowserComponent implements OnInit {
+export class FileBrowserComponent implements OnInit, OnDestroy {
   protected fileService = inject(FileService);
   protected auth = inject(AuthService);
 
@@ -211,6 +211,12 @@ export class FileBrowserComponent implements OnInit {
   previewParentFolderName = signal('');
   movingFiles = signal<DriveFile[] | null>(null);
 
+
+  ngOnDestroy(): void {
+    // Cancel all in-flight image preloads and the ongoing pagination loop.
+    this.abortBackground();
+    this.fileService.cancelLoad();
+  }
 
   async ngOnInit(): Promise<void> {
     // Show spinner immediately before any async work
