@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, inject, signal, computed, HostListener, effect
+  Component, OnInit, inject, signal, computed, HostListener, effect, untracked
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -214,8 +214,9 @@ export class FileBrowserComponent implements OnInit {
       if (!pf || this.previewFileList() === null) return;
       if (this.fileService.files().some(f => f.id === pf.id)) {
         this.previewFileList.set(null);
+        untracked(() => this.preloadAdjacent(this.previewIndex()));
       }
-    });
+    }, { allowSignalWrites: true });
   }
 
   async ngOnInit(): Promise<void> {
