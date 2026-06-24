@@ -362,13 +362,28 @@ export class FileBrowserComponent implements OnInit {
 
     } else {
       // Old session: seed just the current file, load folder pages in background
+      // First page arrives fast; pagination then pauses at 400ms/page while preview is open
       this.fileService.seedFiles([file]);
-      this.loadCurrentFolder();
+      this.loadCurrentFolder(); // fire-and-forget
       this.openPreview(file);
 
-      // Phase 1 only in spinner (no adjacent data yet)
+      // Phase 1 only in spinner
       await this.preloadOneAndWait(file);
       this.sessionLoading.set(false);
+
+      // Phase 2+3: folder first page has likely arrived by now
+      const idx = this.previewIndex();
+      const files = this.mediaFiles();
+      if (files.length > 1) {
+        Promise.all(
+          [idx - 2, idx - 1, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5]
+            .filter(i => i >= 0 && i < files.length)
+            .map(i => this.preloadOneAndWait(files[i], 6000))
+        );
+        const stripIndices = Array.from({ length: 21 }, (_, i) => idx - 10 + i);
+        this.preloadThumbsAndWait(stripIndices, files, 3000);
+        this.preloadStrip(idx, ++this.preloadGen);
+      }
     }
   }
 
