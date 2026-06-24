@@ -110,6 +110,15 @@ export class FileService {
     } catch { /* non-critical */ }
   }
 
+  /** Seed a file list and cancel any in-progress loadFiles so it won't overwrite the seeded data. */
+  seedFiles(files: DriveFile[]): void {
+    ++this.loadGeneration;
+    this.files.set(files);
+    this.searchResults.set(null);
+    this.loading.set(false);
+    this.loadingMore.set(false);
+  }
+
   async saveSession(s: Omit<PreviewSession, 'id' | 'saved_at'>): Promise<void> {
     await firstValueFrom(this.http.post('/api/sessions', s));
     this.loadSessions();
