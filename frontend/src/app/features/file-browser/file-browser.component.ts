@@ -219,6 +219,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    // Load sessions immediately — must not be delayed by folder pagination.
+    this.fileService.loadSessions();
+
     // Show spinner immediately before any async work
     this.fileService.loading.set(true);
 
@@ -244,7 +247,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       await this.loadCurrentFolder();
     }
     this.fileService.loadFolderTree();
-    this.fileService.loadSessions();
   }
 
   // Walk up parent_id chain to build a full breadcrumb from root to folderId.
