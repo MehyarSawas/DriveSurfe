@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, inject, signal, computed, HostListener, effect, untracked
+  Component, OnInit, inject, signal, computed, HostListener
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -174,13 +174,20 @@ export class FileBrowserComponent implements OnInit {
   }
 
   readonly mediaFiles = computed(() => {
-    const preview = this.previewFileList();
     const pending = this.pendingDeleteIds();
-    if (preview !== null) {
-      return preview.filter(f => !f.is_dir && !pending.has(f.id));
-    }
-    const files = this.fileService.searchResults() ?? this.fileService.files();
-    return files.filter(f => !f.is_dir && !pending.has(f.id));
+    const anchor = this.previewFileList();
+    const rawFiles = this.fileService.searchResults() ?? this.fileService.files();
+    const folderFiles = rawFiles.filter(f => !f.is_dir && !pending.has(f.id));
+
+    if (anchor === null) return folderFiles;
+
+    // Keep anchor until folder data has loaded far enough to include the current
+    // preview file — at that point previewIndex() stays correct and navigation
+    // can expand to the full folder naturally.
+    const pf = this.previewFile();
+    if (pf && folderFiles.some(f => f.id === pf.id)) return folderFiles;
+
+    return anchor.filter(f => !f.is_dir && !pending.has(f.id));
   });
 
   readonly displayFiles = computed(() => {
@@ -204,20 +211,6 @@ export class FileBrowserComponent implements OnInit {
   previewParentFolderName = signal('');
   movingFiles = signal<DriveFile[] | null>(null);
 
-  constructor() {
-    // When background folder loading has progressed far enough to include the
-    // current preview file, drop the previewFileList anchor so mediaFiles()
-    // switches to the full folder data — enabling strip and navigation beyond
-    // the initial 21 seeded adjacent files.
-    effect(() => {
-      const pf = this.previewFile();
-      if (!pf || this.previewFileList() === null) return;
-      if (this.fileService.files().some(f => f.id === pf.id)) {
-        this.previewFileList.set(null);
-        untracked(() => this.preloadAdjacent(this.previewIndex()));
-      }
-    }, { allowSignalWrites: true });
-  }
 
   async ngOnInit(): Promise<void> {
     // Show spinner immediately before any async work
