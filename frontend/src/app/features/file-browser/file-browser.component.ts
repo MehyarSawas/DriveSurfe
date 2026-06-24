@@ -93,6 +93,35 @@ export class FileBrowserComponent implements OnInit {
     this.cachedIds.set(new Set(this.preloadCache.keys()));
   }
 
+  private preloadOneAndWait(file: DriveFile, ms = 5000): Promise<void> {
+    if (!this.isPreloadable(file)) return Promise.resolve();
+    let img = this.preloadCache.get(file.id);
+    if (!img) {
+      img = new Image();
+      img.src = this.previewUrl(file.id);
+      this.preloadCache.set(file.id, img);
+      this.cachedIds.set(new Set(this.preloadCache.keys()));
+    }
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    return new Promise<void>(resolve => {
+      img!.addEventListener('load',  () => resolve(), { once: true });
+      img!.addEventListener('error', () => resolve(), { once: true });
+      setTimeout(resolve, ms);
+    });
+  }
+
+  private preloadThumbsAndWait(indices: number[], files: DriveFile[], ms = 3000): Promise<void> {
+    const ps = indices
+      .filter(i => i >= 0 && i < files.length && files[i].thumbnail_url)
+      .map(i => new Promise<void>(resolve => {
+        const img = new Image();
+        img.onload = img.onerror = () => resolve();
+        img.src = files[i].thumbnail_url!;
+        setTimeout(resolve, ms);
+      }));
+    return Promise.all(ps).then(() => {});
+  }
+
   private async preloadStrip(fromIndex: number, gen: number): Promise<void> {
     const files = this.mediaFiles();
     const order: number[] = [];
@@ -293,11 +322,36 @@ export class FileBrowserComponent implements OnInit {
     this.syncUrl(session.folder_id);
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
     this.resolveBreadcrumb(session.folder_id).then(crumbs => this.fileService.breadcrumb.set(crumbs));
+
     const folderPromise = this.loadCurrentFolder();
     const file = await this.fileService.getFile(session.file_id);
     this.openPreview(file);
-    await folderPromise;
-    this.preloadAdjacent(this.previewIndex());
+
+    // Phase 1 (current image) + folder load run concurrently
+    await Promise.all([
+      this.preloadOneAndWait(file),
+      folderPromise,
+    ]);
+
+    const idx   = this.previewIndex();
+    const files = this.mediaFiles();
+
+    // Phase 2: next 5 previews fully downloaded, parallel
+    await Promise.all(
+      [idx + 1, idx + 2, idx + 3, idx + 4, idx + 5]
+        .filter(i => i >= 0 && i < files.length)
+        .map(i => this.preloadOneAndWait(files[i], 6000))
+    );
+
+    // Phase 3: strip thumbnails [idx−10 … idx+5] fully downloaded, parallel
+    await this.preloadThumbsAndWait(
+      Array.from({ length: 16 }, (_, i) => idx - 10 + i),
+      files
+    );
+
+    // Background: continue loading rest of strip sequentially
+    this.preloadStrip(idx, ++this.preloadGen);
+
     this.sessionLoading.set(false);
   }
 
