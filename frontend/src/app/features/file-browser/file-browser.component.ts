@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, inject, signal, computed, HostListener
+  Component, OnInit, inject, signal, computed, HostListener, effect
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -46,6 +46,12 @@ export class FileBrowserComponent implements OnInit {
   readonly previewFile = signal<DriveFile | null>(null);
   readonly pendingDeleteIds = signal<Set<string>>(new Set());
   readonly sessionLoading = signal(false);
+
+  // Holds the seeded adjacent files during session open phases 1+2 so that
+  // background folder loading (which overwrites fileService.files) doesn't
+  // reset previewIndex mid-phase. Cleared automatically once the full folder
+  // data includes the current file (or when preview closes).
+  private readonly previewFileList = signal<DriveFile[] | null>(null);
 
   readonly previewIndex = computed(() => {
     const file = this.previewFile();
@@ -168,8 +174,12 @@ export class FileBrowserComponent implements OnInit {
   }
 
   readonly mediaFiles = computed(() => {
-    const files = this.fileService.searchResults() ?? this.fileService.files();
+    const preview = this.previewFileList();
     const pending = this.pendingDeleteIds();
+    if (preview !== null) {
+      return preview.filter(f => !f.is_dir && !pending.has(f.id));
+    }
+    const files = this.fileService.searchResults() ?? this.fileService.files();
     return files.filter(f => !f.is_dir && !pending.has(f.id));
   });
 
@@ -193,6 +203,20 @@ export class FileBrowserComponent implements OnInit {
   previewParentFolderId = signal('');
   previewParentFolderName = signal('');
   movingFiles = signal<DriveFile[] | null>(null);
+
+  constructor() {
+    // When background folder loading has progressed far enough to include the
+    // current preview file, drop the previewFileList anchor so mediaFiles()
+    // switches to the full folder data — enabling strip and navigation beyond
+    // the initial 21 seeded adjacent files.
+    effect(() => {
+      const pf = this.previewFile();
+      if (!pf || this.previewFileList() === null) return;
+      if (this.fileService.files().some(f => f.id === pf.id)) {
+        this.previewFileList.set(null);
+      }
+    });
+  }
 
   async ngOnInit(): Promise<void> {
     // Show spinner immediately before any async work
@@ -300,6 +324,7 @@ export class FileBrowserComponent implements OnInit {
   }
 
   closePreview(): void {
+    this.previewFileList.set(null);
     this.previewFile.set(null);
     this.fileService.previewOpen.set(false);
     this.loadCurrentFolder();
@@ -336,55 +361,44 @@ export class FileBrowserComponent implements OnInit {
     const adjFiles = session.adjacent_files ?? [];
     const file = await this.fileService.getFile(session.file_id);
 
-    if (adjFiles.length) {
-      // New session: seed adjacent files, no folder load during preview
-      this.fileService.seedFiles(adjFiles);
-      this.openPreview(file);
+    // Anchor mediaFiles() to seeded adjacent files during phases 1+2 so that
+    // the background folder load below cannot overwrite previewIndex mid-phase.
+    // For old sessions (no adjFiles), anchor to just the current file.
+    this.previewFileList.set(adjFiles.length ? adjFiles : [file]);
 
-      // Phase 1: current image fully downloaded
-      await this.preloadOneAndWait(file);
+    // Start loading the full folder in the background (fire-and-forget).
+    // waitWhilePreviewOpen() inside loadFiles slows pagination to 400ms/page
+    // while preview is open, keeping network pressure low. The effect in the
+    // constructor watches fileService.files and drops the previewFileList anchor
+    // once the current file appears in the folder data, switching mediaFiles()
+    // to the expanding full folder — enabling strip and navigation beyond the
+    // initial 21 seeded files.
+    this.fileService.seedFiles([]);  // bump loadGeneration to cancel stale loads
+    this.loadCurrentFolder();        // fire-and-forget
 
-      // Phase 2: prev2 + next5 fully downloaded
-      const idx = this.previewIndex();
-      const files = this.mediaFiles();
-      await Promise.all(
-        [idx - 2, idx - 1, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5]
-          .filter(i => i >= 0 && i < files.length)
-          .map(i => this.preloadOneAndWait(files[i], 6000))
-      );
+    this.openPreview(file);
 
-      this.sessionLoading.set(false);
+    // Phase 1: current image fully downloaded
+    await this.preloadOneAndWait(file);
 
-      // Phase 3: strip thumbnails ±10 (fire-and-forget)
-      const stripIndices = Array.from({ length: 21 }, (_, i) => idx - 10 + i);
-      this.preloadThumbsAndWait(stripIndices, files, 3000);
-      this.preloadStrip(idx, ++this.preloadGen);
+    // Phase 2: prev2 + next5 — snapshot mediaFiles() now (still adjFiles anchor)
+    const idx = this.previewIndex();
+    const phase2Files = this.mediaFiles();
+    await Promise.all(
+      [idx - 2, idx - 1, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5]
+        .filter(i => i >= 0 && i < phase2Files.length)
+        .map(i => this.preloadOneAndWait(phase2Files[i], 6000))
+    );
 
-    } else {
-      // Old session: seed just the current file, load folder pages in background
-      // First page arrives fast; pagination then pauses at 400ms/page while preview is open
-      this.fileService.seedFiles([file]);
-      this.loadCurrentFolder(); // fire-and-forget
-      this.openPreview(file);
+    this.sessionLoading.set(false);
 
-      // Phase 1 only in spinner
-      await this.preloadOneAndWait(file);
-      this.sessionLoading.set(false);
-
-      // Phase 2+3: folder first page has likely arrived by now
-      const idx = this.previewIndex();
-      const files = this.mediaFiles();
-      if (files.length > 1) {
-        Promise.all(
-          [idx - 2, idx - 1, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5]
-            .filter(i => i >= 0 && i < files.length)
-            .map(i => this.preloadOneAndWait(files[i], 6000))
-        );
-        const stripIndices = Array.from({ length: 21 }, (_, i) => idx - 10 + i);
-        this.preloadThumbsAndWait(stripIndices, files, 3000);
-        this.preloadStrip(idx, ++this.preloadGen);
-      }
-    }
+    // Phase 3: re-read index and files — folder first page may have arrived,
+    // switching mediaFiles() to the full folder data already
+    const idx2 = this.previewIndex();
+    const files3 = this.mediaFiles();
+    const stripIndices = Array.from({ length: 21 }, (_, i) => idx2 - 10 + i);
+    this.preloadThumbsAndWait(stripIndices, files3, 3000);
+    this.preloadStrip(idx2, ++this.preloadGen);
   }
 
   jumpToFile(file: DriveFile): void {
