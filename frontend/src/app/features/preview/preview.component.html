@@ -201,7 +201,7 @@
 
   <!-- Session loading overlay — last in DOM so it paints above header/footer backdrop-filter stacking contexts -->
   @if (sessionLoading()) {
-    <div class="session-loading-overlay" (click)="$event.stopPropagation()">
+    <div class="session-loading-overlay">
       <div class="media-spinner"></div>
     </div>
   }

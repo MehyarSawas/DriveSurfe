@@ -293,9 +293,11 @@ export class FileBrowserComponent implements OnInit {
     this.syncUrl(session.folder_id);
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
     this.resolveBreadcrumb(session.folder_id).then(crumbs => this.fileService.breadcrumb.set(crumbs));
-    this.loadCurrentFolder().then(() => this.preloadAdjacent(this.previewIndex()));
+    const folderPromise = this.loadCurrentFolder();
     const file = await this.fileService.getFile(session.file_id);
     this.openPreview(file);
+    await folderPromise;
+    this.preloadAdjacent(this.previewIndex());
     this.sessionLoading.set(false);
   }
 
