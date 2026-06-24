@@ -36,6 +36,7 @@ export interface PreviewSession {
   folder_name: string;
   thumbnail_url: string | null;
   saved_at: string;
+  adjacent_files?: DriveFile[];
 }
 
 export interface BreadcrumbItem {

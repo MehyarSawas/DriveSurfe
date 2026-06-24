@@ -37,8 +37,9 @@ final class SessionRoutes
                 'file_name'     => (string) ($body['file_name'] ?? ''),
                 'folder_id'     => $folderId,
                 'folder_name'   => (string) ($body['folder_name'] ?? ''),
-                'thumbnail_url' => $body['thumbnail_url'] ?? null,
-                'saved_at'      => (new \DateTime())->format(\DateTime::ATOM),
+                'thumbnail_url'  => $body['thumbnail_url'] ?? null,
+                'adjacent_files' => $body['adjacent_files'] ?? [],
+                'saved_at'       => (new \DateTime())->format(\DateTime::ATOM),
             ];
             self::save($sessions);
             return self::json($res, ['ok' => true]);

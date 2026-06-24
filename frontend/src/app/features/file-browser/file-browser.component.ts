@@ -158,11 +158,13 @@ export class FileBrowserComponent implements OnInit {
   }
 
   onStripScrolled(range: {from: number, to: number}): void {
+    this.abortBackground();
     const gen = ++this.preloadGen;
     const files = this.mediaFiles();
-    const indices = Array.from({length: range.to - range.from + 6}, (_, i) => range.from - 1 + i);
-    this.preloadBatch(indices, files, true); // background — abortable on navigation
-    this.preloadStrip(Math.floor((range.from + range.to) / 2), gen);
+    const mid = Math.floor((range.from + range.to) / 2);
+    const indices = Array.from({length: 21}, (_, i) => mid - 10 + i);
+    this.preloadBatch(indices, files, true);
+    this.preloadStrip(mid, gen);
   }
 
   readonly mediaFiles = computed(() => {
@@ -300,11 +302,18 @@ export class FileBrowserComponent implements OnInit {
   closePreview(): void {
     this.previewFile.set(null);
     this.fileService.previewOpen.set(false);
+    this.loadCurrentFolder();
   }
 
   async saveCurrentSession(): Promise<void> {
     const file = this.previewFile();
     if (!file) return;
+    const idx = this.previewIndex();
+    const files = this.mediaFiles();
+    const adj: DriveFile[] = [];
+    for (let i = Math.max(0, idx - 10); i <= Math.min(files.length - 1, idx + 10); i++) {
+      adj.push(files[i]);
+    }
     const crumbs = this.fileService.breadcrumb();
     const folderCrumb = crumbs[crumbs.length - 1];
     await this.fileService.saveSession({
@@ -313,6 +322,7 @@ export class FileBrowserComponent implements OnInit {
       folder_id: folderCrumb?.id ?? this.fileService.currentFolderId(),
       folder_name: folderCrumb?.name ?? 'My Drive',
       thumbnail_url: file.thumbnail_url,
+      adjacent_files: adj,
     });
   }
 
@@ -323,64 +333,38 @@ export class FileBrowserComponent implements OnInit {
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
     this.resolveBreadcrumb(session.folder_id).then(crumbs => this.fileService.breadcrumb.set(crumbs));
 
-    const folderPromise = this.loadCurrentFolder();
+    // Seed adjacent files from session so preview machinery works without folder load
+    const adjFiles = session.adjacent_files ?? [];
+    if (adjFiles.length) {
+      this.fileService.files.set(adjFiles);
+      this.fileService.searchResults.set(null);
+    }
+
+    // Fetch current file metadata and open preview
     const file = await this.fileService.getFile(session.file_id);
     this.openPreview(file);
 
-    // Phase 1 (current image) + folder load run concurrently
-    await Promise.all([
-      this.preloadOneAndWait(file),
-      folderPromise,
-    ]);
+    // Phase 1: current image fully downloaded
+    await this.preloadOneAndWait(file);
 
-    const idx   = this.previewIndex();
+    // Phase 2: prev2 + next5 fully downloaded
+    const idx = this.previewIndex();
     const files = this.mediaFiles();
-
-    // Phase 2: next 5 previews fully downloaded, parallel
     await Promise.all(
-      [idx + 1, idx + 2, idx + 3, idx + 4, idx + 5]
+      [idx - 2, idx - 1, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5]
         .filter(i => i >= 0 && i < files.length)
         .map(i => this.preloadOneAndWait(files[i], 6000))
     );
 
-    // Phase 3: strip thumbnails [idx−10 … idx+5] fully downloaded, parallel
-    await this.preloadThumbsAndWait(
-      Array.from({ length: 16 }, (_, i) => idx - 10 + i),
-      files
-    );
+    // Spinner done — user can interact
+    this.sessionLoading.set(false);
+
+    // Phase 3: strip thumbnails ±10 at current position (fire-and-forget)
+    const stripIndices = Array.from({ length: 21 }, (_, i) => idx - 10 + i);
+    this.preloadThumbsAndWait(stripIndices, files, 3000);
 
     // Background: continue loading rest of strip sequentially
     this.preloadStrip(idx, ++this.preloadGen);
-
-    this.sessionLoading.set(false);
-  }
-
-  private waitForSessionReady(fileId: string): Promise<void> {
-    const deadline = performance.now() + 5000;
-    return new Promise<void>(resolve => {
-      const check = () => {
-        // Step 1: wait until the folder page containing this file is loaded
-        const inList = this.mediaFiles().some(f => f.id === fileId);
-        if (!inList && performance.now() < deadline) { setTimeout(check, 50); return; }
-
-        // Step 2: wait for adjacent preloadable images (not the current file itself —
-        // preloadBatch only loads adjacent, not index itself)
-        const idx = this.previewIndex();
-        const files = this.mediaFiles();
-        const cached = this.cachedIds();
-        const needed = [idx+1, idx+2, idx+3, idx+4, idx+5]
-          .filter(i => i >= 0 && i < files.length)
-          .map(i => files[i])
-          .filter(f => this.isPreloadable(f)) // skip non-images — they're never in cache
-          .map(f => f.id);
-        if (needed.every(id => cached.has(id)) || performance.now() >= deadline) {
-          resolve();
-        } else {
-          setTimeout(check, 50);
-        }
-      };
-      check();
-    });
   }
 
   jumpToFile(file: DriveFile): void {
