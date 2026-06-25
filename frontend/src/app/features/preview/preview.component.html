@@ -140,8 +140,13 @@
             }
           </button>
         }
-        @for (_ of stencilBlocks(); track $index) {
-          <div class="thumb-stencil" aria-hidden="true"></div>
+        @if (stencilBlocks().length) {
+          <div class="stencil-group" aria-hidden="true">
+            @for (_ of stencilBlocks(); track $index) {
+              <div class="stencil-block"></div>
+            }
+            <div class="stencil-wave"></div>
+          </div>
         }
       </div>
       <button class="thumb-nav right" (click)="scrollThumbBy(200)" [disabled]="thumbAtEnd()">
