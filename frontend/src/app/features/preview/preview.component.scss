@@ -286,33 +286,30 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.3) 50%, transparent 75%);
+  background: linear-gradient(90deg, rgba(255,255,255,0.08) 25%, rgba(255,255,255,0.32) 50%, rgba(255,255,255,0.08) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
   pointer-events: none;
 }
 
-.thumb-stencil-group {
-  display: flex;
-  gap: 4px;
-  position: relative;
-  flex-shrink: 0;
-}
-
 .thumb-stencil {
-  background: rgba(255,255,255,0.2);
-  cursor: default;
-  pointer-events: none;
-}
-
-.stencil-wave {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 20%, rgba(255,255,255,0.4) 50%, transparent 80%);
-  background-size: 300% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-  pointer-events: none;
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
   border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.18);
+  pointer-events: none;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(255,255,255,0.0) 25%, rgba(255,255,255,0.38) 50%, rgba(255,255,255,0.0) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
 }
 
 .thumb-placeholder {
