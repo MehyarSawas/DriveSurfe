@@ -273,6 +273,7 @@ export class FileService {
   }
 
   navigateToFolder(id: string, name: string): void {
+    this.folderStats.set(null);
     const crumbs = this.breadcrumb();
     const isVirtual = crumbs.length > 0 && crumbs[0].id.startsWith('__');
     if (isVirtual) {
