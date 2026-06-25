@@ -346,6 +346,7 @@
     [hasPrev]="previewIndex() > 0"
     [hasNext]="previewIndex() < mediaFiles().length - 1"
     [files]="mediaFiles()"
+    [loadingMore]="fileService.loadingMore()"
     [currentIndex]="previewIndex()"
     [currentFolderId]="previewParentFolderId()"
     [cachedIds]="cachedIds()"

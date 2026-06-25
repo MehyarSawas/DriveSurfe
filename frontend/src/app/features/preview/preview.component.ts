@@ -26,9 +26,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly hasNext = input(false);
   readonly currentFolderId = input('');
   readonly files = input<DriveFile[]>([]);
+  readonly loadingMore = input(false);
   readonly currentIndex = input(0);
   readonly cachedIds = input<Set<string>>(new Set());
   readonly sessionLoading = input(false);
+
+  readonly stencilBlocks = computed(() => this.loadingMore() ? new Array(30) : []);
 
   readonly close = output<void>();
   readonly prev = output<void>();

@@ -286,9 +286,15 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.08) 50%, transparent 75%);
+  background: linear-gradient(90deg, rgba(255,255,255,0.12) 25%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0.12) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.2s infinite;
+  pointer-events: none;
+}
+
+.thumb-stencil {
+  background: rgba(255,255,255,0.18);
+  cursor: default;
   pointer-events: none;
 }
 
