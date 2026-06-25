@@ -140,9 +140,12 @@
             }
           </button>
         }
-        @for (_ of stencilBlocks(); track $index) {
-          <div class="thumb-item thumb-stencil" aria-hidden="true">
-            <span class="thumb-shimmer"></span>
+        @if (stencilBlocks().length) {
+          <div class="thumb-stencil-group" aria-hidden="true">
+            @for (_ of stencilBlocks(); track $index) {
+              <div class="thumb-item thumb-stencil"></div>
+            }
+            <div class="stencil-wave"></div>
           </div>
         }
       </div>
