@@ -261,6 +261,7 @@
   border: 2px solid transparent;
   opacity: 0.55;
   position: relative;
+  background: rgba(255,255,255,0.18);
   transition: opacity 0.15s, border-color 0.15s, transform 0.15s;
 
   img {
@@ -300,15 +301,14 @@
   height: 64px;
   overflow: hidden;
   border-radius: 6px;
+
+  .thumb-item {
+    opacity: 0.7;
+    border-color: transparent;
+    pointer-events: none;
+  }
 }
 
-.stencil-block {
-  flex-shrink: 0;
-  width: 64px;
-  height: 64px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.2);
-}
 
 .stencil-wave {
   position: absolute;
