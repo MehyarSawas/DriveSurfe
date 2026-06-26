@@ -161,11 +161,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   private preloadAdjacent(index: number): void {
-    this.abortBackground(); // free connections before loading new window
-    const gen = ++this.preloadGen;
+    this.abortBackground();
+    ++this.preloadGen;
     const files = this.mediaFiles();
     this.preloadBatch([index-2, index-1, index+1, index+2, index+3, index+4, index+5], files);
-    this.preloadStrip(index, gen);
   }
 
   onStripScrolled(range: {from: number, to: number}): void {
