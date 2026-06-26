@@ -131,13 +131,15 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return Promise.all(ps).then(() => {});
   }
 
-  private async preloadStrip(fromIndex: number, gen: number): Promise<void> {
+  private async preloadStrip(fromIndex: number, gen: number, maxRadius = 40): Promise<void> {
     const files = this.mediaFiles();
     const order: number[] = [];
     let lo = fromIndex - 3, hi = fromIndex + 6;
-    while (lo >= 0 || hi < files.length) {
-      if (hi < files.length) order.push(hi++);
-      if (lo >= 0) order.push(lo--);
+    const loLimit = Math.max(0, fromIndex - maxRadius);
+    const hiLimit = Math.min(files.length - 1, fromIndex + maxRadius);
+    while (lo >= loLimit || hi <= hiLimit) {
+      if (hi <= hiLimit) order.push(hi++);
+      if (lo >= loLimit) order.push(lo--);
     }
     for (const i of order) {
       if (gen !== this.preloadGen) return;
@@ -336,6 +338,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   closePreview(): void {
+    this.abortBackground();
+    ++this.preloadGen;
     this.previewFileList.set(null);
     this.previewFile.set(null);
     this.fileService.previewOpen.set(false);
