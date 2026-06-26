@@ -5,6 +5,7 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
+import { PreviewCacheService } from '../../core/services/preview-cache.service';
 import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession } from '../../core/models/drive-file.model';
 import { FileGridComponent } from './components/file-grid/file-grid.component';
 import { FileListComponent } from './components/file-list/file-list.component';
@@ -35,6 +36,7 @@ import { FolderPickerComponent } from '../../shared/components/folder-picker/fol
 export class FileBrowserComponent implements OnInit, OnDestroy {
   protected fileService = inject(FileService);
   protected auth = inject(AuthService);
+  private previewCache = inject(PreviewCacheService);
 
   readonly viewMode = signal<ViewMode>('grid');
   readonly sortBy = signal<SortBy>('name');
@@ -359,6 +361,15 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       thumbnail_url: file.thumbnail_url,
       adjacent_files: adj,
     });
+    // Cache adjacent files for this session so thumbnails and previews load
+    // instantly the next time the session is opened.
+    const saved = this.fileService.sessions().find(s => s.folder_id === (folderCrumb?.id ?? this.fileService.currentFolderId()));
+    if (saved) this.previewCache.cacheSession(saved.id, adj);
+  }
+
+  async removeSession(sessionId: string): Promise<void> {
+    this.previewCache.deleteSession(sessionId);
+    await this.fileService.deleteSession(sessionId);
   }
 
   async openSession(session: PreviewSession): Promise<void> {
