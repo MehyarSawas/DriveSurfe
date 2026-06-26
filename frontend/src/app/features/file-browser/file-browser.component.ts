@@ -64,6 +64,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private readonly preloadCache = new Map<string, HTMLImageElement>();
   private readonly backgroundImages = new Set<HTMLImageElement>(); // in-flight strip/scroll loads
   readonly cachedIds = signal<Set<string>>(new Set());
+  private stripScrollTimer: ReturnType<typeof setTimeout> | null = null;
 
   private isPreloadable(f: DriveFile): boolean {
     return f.mime_type?.startsWith('image/') ||
@@ -164,13 +165,20 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   onStripScrolled(range: {from: number, to: number}): void {
+    // Cancel immediately on every scroll tick — no connection wasted on stale positions.
     this.abortBackground();
-    const gen = ++this.preloadGen;
-    const files = this.mediaFiles();
-    const mid = Math.floor((range.from + range.to) / 2);
-    const indices = Array.from({length: 21}, (_, i) => mid - 10 + i);
-    this.preloadBatch(indices, files, true);
-    this.preloadStrip(mid, gen);
+    ++this.preloadGen; // invalidates any running preloadStrip
+
+    // Debounce the actual load: only fire once the user has settled (150 ms idle).
+    if (this.stripScrollTimer !== null) clearTimeout(this.stripScrollTimer);
+    this.stripScrollTimer = setTimeout(() => {
+      this.stripScrollTimer = null;
+      const files = this.mediaFiles();
+      const mid = Math.floor((range.from + range.to) / 2);
+      const indices = Array.from({length: 21}, (_, i) => mid - 10 + i);
+      this.preloadBatch(indices, files, true);
+      this.preloadStrip(mid, ++this.preloadGen);
+    }, 150);
   }
 
   readonly mediaFiles = computed(() => {
@@ -213,7 +221,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
 
   ngOnDestroy(): void {
-    // Cancel all in-flight image preloads and the ongoing pagination loop.
+    if (this.stripScrollTimer !== null) clearTimeout(this.stripScrollTimer);
     this.abortBackground();
     this.fileService.cancelLoad();
   }
