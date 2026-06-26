@@ -67,7 +67,7 @@
                 {{ file.is_favorite ? 'Unstar' : 'Star' }}
               </button>
               <button class="menu-item" (click)="move.emit(file); openMenuId = null">
-                <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-5 7h-2v2H9v-2H7v-2h2V9h2v2h2v2z"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM16 11h-5V8l-5 5 5 5v-3h5z"/></svg>
                 Move to
               </button>
               <button class="menu-item" (click)="download.emit(file); openMenuId = null">
