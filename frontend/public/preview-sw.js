@@ -40,14 +40,18 @@ self.addEventListener('message', event => {
   const { type, sessionId, urls } = event.data ?? {};
 
   if (type === 'CACHE_SESSION') {
+    // Only promote what is already in the general cache — no extra fetches.
     event.waitUntil(
-      caches.open(CACHE_PREFIX + sessionId).then(cache =>
-        Promise.allSettled(
-          urls.map(url =>
-            fetch(url).then(r => { if (r.ok) cache.put(url, r); })
-          )
-        )
-      )
+      (async () => {
+        const general = await caches.open(GENERAL_CACHE);
+        const session = await caches.open(CACHE_PREFIX + sessionId);
+        await Promise.allSettled(
+          urls.map(async url => {
+            const cached = await general.match(url);
+            if (cached) await session.put(url, cached);
+          })
+        );
+      })()
     );
   }
 
