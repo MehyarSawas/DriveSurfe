@@ -265,7 +265,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.cancelSearch();
       return;
     }
-    if (this.fileService.searchResults() === null) {
+    if (!this._lastSearchEvent) {
       this.preSearchBreadcrumb = this.fileService.breadcrumb();
     }
     this._lastSearchEvent = event;
