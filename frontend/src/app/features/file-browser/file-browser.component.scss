@@ -385,12 +385,16 @@ ds-search-bar {
 .search-context {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 6px 8px 6px 4px;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 
-  svg {
+  .search-back-btn {
+    flex-shrink: 0;
+  }
+
+  .search-context-icon {
     width: 16px;
     height: 16px;
     fill: var(--color-icon);

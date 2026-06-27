@@ -6,7 +6,7 @@ import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PreviewCacheService } from '../../core/services/preview-cache.service';
-import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession } from '../../core/models/drive-file.model';
+import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession, BreadcrumbItem } from '../../core/models/drive-file.model';
 import { FileGridComponent } from './components/file-grid/file-grid.component';
 import { FileListComponent } from './components/file-list/file-list.component';
 import { FolderTreeComponent } from './components/folder-tree/folder-tree.component';
@@ -49,6 +49,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly pendingDeleteIds = signal<Set<string>>(new Set());
   readonly sessionLoading = signal(false);
   readonly bulkMoveToast = signal<string | null>(null);
+  private preSearchBreadcrumb: BreadcrumbItem[] = [];
 
   // Holds the seeded adjacent files during session open phases 1+2 so that
   // background folder loading (which overwrites fileService.files) doesn't
@@ -262,12 +263,24 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.fileService.searchLoading.set(false);
       return;
     }
+    if (this.fileService.searchResults() === null) {
+      this.preSearchBreadcrumb = this.fileService.breadcrumb();
+    }
     const results = await this.fileService.search(event.query, event.folderId);
     this.fileService.searchResults.set(results);
     const label = event.folderId
       ? `"${event.query}" in ${event.folderName ?? 'folder'}`
       : `Search: "${event.query}"`;
     this.fileService.breadcrumb.set([{ id: '__search__', name: label }]);
+  }
+
+  cancelSearch(): void {
+    this.fileService.searchResults.set(null);
+    this.fileService.searchLoading.set(false);
+    if (this.preSearchBreadcrumb.length) {
+      this.fileService.breadcrumb.set(this.preSearchBreadcrumb);
+      this.preSearchBreadcrumb = [];
+    }
   }
 
   async openPreview(file: DriveFile): Promise<void> {
