@@ -356,7 +356,7 @@
 <!-- Move folder picker -->
 @if (movingFiles()) {
   <ds-folder-picker
-    [startBreadcrumb]="fileService.searchResults() ? [] : fileService.breadcrumb()"
+    [startBreadcrumb]="fileService.searchResults() ? [] : fileService.breadcrumb().slice(0, -1)"
     (folderSelected)="onPickerFolderSelected($event)"
     (closed)="movingFiles.set(null)"
   />
