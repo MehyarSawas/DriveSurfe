@@ -61,57 +61,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return Math.max(0, this.mediaFiles().findIndex(f => f.id === file.id));
   });
 
-  // Keeps Image objects alive so the browser caches their responses
-  private preloadGen = 0;
-  private readonly preloadCache = new Map<string, HTMLImageElement>();
-  readonly cachedIds = signal<Set<string>>(new Set());
-
-  private isPreloadable(f: DriveFile): boolean {
-    return f.mime_type?.startsWith('image/') ||
-      ['jpg','jpeg','png','gif','webp','heic','heif'].some(e => f.extension === e);
-  }
-
-  private preloadBatch(indices: number[], files: DriveFile[]): void {
-    for (const i of indices) {
-      if (i < 0 || i >= files.length) continue;
-      const f = files[i];
-      if (!this.isPreloadable(f) || this.preloadCache.has(f.id)) continue;
-      const img = new Image();
-      img.src = this.previewUrl(f.id);
-      this.preloadCache.set(f.id, img);
-    }
-    this.cachedIds.set(new Set(this.preloadCache.keys()));
-  }
-
-  private preloadOneAndWait(file: DriveFile, ms = 5000): Promise<void> {
-    if (!this.isPreloadable(file)) return Promise.resolve();
-    let img = this.preloadCache.get(file.id);
-    if (!img) {
-      img = new Image();
-      img.src = this.previewUrl(file.id);
-      this.preloadCache.set(file.id, img);
-      this.cachedIds.set(new Set(this.preloadCache.keys()));
-    }
-    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-    return new Promise<void>(resolve => {
-      img!.addEventListener('load',  () => resolve(), { once: true });
-      img!.addEventListener('error', () => resolve(), { once: true });
-      setTimeout(resolve, ms);
-    });
-  }
-
-  private previewUrl(fileId: string): string {
-    const w = Math.min(window.screen.width * window.devicePixelRatio, 10000) | 0;
-    const h = Math.min(window.screen.height * window.devicePixelRatio, 10000) | 0;
-    return `/api/files/${fileId}/preview?width=${w}&height=${h}`;
-  }
-
-  private preloadAdjacent(index: number): void {
-    const files = this.mediaFiles();
-    this.preloadBatch([index-2, index-1, index+1, index+2, index+3, index+4, index+5], files);
-  }
-
-  // Strip scroll does not trigger preloading — only ±2/+5 around the current image is ever preloaded
   onStripScrolled(_range: {from: number, to: number}): void {}
 
   readonly mediaFiles = computed(() => {
@@ -255,8 +204,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     }
     this.fileService.previewOpen.set(true);
     this.previewFile.set(file);
-    const idx = this.mediaFiles().findIndex(f => f.id === file.id);
-    this.preloadAdjacent(idx >= 0 ? idx : 0);
     // Load parent folder's dirs for the move panel
     const crumbs = this.fileService.breadcrumb();
     const parentCrumb = crumbs.length >= 2 ? crumbs[crumbs.length - 2] : crumbs[0];
@@ -327,27 +274,11 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.loadCurrentFolder();        // fire-and-forget
 
     this.openPreview(file);
-
-    // Phase 1: current image fully downloaded
-    await this.preloadOneAndWait(file);
-
-    // Phase 2: prev2 + next5 — snapshot mediaFiles() now (still adjFiles anchor)
-    const idx = this.previewIndex();
-    const phase2Files = this.mediaFiles();
-    await Promise.all(
-      [idx - 2, idx - 1, idx + 1, idx + 2, idx + 3, idx + 4, idx + 5]
-        .filter(i => i >= 0 && i < phase2Files.length)
-        .map(i => this.preloadOneAndWait(phase2Files[i], 6000))
-    );
-
     this.sessionLoading.set(false);
   }
 
   jumpToFile(file: DriveFile): void {
-    const idx = this.mediaFiles().findIndex(f => f.id === file.id);
-    if (idx === -1) return;
     this.previewFile.set(file);
-    this.preloadAdjacent(idx);
   }
 
   navigatePreview(delta: number): void {
@@ -355,7 +286,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const next = this.previewIndex() + delta;
     if (next >= 0 && next < files.length) {
       this.previewFile.set(files[next]);
-      this.preloadAdjacent(next);
     }
   }
 
@@ -366,9 +296,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.pendingDeleteIds.update(s => new Set([...s, file.id])); // remove from list immediately
     const filtered = this.mediaFiles();
     if (filtered.length === 0) return; // last file — stay on it until countdown ends
-    const newIdx = Math.min(idx, filtered.length - 1);
-    this.previewFile.set(filtered[newIdx]);
-    this.preloadAdjacent(newIdx);
+    this.previewFile.set(filtered[Math.min(idx, filtered.length - 1)]);
   }
 
   onUndoDelete(fileId: string): void {

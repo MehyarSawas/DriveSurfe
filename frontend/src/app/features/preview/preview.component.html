@@ -128,7 +128,7 @@
       <div class="thumb-strip" #thumbStrip (scroll)="onThumbScroll()">
         @for (f of files(); track f.id; let i = $index) {
           <button class="thumb-item" [class.active]="i === currentIndex()" (click)="jumpTo.emit(f)">
-            @if (f.thumbnail_url && !cachedIds().has(f.id)) {
+            @if (f.thumbnail_url) {
               <span class="thumb-shimmer" aria-hidden="true"></span>
             }
             @if (f.thumbnail_url) {
