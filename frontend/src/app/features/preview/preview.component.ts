@@ -224,6 +224,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.thumbAtEnd.set(strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4);
   }
 
+  isNearCurrent(i: number): boolean {
+    return Math.abs(i - this.currentIndex()) <= 25;
+  }
+
   onImageLoad(): void { this.isLoading.set(false); }
   onImageError(): void { this.isLoading.set(false); this.previewFailed.set(true); }
 

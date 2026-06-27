@@ -270,7 +270,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     // once the current file appears in the folder data, switching mediaFiles()
     // to the expanding full folder — enabling strip and navigation beyond the
     // initial 21 seeded files.
-    this.fileService.seedFiles([]);  // bump loadGeneration to cancel stale loads
+    this.fileService.cancelLoad();
     this.loadCurrentFolder();        // fire-and-forget
 
     this.openPreview(file);
