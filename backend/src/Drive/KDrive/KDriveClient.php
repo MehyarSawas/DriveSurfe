@@ -78,7 +78,7 @@ final class KDriveClient implements DriveInterface
         $params = [
             'query'       => $query,
             'query_scope' => 'filename',
-            'limit'       => 1000,
+            'limit'       => 500,
             'with'        => 'is_favorite',
             'depth'       => 'unlimited',
             'order_by'    => $apiOrderBy,
