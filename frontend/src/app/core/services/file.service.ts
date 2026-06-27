@@ -137,10 +137,14 @@ export class FileService {
   }
 
   async loadFolderTree(): Promise<void> {
-    const res = await firstValueFrom(
-      this.http.get<ApiResponse<FolderTreeNode>>('/api/folder-tree')
-    );
-    this.folderTree.set(res.data);
+    try {
+      const res = await firstValueFrom(
+        this.http.get<ApiResponse<FolderTreeNode>>('/api/folder-tree')
+      );
+      this.folderTree.set(res.data);
+    } catch (err) {
+      console.error('loadFolderTree error:', err);
+    }
   }
 
   async loadTrash(): Promise<void> {

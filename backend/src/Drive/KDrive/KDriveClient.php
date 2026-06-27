@@ -320,7 +320,12 @@ final class KDriveClient implements DriveInterface
                 'headers' => ['Authorization' => "Bearer {$token}"],
                 'query' => $query ?: null,
             ]);
-            $data = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $body = (string) $response->getBody();
+            try {
+                $data = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException $e) {
+                throw new RuntimeException("kDrive API returned non-JSON response (HTTP {$response->getStatusCode()}): " . substr($body, 0, 200), 0, $e);
+            }
             if (($data['result'] ?? '') === 'error') {
                 throw new RuntimeException('kDrive: ' . json_encode($data['error'] ?? 'unknown'));
             }
