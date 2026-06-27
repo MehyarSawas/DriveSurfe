@@ -91,6 +91,7 @@ final class KDriveClient implements DriveInterface
         }
 
         $data    = $this->get("{$driveId}/files/search", $params, self::API_V3);
+        error_log('[search] keys=' . implode(',', array_keys($data)) . ' count=' . count($data['data'] ?? []) . ' has_more=' . json_encode($data['has_more'] ?? null) . ' cursor=' . json_encode($data['cursor'] ?? null));
         $files   = $this->normalizeFiles($data['data'] ?? []);
         $hasMore = !empty($data['has_more']);
         $cursor  = $hasMore ? ($data['cursor'] ?? null) : null;
