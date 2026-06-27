@@ -251,9 +251,7 @@
       @if (fileService.searchResults(); as results) {
         <span class="search-results-count">
           @if (fileService.searchLoading()) {
-            Searching…
-          } @else if (fileService.searchCapped()) {
-            Top 1000 results — refine your search
+            {{ results.length ? results.length + ' results…' : 'Searching…' }}
           } @else {
             {{ results.length }} results
           }

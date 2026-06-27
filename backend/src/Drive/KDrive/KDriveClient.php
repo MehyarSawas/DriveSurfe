@@ -90,12 +90,16 @@ final class KDriveClient implements DriveInterface
             $params['cursor'] = $options['cursor'];
         }
 
-        error_log('[search] REQUEST: GET ' . self::API_V3 . "/{$driveId}/files/search?" . http_build_query($params));
-        $data  = $this->get("{$driveId}/files/search", $params, self::API_V3);
-        error_log('[search] RESPONSE: count=' . count($data['data'] ?? []) . ' has_more=' . json_encode($data['has_more'] ?? null) . ' cursor=' . json_encode($data['cursor'] ?? null));
-        $files = $this->normalizeFiles($data['data'] ?? []);
+        $all = [];
+        do {
+            $data    = $this->get("{$driveId}/files/search", $params, self::API_V3);
+            $all     = array_merge($all, $this->normalizeFiles($data['data'] ?? []));
+            $hasMore = !empty($data['has_more']);
+            $cursor  = $hasMore ? ($data['cursor'] ?? null) : null;
+            if ($cursor) $params['cursor'] = $cursor;
+        } while ($hasMore && $cursor);
 
-        return ['data' => $files, 'has_more' => false, 'cursor' => null, 'capped' => count($files) >= 1000];
+        return ['data' => $all, 'has_more' => false, 'cursor' => null, 'capped' => false];
     }
 
     public function thumbnailUrl(string $fileId): string
