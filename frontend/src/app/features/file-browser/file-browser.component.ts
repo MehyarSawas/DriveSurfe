@@ -74,6 +74,20 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   // Abort all background in-flight requests so navigation is never blocked by strip preloads
+  private async runBatched<T>(
+    items: T[],
+    fn: (item: T) => Promise<void>,
+    concurrency: number,
+    delayBetweenBatchesMs = 0,
+  ): Promise<void> {
+    for (let i = 0; i < items.length; i += concurrency) {
+      await Promise.all(items.slice(i, i + concurrency).map(fn));
+      if (delayBetweenBatchesMs > 0 && i + concurrency < items.length) {
+        await new Promise(r => setTimeout(r, delayBetweenBatchesMs));
+      }
+    }
+  }
+
   private abortBackground(): void {
     for (const img of this.backgroundImages) {
       img.src = '';
@@ -482,7 +496,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       nextAfterMove = all[idx + 1] ?? all[idx - 1] ?? null;
     }
 
-    await Promise.all(files.map(f => this.fileService.moveFile(f.id, folder.id)));
+    await this.runBatched(files, f => this.fileService.moveFile(f.id, folder.id), 5, 800);
     this.fileService.clearSelection();
 
     if (files.length === 1 && this.previewFile()?.id === files[0].id) {
@@ -506,7 +520,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   async bulkDelete(): Promise<void> {
     const files = this.displayFiles().filter(f => this.fileService.selectedIds().has(f.id));
-    await Promise.all(files.map(f => this.fileService.delete(f)));
+    await this.runBatched(files, f => this.fileService.delete(f), 5, 800);
     this.fileService.clearSelection();
   }
 
