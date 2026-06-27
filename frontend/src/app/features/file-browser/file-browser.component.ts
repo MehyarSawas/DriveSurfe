@@ -484,6 +484,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   navigateToFolder(id: string, name: string): void {
+    this.fileService.clearSelection();
     this.fileService.navigateToFolder(id, name);
     this.syncUrl(id);
     this.loadCurrentFolder();

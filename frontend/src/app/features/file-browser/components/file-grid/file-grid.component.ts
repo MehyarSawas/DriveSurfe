@@ -40,23 +40,33 @@ export class FileGridComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.boundDragMove = (e: TouchEvent) => this.zone.run(() => this.onDragMove(e));
     this.boundDragEnd  = () => this.zone.run(() => this.onDragEnd());
-    this.el.nativeElement.addEventListener('touchmove', this.boundDragMove, { passive: true });
-    this.el.nativeElement.addEventListener('touchend',  this.boundDragEnd);
+    // Use document so touchmove/touchend fire regardless of which element
+    // received the touchstart (iOS only fires touchmove on the original target,
+    // and stopPropagation on touchstart can block grid-level listeners).
+    document.addEventListener('touchmove', this.boundDragMove, { passive: true });
+    document.addEventListener('touchend',  this.boundDragEnd);
   }
 
   ngOnDestroy(): void {
-    this.el.nativeElement.removeEventListener('touchmove', this.boundDragMove);
-    this.el.nativeElement.removeEventListener('touchend',  this.boundDragEnd);
+    document.removeEventListener('touchmove', this.boundDragMove);
+    document.removeEventListener('touchend',  this.boundDragEnd);
     this.stopAutoScroll();
   }
 
   onSelectTouchStart(e: TouchEvent, file: DriveFile): void {
     e.preventDefault(); // stop synthetic click from double-toggling
     e.stopPropagation();
+    const alreadySelected = this.isSelected(file.id);
+    if (alreadySelected) {
+      // Simple tap-to-deselect: no drag
+      this.isDragSelecting = false;
+      this.selectToggle.emit(file);
+      return;
+    }
     this.isDragSelecting = true;
     this.dragStartIdx = this.files().findIndex(f => f.id === file.id);
     this.dragRange = new Set([file.id]);
-    if (!this.isSelected(file.id)) this.selectToggle.emit(file);
+    this.selectToggle.emit(file);
   }
 
   private onDragMove(e: TouchEvent): void {
