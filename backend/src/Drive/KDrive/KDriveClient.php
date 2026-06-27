@@ -74,9 +74,6 @@ final class KDriveClient implements DriveInterface
             'query'    => $query,
             'per_page' => 200,
             'with'     => 'is_favorite',
-            'depth'    => -1,
-            'order_by' => $sortBy,
-            'order_for' => [$sortBy => $sortDir],
             'page'     => $page,
         ];
         if ($folderId !== null && $folderId !== '' && $folderId !== '1') {
