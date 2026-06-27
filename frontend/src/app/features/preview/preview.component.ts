@@ -28,7 +28,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly files = input<DriveFile[]>([]);
   readonly loadingMore = input(false);
   readonly currentIndex = input(0);
-  readonly cachedIds = input<Set<string>>(new Set());
   readonly sessionLoading = input(false);
 
   readonly stencilBlocks = computed(() => this.loadingMore() ? new Array(30) : []);
@@ -223,6 +222,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private updateThumbScrollState(strip: HTMLElement): void {
     this.thumbScrollLeft.set(strip.scrollLeft);
     this.thumbAtEnd.set(strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4);
+  }
+
+  isNearCurrent(i: number): boolean {
+    return Math.abs(i - this.currentIndex()) <= 10;
   }
 
   onImageLoad(): void { this.isLoading.set(false); }

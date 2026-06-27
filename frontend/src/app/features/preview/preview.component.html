@@ -128,11 +128,11 @@
       <div class="thumb-strip" #thumbStrip (scroll)="onThumbScroll()">
         @for (f of files(); track f.id; let i = $index) {
           <button class="thumb-item" [class.active]="i === currentIndex()" (click)="jumpTo.emit(f)">
-            @if (f.thumbnail_url && !cachedIds().has(f.id)) {
+            @if (f.thumbnail_url) {
               <span class="thumb-shimmer" aria-hidden="true"></span>
             }
-            @if (f.thumbnail_url) {
-              <img [src]="thumbnailUrl(f)" [alt]="f.name" loading="lazy" />
+            @if (f.thumbnail_url && isNearCurrent(i)) {
+              <img [src]="thumbnailUrl(f)" [alt]="f.name" />
             } @else {
               <div class="thumb-placeholder">
                 <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
