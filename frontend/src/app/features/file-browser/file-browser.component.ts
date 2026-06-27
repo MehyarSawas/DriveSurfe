@@ -380,15 +380,17 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   navigateAfterDeleteStart(file: DriveFile): void {
-    const files = this.mediaFiles(); // snapshot before adding to pending set
+    const files = this.mediaFiles();
     const idx = files.findIndex(f => f.id === file.id);
     if (idx === -1) return;
-    this.pendingDeleteIds.update(s => new Set([...s, file.id])); // remove from list immediately
-    const filtered = this.mediaFiles();
-    if (filtered.length === 0) return; // last file — stay on it until countdown ends
-    const newIdx = Math.min(idx, filtered.length - 1);
-    this.previewFile.set(filtered[newIdx]);
-    this.preloadAdjacent(newIdx);
+    // Resolve next file from snapshot BEFORE signal changes — pendingDeleteIds
+    // causes mediaFiles() to potentially switch to the anchor list, which would
+    // clip Math.min(idx, anchor.length-1) to the wrong position.
+    const nextFile = idx < files.length - 1 ? files[idx + 1] : files[idx - 1];
+    this.pendingDeleteIds.update(s => new Set([...s, file.id]));
+    if (!nextFile) return; // was the only file
+    this.previewFile.set(nextFile);
+    this.preloadAdjacent(idx < files.length - 1 ? idx : idx - 1);
   }
 
   onUndoDelete(fileId: string): void {
