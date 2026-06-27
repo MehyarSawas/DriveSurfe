@@ -288,7 +288,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.previewFileList.set(null);
     this.previewFile.set(null);
     this.fileService.previewOpen.set(false);
-    this.loadCurrentFolder();
+    // Do not reload — folder files are already loaded (or loading in background).
+    // Reloading would reset files to page 1 and lose scroll position.
   }
 
   async saveCurrentSession(): Promise<void> {
@@ -331,20 +332,21 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const adjFiles = session.adjacent_files ?? [];
     const file = await this.fileService.getFile(session.file_id);
 
-    // Anchor mediaFiles() to seeded adjacent files during phases 1+2 so that
-    // the background folder load below cannot overwrite previewIndex mid-phase.
-    // For old sessions (no adjFiles), anchor to just the current file.
-    this.previewFileList.set(adjFiles.length ? adjFiles : [file]);
+    // If the session folder is already loaded, use existing files directly.
+    // Otherwise seed the anchor and start a background load.
+    const alreadyLoaded = this.fileService.currentFolderId() === session.folder_id
+      && this.fileService.files().length > 0;
 
-    // Start loading the full folder in the background (fire-and-forget).
-    // waitWhilePreviewOpen() inside loadFiles slows pagination to 400ms/page
-    // while preview is open, keeping network pressure low. The effect in the
-    // constructor watches fileService.files and drops the previewFileList anchor
-    // once the current file appears in the folder data, switching mediaFiles()
-    // to the expanding full folder — enabling strip and navigation beyond the
-    // initial 21 seeded files.
-    this.fileService.seedFiles([]);  // bump loadGeneration to cancel stale loads
-    this.loadCurrentFolder();        // fire-and-forget
+    if (alreadyLoaded) {
+      // Folder is already in memory — no reload needed, no anchor needed.
+      this.previewFileList.set(null);
+    } else {
+      // Anchor mediaFiles() to adjacent files so background pagination can't
+      // reset previewIndex while phases 1+2 are running.
+      this.previewFileList.set(adjFiles.length ? adjFiles : [file]);
+      this.fileService.seedFiles([]);   // cancel any stale load
+      this.loadCurrentFolder();         // fire-and-forget
+    }
 
     this.openPreview(file);
 
