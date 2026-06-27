@@ -276,10 +276,11 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   cancelSearch(): void {
     this.fileService.searchResults.set(null);
     this.fileService.searchLoading.set(false);
-    if (this.preSearchBreadcrumb.length) {
-      this.fileService.breadcrumb.set(this.preSearchBreadcrumb);
-      this.preSearchBreadcrumb = [];
-    }
+    const restore = this.preSearchBreadcrumb.length
+      ? this.preSearchBreadcrumb
+      : [{ id: this.fileService.currentFolderId(), name: 'My Drive' }];
+    this.fileService.breadcrumb.set(restore);
+    this.preSearchBreadcrumb = [];
   }
 
   async openPreview(file: DriveFile): Promise<void> {
