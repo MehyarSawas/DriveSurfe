@@ -76,8 +76,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       const isPdf = mime === 'application/pdf' || ext === 'pdf';
       if (isVideo || isPdf) continue;
       this.preloadedIds.add(f.id);
-      const img = new Image();
-      img.src = `/api/files/${f.id}/preview?width=${w}&height=${h}`;
+      fetch(`/api/files/${f.id}/preview?width=${w}&height=${h}`, { credentials: 'include' })
+        .catch(() => { /* non-critical */ });
     }
   }
 
