@@ -76,12 +76,13 @@ final class KDriveClient implements DriveInterface
         };
 
         $params = [
-            'query'    => $query,
-            'limit'    => 1000,
-            'with'     => 'is_favorite',
-            'depth'    => 'unlimited',
-            'order_by' => $apiOrderBy,
-            'order'    => $sortDir,
+            'query'       => $query,
+            'query_scope' => 'filename',
+            'limit'       => 1000,
+            'with'        => 'is_favorite',
+            'depth'       => 'unlimited',
+            'order_by'    => $apiOrderBy,
+            'order'       => $sortDir,
         ];
         if ($folderId !== null && $folderId !== '' && $folderId !== '1') {
             $params['directory_id'] = (int) $folderId;
