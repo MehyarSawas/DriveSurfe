@@ -470,16 +470,22 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const files = this.movingFiles();
     this.movingFiles.set(null);
     if (!files) return;
+    // Snapshot next file BEFORE moveFile removes it from mediaFiles()
+    let nextAfterMove: DriveFile | null = null;
+    if (files.length === 1 && this.previewFile()?.id === files[0].id) {
+      const all = this.mediaFiles();
+      const idx = all.findIndex(f => f.id === files[0].id);
+      nextAfterMove = all[idx + 1] ?? all[idx - 1] ?? null;
+    }
+
     await Promise.all(files.map(f => this.fileService.moveFile(f.id, folder.id)));
     this.fileService.clearSelection();
-    // If moved from preview context, advance preview
+
     if (files.length === 1 && this.previewFile()?.id === files[0].id) {
-      const remaining = this.mediaFiles();
-      if (remaining.length === 0) {
+      if (!nextAfterMove) {
         this.closePreview();
       } else {
-        const idx = Math.min(this.previewIndex(), remaining.length - 1);
-        this.previewFile.set(remaining[idx]);
+        this.previewFile.set(nextAfterMove);
       }
     }
   }
