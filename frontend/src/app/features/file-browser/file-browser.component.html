@@ -86,7 +86,7 @@
 
         <ds-search-bar
           [folderId]="fileService.currentFolderId()"
-          [folderName]="fileService.breadcrumb()[fileService.breadcrumb().length - 1]?.name ?? 'My Drive'"
+          [folderName]="currentFolderName()"
           (search)="onSearch($event)"
         />
 

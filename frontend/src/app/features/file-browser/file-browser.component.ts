@@ -51,7 +51,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly bulkMoveToast = signal<string | null>(null);
   @ViewChild(SearchBarComponent) private searchBar?: SearchBarComponent;
 
-  private preSearchBreadcrumb: BreadcrumbItem[] = [];
+  private readonly preSearchBreadcrumb = signal<BreadcrumbItem[]>([]);
   private _lastSearchEvent: { query: string; folderId?: string; folderName?: string } | null = null;
 
   // Holds the seeded adjacent files during session open phases 1+2 so that
@@ -59,6 +59,13 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   // reset previewIndex mid-phase. Cleared automatically once the full folder
   // data includes the current file (or when preview closes).
   private readonly previewFileList = signal<DriveFile[] | null>(null);
+
+  readonly currentFolderName = computed(() => {
+    const crumbs = this._lastSearchEvent
+      ? this.preSearchBreadcrumb()
+      : this.fileService.breadcrumb();
+    return crumbs[crumbs.length - 1]?.name ?? 'My Drive';
+  });
 
   readonly previewIndex = computed(() => {
     const file = this.previewFile();
@@ -266,7 +273,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       return;
     }
     if (!this._lastSearchEvent) {
-      this.preSearchBreadcrumb = this.fileService.breadcrumb();
+      this.preSearchBreadcrumb.set(this.fileService.breadcrumb());
     }
     this._lastSearchEvent = event;
     // Update breadcrumb immediately so it always reflects current search term
@@ -285,11 +292,12 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.searchBar?.clearSilent();
     this.fileService.searchResults.set(null);
     this.fileService.searchLoading.set(false);
-    const restore = this.preSearchBreadcrumb.length
-      ? this.preSearchBreadcrumb
+    const saved = this.preSearchBreadcrumb();
+    const restore = saved.length
+      ? saved
       : [{ id: this.fileService.currentFolderId(), name: 'My Drive' }];
     this.fileService.breadcrumb.set(restore);
-    this.preSearchBreadcrumb = [];
+    this.preSearchBreadcrumb.set([]);
     this._lastSearchEvent = null;
   }
 
