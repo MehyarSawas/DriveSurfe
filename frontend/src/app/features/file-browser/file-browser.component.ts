@@ -324,6 +324,11 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   async openSession(session: PreviewSession): Promise<void> {
     this.sessionLoading.set(true);
+
+    // Check BEFORE navigateToFolder changes currentFolderId
+    const alreadyInFolder = this.fileService.currentFolderId() === session.folder_id
+      && this.fileService.files().length > 0;
+
     this.fileService.navigateToFolder(session.folder_id, session.folder_name);
     this.syncUrl(session.folder_id);
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
@@ -332,13 +337,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const adjFiles = session.adjacent_files ?? [];
     const file = await this.fileService.getFile(session.file_id);
 
-    // If the session folder is already loaded, use existing files directly.
-    // Otherwise seed the anchor and start a background load.
-    const alreadyLoaded = this.fileService.currentFolderId() === session.folder_id
-      && this.fileService.files().length > 0;
-
-    if (alreadyLoaded) {
-      // Folder is already in memory — no reload needed, no anchor needed.
+    if (alreadyInFolder) {
+      // Folder already in memory — no reload, no anchor needed.
       this.previewFileList.set(null);
     } else {
       // Anchor mediaFiles() to adjacent files so background pagination can't
