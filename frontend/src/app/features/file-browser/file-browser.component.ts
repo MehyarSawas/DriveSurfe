@@ -91,14 +91,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.preloadCache.set(f.id, img);
       if (isBackground) this.backgroundImages.add(img);
     }
-    if (this.preloadCache.size > 60) {
-      const evict = this.preloadCache.size - 60;
-      let n = 0;
-      for (const id of this.preloadCache.keys()) {
-        if (n++ >= evict) break;
-        this.preloadCache.delete(id);
-      }
-    }
     this.cachedIds.set(new Set(this.preloadCache.keys()));
   }
 
