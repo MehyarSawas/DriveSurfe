@@ -80,7 +80,7 @@ final class KDriveClient implements DriveInterface
             'limit'    => 1000,
             'with'     => 'is_favorite',
             'depth'    => 'unlimited',
-            'order_by' => [$apiOrderBy],
+            'order_by' => $apiOrderBy,
             'order'    => $sortDir,
         ];
         if ($folderId !== null && $folderId !== '' && $folderId !== '1') {
@@ -90,7 +90,9 @@ final class KDriveClient implements DriveInterface
             $params['cursor'] = $options['cursor'];
         }
 
+        error_log('[search] REQUEST: GET ' . self::API_V3 . "/{$driveId}/files/search?" . http_build_query($params));
         $data  = $this->get("{$driveId}/files/search", $params, self::API_V3);
+        error_log('[search] RESPONSE: count=' . count($data['data'] ?? []) . ' has_more=' . json_encode($data['has_more'] ?? null) . ' cursor=' . json_encode($data['cursor'] ?? null));
         $files = $this->normalizeFiles($data['data'] ?? []);
 
         return ['data' => $files, 'has_more' => false, 'cursor' => null, 'capped' => count($files) >= 1000];
