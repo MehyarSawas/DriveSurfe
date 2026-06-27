@@ -69,7 +69,7 @@ export class SearchBarComponent {
   private subject = new Subject<string>();
 
   constructor() {
-    this.subject.pipe(debounceTime(300), distinctUntilChanged()).subscribe(() => {
+    this.subject.pipe(debounceTime(500), distinctUntilChanged()).subscribe(() => {
       this.emitSearch();
     });
   }

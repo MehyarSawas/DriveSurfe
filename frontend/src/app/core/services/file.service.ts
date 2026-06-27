@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subject, takeUntil } from 'rxjs';
 import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID, PreviewSession } from '../models/drive-file.model';
 import { FolderTreeNode, DriveUsage } from '../models/drive.model';
 
@@ -170,8 +170,16 @@ export class FileService {
   }
 
   private searchGen = 0;
+  private searchAbort$ = new Subject<void>();
+
+  abortSearch(): void {
+    this.searchAbort$.next();
+    ++this.searchGen;
+    this.searchLoading.set(false);
+  }
 
   async search(query: string, folderId?: string, options?: { sortBy?: string; sortDir?: string }): Promise<void> {
+    this.searchAbort$.next();
     const gen = ++this.searchGen;
     const params: Record<string, string> = { q: query };
     if (folderId) params['folderId'] = folderId;
@@ -186,7 +194,7 @@ export class FileService {
       const res = await firstValueFrom(
         this.http.get<{ data: DriveFile[]; has_more: boolean; cursor: string | null; capped: boolean }>(
           '/api/search', { params }
-        )
+        ).pipe(takeUntil(this.searchAbort$))
       );
       if (gen !== this.searchGen) return;
       this.searchResults.set(res.data);
