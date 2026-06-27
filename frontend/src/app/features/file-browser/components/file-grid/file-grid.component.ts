@@ -28,7 +28,10 @@ export class FileGridComponent implements AfterViewInit, OnDestroy {
   openMenuId: string | null = null;
 
   private isDragSelecting = false;
-  private dragOrder: string[] = [];   // ordered list of IDs selected this drag
+  private dragStartIdx = -1;
+  private dragRange = new Set<string>();
+  private lastTouchY = 0;
+  private scrollInterval: ReturnType<typeof setInterval> | null = null;
   private boundDragMove!: (e: TouchEvent) => void;
   private boundDragEnd!: () => void;
 
@@ -37,52 +40,104 @@ export class FileGridComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.boundDragMove = (e: TouchEvent) => this.zone.run(() => this.onDragMove(e));
     this.boundDragEnd  = () => this.zone.run(() => this.onDragEnd());
-    this.el.nativeElement.addEventListener('touchmove', this.boundDragMove, { passive: false });
+    this.el.nativeElement.addEventListener('touchmove', this.boundDragMove, { passive: true });
     this.el.nativeElement.addEventListener('touchend',  this.boundDragEnd);
   }
 
   ngOnDestroy(): void {
     this.el.nativeElement.removeEventListener('touchmove', this.boundDragMove);
     this.el.nativeElement.removeEventListener('touchend',  this.boundDragEnd);
+    this.stopAutoScroll();
   }
 
   onSelectTouchStart(e: TouchEvent, file: DriveFile): void {
-    e.preventDefault(); // stop synthetic click from firing a second toggle
+    e.preventDefault(); // stop synthetic click from double-toggling
     e.stopPropagation();
     this.isDragSelecting = true;
-    this.dragOrder = [file.id];
-    this.selectToggle.emit(file); // always toggle on initial tap (select or deselect)
+    this.dragStartIdx = this.files().findIndex(f => f.id === file.id);
+    this.dragRange = new Set([file.id]);
+    if (!this.isSelected(file.id)) this.selectToggle.emit(file);
   }
 
   private onDragMove(e: TouchEvent): void {
     if (!this.isDragSelecting) return;
-    e.preventDefault();
+    // No preventDefault — allow native scroll to run simultaneously
     const touch = e.touches[0];
+    this.lastTouchY = touch.clientY;
+    this.updateAutoScroll(touch.clientY);
+
     const target = document.elementFromPoint(touch.clientX, touch.clientY);
     const card = target?.closest('[data-file-id]') as HTMLElement | null;
     if (!card) return;
     const fileId = card.dataset['fileId'];
     if (!fileId) return;
 
-    const idx = this.dragOrder.indexOf(fileId);
-    if (idx === -1) {
-      // New item — select it and add to order
-      this.dragOrder.push(fileId);
-      const file = this.files().find(f => f.id === fileId);
-      if (file && !this.isSelected(file.id)) this.selectToggle.emit(file);
-    } else {
-      // Moved back — deselect everything after this position
-      const toDeselect = this.dragOrder.splice(idx + 1);
-      for (const id of toDeselect) {
-        const file = this.files().find(f => f.id === id);
-        if (file && this.isSelected(file.id)) this.selectToggle.emit(file);
+    const files = this.files();
+    const currentIdx = files.findIndex(f => f.id === fileId);
+    if (currentIdx === -1 || this.dragStartIdx === -1) return;
+
+    const lo = Math.min(this.dragStartIdx, currentIdx);
+    const hi = Math.max(this.dragStartIdx, currentIdx);
+    const newRange = new Set(files.slice(lo, hi + 1).map(f => f.id));
+
+    // Select files newly in range
+    for (const id of newRange) {
+      if (!this.dragRange.has(id)) {
+        const file = files.find(f => f.id === id);
+        if (file && !this.isSelected(id)) this.selectToggle.emit(file);
       }
     }
+    // Deselect files that left the range
+    for (const id of this.dragRange) {
+      if (!newRange.has(id)) {
+        const file = files.find(f => f.id === id);
+        if (file && this.isSelected(id)) this.selectToggle.emit(file);
+      }
+    }
+
+    this.dragRange = newRange;
+  }
+
+  private updateAutoScroll(clientY: number): void {
+    const threshold = 80;
+    const vH = window.innerHeight;
+    const nearEdge = clientY < threshold || clientY > vH - threshold;
+    if (nearEdge && !this.scrollInterval) {
+      this.scrollInterval = setInterval(() => {
+        const y = this.lastTouchY;
+        const t = threshold;
+        const speed = y < t
+          ? -Math.round((t - y) / t * 12)
+          : Math.round((y - (vH - t)) / t * 12);
+        this.getScrollContainer()?.scrollBy(0, speed);
+      }, 16);
+    } else if (!nearEdge) {
+      this.stopAutoScroll();
+    }
+  }
+
+  private stopAutoScroll(): void {
+    if (this.scrollInterval !== null) {
+      clearInterval(this.scrollInterval);
+      this.scrollInterval = null;
+    }
+  }
+
+  private getScrollContainer(): Element | null {
+    let el: Element | null = this.el.nativeElement.parentElement;
+    while (el) {
+      const oy = getComputedStyle(el).overflowY;
+      if (oy === 'auto' || oy === 'scroll') return el;
+      el = el.parentElement;
+    }
+    return document.documentElement;
   }
 
   private onDragEnd(): void {
     this.isDragSelecting = false;
-    this.dragOrder = [];
+    this.dragStartIdx = -1;
+    this.dragRange = new Set();
+    this.stopAutoScroll();
   }
 
   @HostListener('document:click')
