@@ -66,26 +66,36 @@ final class KDriveClient implements DriveInterface
     public function search(string $query, ?string $folderId = null, array $options = []): array
     {
         $driveId = $this->getDriveId();
-        $sortBy  = $options['sortBy'] ?? 'name';
-        $sortDir = $options['sortDir'] ?? 'asc';
-        $page    = max(1, (int) ($options['page'] ?? 1));
+
+        // V3 order_by only accepts last_modified_at or relevance
+        $sortBy  = $options['sortBy'] ?? 'relevance';
+        $sortDir = $options['sortDir'] ?? 'desc';
+        $apiOrderBy = match ($sortBy) {
+            'last_modified_at' => 'last_modified_at',
+            default            => 'relevance',
+        };
 
         $params = [
             'query'    => $query,
-            'per_page' => 200,
+            'limit'    => 1000,
             'with'     => 'is_favorite',
-            'page'     => $page,
+            'depth'    => 'unlimited',
+            'order_by' => [$apiOrderBy],
+            'order'    => $sortDir,
         ];
         if ($folderId !== null && $folderId !== '' && $folderId !== '1') {
-            $params['directory_id'] = $folderId;
+            $params['directory_id'] = (int) $folderId;
+        }
+        if (isset($options['cursor']) && $options['cursor']) {
+            $params['cursor'] = $options['cursor'];
         }
 
-        $data  = $this->get("{$driveId}/files/search", $params);
-        $files = $this->normalizeFiles($data['data'] ?? []);
-        $pages = (int) ($data['pages'] ?? 1);
-        $total = (int) ($data['total'] ?? count($files));
+        $data    = $this->get("{$driveId}/files/search", $params, self::API_V3);
+        $files   = $this->normalizeFiles($data['data'] ?? []);
+        $hasMore = !empty($data['has_more']);
+        $cursor  = $hasMore ? ($data['cursor'] ?? null) : null;
 
-        return ['data' => $files, 'page' => $page, 'pages' => $pages, 'total' => $total];
+        return ['data' => $files, 'has_more' => $hasMore, 'cursor' => $cursor];
     }
 
     public function thumbnailUrl(string $fileId): string

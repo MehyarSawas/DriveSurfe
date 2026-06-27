@@ -119,9 +119,9 @@ final class FileRoutes
             $query    = $params['q'] ?? '';
             $folderId = $params['folderId'] ?? null;
             $options  = [
-                'sortBy'  => $params['sortBy']  ?? 'name',
-                'sortDir' => $params['sortDir'] ?? 'asc',
-                'page'    => (int) ($params['page'] ?? 1),
+                'sortBy'  => $params['sortBy']  ?? 'relevance',
+                'sortDir' => $params['sortDir'] ?? 'desc',
+                'cursor'  => $params['cursor']  ?? null,
             ];
             $result = $drive->search($query, $folderId, $options);
             return self::json($res, $result);

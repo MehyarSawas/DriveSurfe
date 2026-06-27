@@ -181,19 +181,18 @@ export class FileService {
     this.searchResults.set([]);
 
     try {
-      let page = 1;
-      let pages = 1;
+      let cursor: string | null = null;
       do {
+        const reqParams: Record<string, string> = cursor ? { ...params, cursor } : { ...params };
         const res = await firstValueFrom(
-          this.http.get<{ data: DriveFile[]; page: number; pages: number; total: number }>(
-            '/api/search', { params: { ...params, page: String(page) } }
+          this.http.get<{ data: DriveFile[]; has_more: boolean; cursor: string | null }>(
+            '/api/search', { params: reqParams }
           )
         );
         if (gen !== this.searchGen) return;
-        pages = res.pages ?? 1;
         this.searchResults.update(r => [...(r ?? []), ...res.data]);
-        page++;
-      } while (page <= pages && gen === this.searchGen);
+        cursor = res.has_more ? (res.cursor ?? null) : null;
+      } while (cursor && gen === this.searchGen);
     } finally {
       if (gen === this.searchGen) this.searchLoading.set(false);
     }
