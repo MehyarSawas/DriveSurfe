@@ -238,7 +238,7 @@
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>
-      @if (fileService.folderStats(); as stats) {
+      @if (!fileService.searchResults() && fileService.folderStats(); as stats) {
         <div class="folder-stats">
           <button class="stats-count" (click)="$event.stopPropagation(); statsPopoverOpen.set(!statsPopoverOpen())">
             @if (fileService.loadingMore()) {
@@ -267,14 +267,14 @@
       }
     </div>
 
-    <!-- Background-load progress bar -->
-    @if (fileService.loadingMore()) {
+    <!-- Background-load progress bar (folder only, hidden during search) -->
+    @if (!fileService.searchResults() && fileService.loadingMore()) {
       <div class="load-more-bar"><div class="load-more-fill"></div></div>
     }
 
     <!-- File content -->
     <div class="file-content" [style.display]="previewFile() ? 'none' : null">
-      @if (fileService.loading()) {
+      @if (fileService.searchLoading() || (!fileService.searchResults() && fileService.loading())) {
         <div class="loading">
           <div class="spinner"></div>
         </div>

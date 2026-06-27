@@ -258,6 +258,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   async onSearch(event: { query: string; folderId?: string }): Promise<void> {
     if (!event.query.trim()) {
       this.fileService.searchResults.set(null);
+      this.fileService.searchLoading.set(false);
       return;
     }
     const results = await this.fileService.search(event.query, event.folderId);

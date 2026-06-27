@@ -30,6 +30,7 @@ export class FileService {
 
   readonly files = signal<DriveFile[]>([]);
   readonly searchResults = signal<DriveFile[] | null>(null);
+  readonly searchLoading = signal(false);
   readonly loading = signal(false);
   readonly loadingMore = signal(false);
   readonly currentFolderId = signal(HOME_FOLDER_ID);
@@ -169,10 +170,15 @@ export class FileService {
   async search(query: string, folderId?: string): Promise<DriveFile[]> {
     const params: Record<string, string> = { q: query };
     if (folderId) params['folderId'] = folderId;
-    const res = await firstValueFrom(
-      this.http.get<ApiResponse<DriveFile[]>>('/api/search', { params })
-    );
-    return res.data;
+    this.searchLoading.set(true);
+    try {
+      const res = await firstValueFrom(
+        this.http.get<ApiResponse<DriveFile[]>>('/api/search', { params })
+      );
+      return res.data;
+    } finally {
+      this.searchLoading.set(false);
+    }
   }
 
   async getUsage(): Promise<DriveUsage> {
