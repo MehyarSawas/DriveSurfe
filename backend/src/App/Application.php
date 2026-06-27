@@ -51,10 +51,27 @@ final class Application
     private function registerMiddleware(): void
     {
         $isDev = ($_ENV['APP_ENV'] ?? 'production') === 'development';
-        $this->slim->addErrorMiddleware(
+        $errorMiddleware = $this->slim->addErrorMiddleware(
             displayErrorDetails: $isDev,
             logErrors: true,
             logErrorDetails: true
+        );
+        $session = $this->slim->getContainer()->get(SessionService::class);
+        $errorMiddleware->setDefaultErrorHandler(
+            function ($request, \Throwable $exception, bool $displayErrorDetails) use ($session, $isDev) {
+                $isAuth = (bool) ($session->get()['authenticated'] ?? false);
+                $response = new \Slim\Psr7\Response();
+                $body = ['error' => $exception->getMessage()];
+                if ($isAuth || $isDev) {
+                    $body['trace'] = $exception->getTraceAsString();
+                    $body['class'] = get_class($exception);
+                }
+                $response->getBody()->write(json_encode($body, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+                $status = $exception instanceof \Slim\Exception\HttpException
+                    ? $exception->getCode()
+                    : 500;
+                return $response->withStatus($status)->withHeader('Content-Type', 'application/json');
+            }
         );
         $this->slim->addBodyParsingMiddleware();
 
