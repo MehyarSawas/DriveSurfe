@@ -114,4 +114,9 @@ export class SearchBarComponent {
     this.query.set('');
     this.search.emit({ query: '' });
   }
+
+  clearSilent(): void {
+    this.query.set('');
+    this.folderOnly.set(false);
+  }
 }

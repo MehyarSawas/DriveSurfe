@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, OnDestroy, inject, signal, computed, HostListener
+  Component, OnInit, OnDestroy, inject, signal, computed, HostListener, ViewChild
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -49,6 +49,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly pendingDeleteIds = signal<Set<string>>(new Set());
   readonly sessionLoading = signal(false);
   readonly bulkMoveToast = signal<string | null>(null);
+  @ViewChild(SearchBarComponent) private searchBar?: SearchBarComponent;
+
   private preSearchBreadcrumb: BreadcrumbItem[] = [];
   private _lastSearchEvent: { query: string; folderId?: string; folderName?: string } | null = null;
 
@@ -280,6 +282,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   cancelSearch(): void {
+    this.searchBar?.clearSilent();
     this.fileService.searchResults.set(null);
     this.fileService.searchLoading.set(false);
     const restore = this.preSearchBreadcrumb.length
