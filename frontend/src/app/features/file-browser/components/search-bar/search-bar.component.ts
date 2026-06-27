@@ -94,6 +94,7 @@ export class SearchBarComponent {
 
   emitSearch(): void {
     const q = this.query();
+    if (q.length > 0 && q.length < 3) return;
     this.search.emit(this.folderOnly() && this.folderId()
       ? { query: q, folderId: this.folderId(), folderName: this.folderName() }
       : { query: q });
