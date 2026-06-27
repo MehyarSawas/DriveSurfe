@@ -269,7 +269,7 @@
     }
 
     <!-- File content -->
-    <div class="file-content">
+    <div class="file-content" [style.display]="previewFile() ? 'none' : null">
       @if (fileService.loading()) {
         <div class="loading">
           <div class="spinner"></div>

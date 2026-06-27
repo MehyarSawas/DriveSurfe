@@ -225,7 +225,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   isNearCurrent(i: number): boolean {
-    return Math.abs(i - this.currentIndex()) <= 25;
+    return Math.abs(i - this.currentIndex()) <= 10;
   }
 
   onImageLoad(): void { this.isLoading.set(false); }
