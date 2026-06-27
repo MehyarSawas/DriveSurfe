@@ -40,6 +40,7 @@ export class FileService {
   readonly folderStats = signal<FolderStats | null>(null);
   readonly previewOpen = signal(false);
   readonly sessions = signal<PreviewSession[]>([]);
+  readonly searchCapped = signal(false);
 
   private loadGeneration = 0;
 
@@ -179,20 +180,17 @@ export class FileService {
 
     this.searchLoading.set(true);
     this.searchResults.set([]);
+    this.searchCapped.set(false);
 
     try {
-      let cursor: string | null = null;
-      do {
-        const reqParams: Record<string, string> = cursor ? { ...params, cursor } : { ...params };
-        const res = await firstValueFrom(
-          this.http.get<{ data: DriveFile[]; has_more: boolean; cursor: string | null }>(
-            '/api/search', { params: reqParams }
-          )
-        );
-        if (gen !== this.searchGen) return;
-        this.searchResults.update(r => [...(r ?? []), ...res.data]);
-        cursor = res.has_more ? (res.cursor ?? null) : null;
-      } while (cursor && gen === this.searchGen);
+      const res = await firstValueFrom(
+        this.http.get<{ data: DriveFile[]; has_more: boolean; cursor: string | null; capped: boolean }>(
+          '/api/search', { params }
+        )
+      );
+      if (gen !== this.searchGen) return;
+      this.searchResults.set(res.data);
+      this.searchCapped.set(res.capped ?? false);
     } finally {
       if (gen === this.searchGen) this.searchLoading.set(false);
     }

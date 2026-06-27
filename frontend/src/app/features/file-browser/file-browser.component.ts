@@ -292,6 +292,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.searchBar?.clearSilent();
     this.fileService.searchResults.set(null);
     this.fileService.searchLoading.set(false);
+    this.fileService.searchCapped.set(false);
     const saved = this.preSearchBreadcrumb();
     const restore = saved.length
       ? saved
