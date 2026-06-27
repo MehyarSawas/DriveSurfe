@@ -66,7 +66,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private readonly preloadCache = new Map<string, HTMLImageElement>();
   private readonly backgroundImages = new Set<HTMLImageElement>(); // in-flight strip/scroll loads
   readonly cachedIds = signal<Set<string>>(new Set());
-  private stripScrollTimer: ReturnType<typeof setTimeout> | null = null;
+
 
   private isPreloadable(f: DriveFile): boolean {
     return f.mime_type?.startsWith('image/') ||
@@ -111,41 +111,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     });
   }
 
-  private preloadThumbsAndWait(indices: number[], files: DriveFile[], ms = 3000): Promise<void> {
-    const ps = indices
-      .filter(i => i >= 0 && i < files.length && files[i].thumbnail_url)
-      .map(i => new Promise<void>(resolve => {
-        const img = new Image();
-        img.onload = img.onerror = () => resolve();
-        img.src = files[i].thumbnail_url!;
-        setTimeout(resolve, ms);
-      }));
-    return Promise.all(ps).then(() => {});
-  }
-
-  private async preloadStrip(fromIndex: number, gen: number, maxRadius = 40): Promise<void> {
-    const files = this.mediaFiles();
-    const order: number[] = [];
-    let lo = fromIndex - 3, hi = fromIndex + 6;
-    const loLimit = Math.max(0, fromIndex - maxRadius);
-    const hiLimit = Math.min(files.length - 1, fromIndex + maxRadius);
-    while (lo >= loLimit || hi <= hiLimit) {
-      if (hi <= hiLimit) order.push(hi++);
-      if (lo >= loLimit) order.push(lo--);
-    }
-    for (const i of order) {
-      if (gen !== this.preloadGen) return;
-      const f = files[i];
-      if (!this.isPreloadable(f) || this.preloadCache.has(f.id)) continue;
-      const img = new Image();
-      img.src = this.previewUrl(f.id);
-      this.preloadCache.set(f.id, img);
-      this.backgroundImages.add(img);
-      this.cachedIds.set(new Set(this.preloadCache.keys()));
-      await new Promise(r => setTimeout(r, 80));
-    }
-  }
-
   private previewUrl(fileId: string): string {
     const w = Math.min(window.screen.width * window.devicePixelRatio, 10000) | 0;
     const h = Math.min(window.screen.height * window.devicePixelRatio, 10000) | 0;
@@ -159,21 +124,11 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.preloadBatch([index-2, index-1, index+1, index+2, index+3, index+4, index+5], files);
   }
 
-  onStripScrolled(range: {from: number, to: number}): void {
-    // Cancel immediately on every scroll tick — no connection wasted on stale positions.
+  onStripScrolled(_range: {from: number, to: number}): void {
+    // Strip scroll only shows thumbnails — cancel any in-flight preview preloads
+    // so they don't compete with the current image load. No new preview requests here.
     this.abortBackground();
-    ++this.preloadGen; // invalidates any running preloadStrip
-
-    // Debounce the actual load: only fire once the user has settled (150 ms idle).
-    if (this.stripScrollTimer !== null) clearTimeout(this.stripScrollTimer);
-    this.stripScrollTimer = setTimeout(() => {
-      this.stripScrollTimer = null;
-      const files = this.mediaFiles();
-      const mid = Math.floor((range.from + range.to) / 2);
-      const indices = Array.from({length: 21}, (_, i) => mid - 10 + i);
-      this.preloadBatch(indices, files, true);
-      this.preloadStrip(mid, ++this.preloadGen);
-    }, 150);
+    ++this.preloadGen;
   }
 
   readonly mediaFiles = computed(() => {
@@ -216,7 +171,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
 
   ngOnDestroy(): void {
-    if (this.stripScrollTimer !== null) clearTimeout(this.stripScrollTimer);
     this.abortBackground();
     this.fileService.cancelLoad();
   }
@@ -407,14 +361,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     );
 
     this.sessionLoading.set(false);
-
-    // Phase 3: re-read index and files — folder first page may have arrived,
-    // switching mediaFiles() to the full folder data already
-    const idx2 = this.previewIndex();
-    const files3 = this.mediaFiles();
-    const stripIndices = Array.from({ length: 21 }, (_, i) => idx2 - 10 + i);
-    this.preloadThumbsAndWait(stripIndices, files3, 3000);
-    this.preloadStrip(idx2, ++this.preloadGen);
   }
 
   jumpToFile(file: DriveFile): void {
