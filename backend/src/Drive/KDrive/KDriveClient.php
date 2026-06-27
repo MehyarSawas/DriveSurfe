@@ -72,11 +72,12 @@ final class KDriveClient implements DriveInterface
         }
         $all = [];
         do {
-            $data   = $this->get("{$driveId}/files/search", $params);
-            $all    = array_merge($all, $this->normalizeFiles($data['data'] ?? []));
-            $cursor = $data['cursor'] ?? null;
+            $data    = $this->get("{$driveId}/files/search", $params, self::API_V3);
+            $all     = array_merge($all, $this->normalizeFiles($data['data'] ?? []));
+            $hasMore = !empty($data['has_more']);
+            $cursor  = $hasMore ? ($data['cursor'] ?? null) : null;
             if ($cursor) $params['cursor'] = $cursor;
-        } while (!empty($data['has_more']) && $cursor);
+        } while ($hasMore && $cursor);
         return $all;
     }
 
