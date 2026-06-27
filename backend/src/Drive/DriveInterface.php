@@ -10,7 +10,7 @@ interface DriveInterface
 
     public function getFolderTree(): array;
 
-    public function search(string $query): array;
+    public function search(string $query, ?string $folderId = null): array;
 
     public function thumbnailUrl(string $fileId): string;
 

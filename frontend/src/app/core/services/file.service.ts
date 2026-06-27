@@ -166,9 +166,11 @@ export class FileService {
     return res.data;
   }
 
-  async search(query: string): Promise<DriveFile[]> {
+  async search(query: string, folderId?: string): Promise<DriveFile[]> {
+    const params: Record<string, string> = { q: query };
+    if (folderId) params['folderId'] = folderId;
     const res = await firstValueFrom(
-      this.http.get<ApiResponse<DriveFile[]>>('/api/search', { params: { q: query } })
+      this.http.get<ApiResponse<DriveFile[]>>('/api/search', { params })
     );
     return res.data;
   }

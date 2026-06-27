@@ -255,14 +255,17 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
   }
 
-  async onSearch(query: string): Promise<void> {
-    if (!query.trim()) {
+  async onSearch(event: { query: string; folderId?: string }): Promise<void> {
+    if (!event.query.trim()) {
       this.fileService.searchResults.set(null);
       return;
     }
-    const results = await this.fileService.search(query);
+    const results = await this.fileService.search(event.query, event.folderId);
     this.fileService.searchResults.set(results);
-    this.fileService.breadcrumb.set([{ id: '__search__', name: `Search: "${query}"` }]);
+    const label = event.folderId
+      ? `"${event.query}" in ${this.fileService.breadcrumb()[this.fileService.breadcrumb().length - 1]?.name ?? 'folder'}`
+      : `Search: "${event.query}"`;
+    this.fileService.breadcrumb.set([{ id: '__search__', name: label }]);
   }
 
   async openPreview(file: DriveFile): Promise<void> {

@@ -63,10 +63,14 @@ final class KDriveClient implements DriveInterface
         return $this->buildTree($dirs, '5');
     }
 
-    public function search(string $query): array
+    public function search(string $query, ?string $folderId = null): array
     {
         $driveId = $this->getDriveId();
-        $data = $this->get("{$driveId}/files/search", ['query' => $query, 'per_page' => 100, 'with' => 'is_favorite']);
+        $params  = ['query' => $query, 'per_page' => 100, 'with' => 'is_favorite'];
+        if ($folderId !== null && $folderId !== '' && $folderId !== '1') {
+            $params['directory_id'] = $folderId;
+        }
+        $data = $this->get("{$driveId}/files/search", $params);
         return $this->normalizeFiles($data['data'] ?? []);
     }
 
