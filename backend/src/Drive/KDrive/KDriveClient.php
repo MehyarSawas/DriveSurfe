@@ -63,23 +63,32 @@ final class KDriveClient implements DriveInterface
         return $this->buildTree($dirs, '5');
     }
 
-    public function search(string $query, ?string $folderId = null): array
+    public function search(string $query, ?string $folderId = null, array $options = []): array
     {
         $driveId = $this->getDriveId();
-        $params  = ['query' => $query, 'per_page' => 200, 'with' => 'is_favorite'];
+        $sortBy  = $options['sortBy'] ?? 'name';
+        $sortDir = $options['sortDir'] ?? 'asc';
+        $page    = max(1, (int) ($options['page'] ?? 1));
+
+        $params = [
+            'query'    => $query,
+            'per_page' => 200,
+            'with'     => 'is_favorite',
+            'depth'    => -1,
+            'order_by' => $sortBy,
+            'order_for' => [$sortBy => $sortDir],
+            'page'     => $page,
+        ];
         if ($folderId !== null && $folderId !== '' && $folderId !== '1') {
             $params['directory_id'] = $folderId;
         }
-        $all  = [];
-        $page = 1;
-        do {
-            $params['page'] = $page;
-            $data  = $this->get("{$driveId}/files/search", $params);
-            $all   = array_merge($all, $this->normalizeFiles($data['data'] ?? []));
-            $pages = (int) ($data['pages'] ?? 1);
-            $page++;
-        } while ($page <= $pages);
-        return $all;
+
+        $data  = $this->get("{$driveId}/files/search", $params);
+        $files = $this->normalizeFiles($data['data'] ?? []);
+        $pages = (int) ($data['pages'] ?? 1);
+        $total = (int) ($data['total'] ?? count($files));
+
+        return ['data' => $files, 'page' => $page, 'pages' => $pages, 'total' => $total];
     }
 
     public function thumbnailUrl(string $fileId): string

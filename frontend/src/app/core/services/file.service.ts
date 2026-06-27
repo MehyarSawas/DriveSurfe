@@ -168,17 +168,34 @@ export class FileService {
     return res.data;
   }
 
-  async search(query: string, folderId?: string): Promise<DriveFile[]> {
+  private searchGen = 0;
+
+  async search(query: string, folderId?: string, options?: { sortBy?: string; sortDir?: string }): Promise<void> {
+    const gen = ++this.searchGen;
     const params: Record<string, string> = { q: query };
     if (folderId) params['folderId'] = folderId;
+    if (options?.sortBy) params['sortBy'] = options.sortBy;
+    if (options?.sortDir) params['sortDir'] = options.sortDir;
+
     this.searchLoading.set(true);
+    this.searchResults.set([]);
+
     try {
-      const res = await firstValueFrom(
-        this.http.get<ApiResponse<DriveFile[]>>('/api/search', { params })
-      );
-      return res.data;
+      let page = 1;
+      let pages = 1;
+      do {
+        const res = await firstValueFrom(
+          this.http.get<{ data: DriveFile[]; page: number; pages: number; total: number }>(
+            '/api/search', { params: { ...params, page: String(page) } }
+          )
+        );
+        if (gen !== this.searchGen) return;
+        pages = res.pages ?? 1;
+        this.searchResults.update(r => [...(r ?? []), ...res.data]);
+        page++;
+      } while (page <= pages && gen === this.searchGen);
     } finally {
-      this.searchLoading.set(false);
+      if (gen === this.searchGen) this.searchLoading.set(false);
     }
   }
 

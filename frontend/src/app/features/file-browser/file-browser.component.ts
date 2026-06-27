@@ -50,6 +50,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly sessionLoading = signal(false);
   readonly bulkMoveToast = signal<string | null>(null);
   private preSearchBreadcrumb: BreadcrumbItem[] = [];
+  private _lastSearchEvent: { query: string; folderId?: string; folderName?: string } | null = null;
 
   // Holds the seeded adjacent files during session open phases 1+2 so that
   // background folder loading (which overwrites fileService.files) doesn't
@@ -265,12 +266,17 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (this.fileService.searchResults() === null) {
       this.preSearchBreadcrumb = this.fileService.breadcrumb();
     }
-    const results = await this.fileService.search(event.query, event.folderId);
-    this.fileService.searchResults.set(results);
+    this._lastSearchEvent = event;
+    // Update breadcrumb immediately so it always reflects current search term
     const label = event.folderId
       ? `"${event.query}" in ${event.folderName ?? 'folder'}`
       : `Search: "${event.query}"`;
     this.fileService.breadcrumb.set([{ id: '__search__', name: label }]);
+
+    await this.fileService.search(event.query, event.folderId, {
+      sortBy: this.sortBy(),
+      sortDir: this.sortDir(),
+    });
   }
 
   cancelSearch(): void {
@@ -281,6 +287,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       : [{ id: this.fileService.currentFolderId(), name: 'My Drive' }];
     this.fileService.breadcrumb.set(restore);
     this.preSearchBreadcrumb = [];
+    this._lastSearchEvent = null;
   }
 
   async openPreview(file: DriveFile): Promise<void> {
@@ -432,7 +439,11 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.sortBy.set(by);
       this.sortDir.set('asc');
     }
-    this.loadCurrentFolder();
+    if (this.fileService.searchResults() !== null) {
+      if (this._lastSearchEvent) this.onSearch(this._lastSearchEvent);
+    } else {
+      this.loadCurrentFolder();
+    }
   }
 
   setFilter(type: string): void {

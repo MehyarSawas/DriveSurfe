@@ -118,7 +118,13 @@ final class FileRoutes
             $params   = $req->getQueryParams();
             $query    = $params['q'] ?? '';
             $folderId = $params['folderId'] ?? null;
-            return self::json($res, ['data' => $drive->search($query, $folderId)]);
+            $options  = [
+                'sortBy'  => $params['sortBy']  ?? 'name',
+                'sortDir' => $params['sortDir'] ?? 'asc',
+                'page'    => (int) ($params['page'] ?? 1),
+            ];
+            $result = $drive->search($query, $folderId, $options);
+            return self::json($res, $result);
         })->add($auth);
 
         $group->get('/trash', function (Request $req, Response $res) use ($drive): Response {
