@@ -48,6 +48,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly previewFile = signal<DriveFile | null>(null);
   readonly pendingDeleteIds = signal<Set<string>>(new Set());
   readonly sessionLoading = signal(false);
+  readonly bulkMoveToast = signal<string | null>(null);
 
   // Holds the seeded adjacent files during session open phases 1+2 so that
   // background folder loading (which overwrites fileService.files) doesn't
@@ -74,20 +75,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   // Abort all background in-flight requests so navigation is never blocked by strip preloads
-  private async runBatched<T>(
-    items: T[],
-    fn: (item: T) => Promise<void>,
-    concurrency: number,
-    delayBetweenBatchesMs = 0,
-  ): Promise<void> {
-    for (let i = 0; i < items.length; i += concurrency) {
-      await Promise.all(items.slice(i, i + concurrency).map(fn));
-      if (delayBetweenBatchesMs > 0 && i + concurrency < items.length) {
-        await new Promise(r => setTimeout(r, delayBetweenBatchesMs));
-      }
-    }
-  }
-
   private abortBackground(): void {
     for (const img of this.backgroundImages) {
       img.src = '';
@@ -496,8 +483,17 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       nextAfterMove = all[idx + 1] ?? all[idx - 1] ?? null;
     }
 
-    await this.runBatched(files, f => this.fileService.moveFile(f.id, folder.id), 5, 800);
-    this.fileService.clearSelection();
+    const results = await Promise.allSettled(files.map(f => this.fileService.moveFile(f.id, folder.id).then(() => f.id)));
+    const failedIds = new Set(
+      results.flatMap((r, i) => r.status === 'rejected' ? [files[i].id] : [])
+    );
+    if (failedIds.size > 0) {
+      this.fileService.selectedIds.set(failedIds);
+      this.bulkMoveToast.set(`Moved ${files.length - failedIds.size} of ${files.length} files. ${failedIds.size} failed — try again.`);
+      setTimeout(() => this.bulkMoveToast.set(null), 6000);
+    } else {
+      this.fileService.clearSelection();
+    }
 
     if (files.length === 1 && this.previewFile()?.id === files[0].id) {
       if (!nextAfterMove) {
@@ -520,8 +516,17 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   async bulkDelete(): Promise<void> {
     const files = this.displayFiles().filter(f => this.fileService.selectedIds().has(f.id));
-    await this.runBatched(files, f => this.fileService.delete(f), 5, 800);
-    this.fileService.clearSelection();
+    const results = await Promise.allSettled(files.map(f => this.fileService.delete(f).then(() => f.id)));
+    const failedIds = new Set(
+      results.flatMap((r, i) => r.status === 'rejected' ? [files[i].id] : [])
+    );
+    if (failedIds.size > 0) {
+      this.fileService.selectedIds.set(failedIds);
+      this.bulkMoveToast.set(`Deleted ${files.length - failedIds.size} of ${files.length} files. ${failedIds.size} failed — try again.`);
+      setTimeout(() => this.bulkMoveToast.set(null), 6000);
+    } else {
+      this.fileService.clearSelection();
+    }
   }
 
   bulkDownload(): void {

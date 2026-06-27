@@ -369,3 +369,9 @@
     (createFolder)="handleCreateFolderFromPreview($event)"
   />
 }
+
+@if (bulkMoveToast()) {
+  <div class="bulk-toast">{{ bulkMoveToast() }}</div>
+}
+
+
