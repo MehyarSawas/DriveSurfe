@@ -381,6 +381,37 @@ ds-search-bar {
   svg { fill: var(--color-primary); }
 }
 
+.search-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    fill: var(--color-icon);
+    flex-shrink: 0;
+  }
+
+  .search-context-label {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.search-results-count {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
 .sort-bar {
   display: flex;
   gap: 4px;
