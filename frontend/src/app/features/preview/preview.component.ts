@@ -225,7 +225,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   isNearCurrent(i: number): boolean {
-    return Math.abs(i - this.currentIndex()) <= 10;
+    if (Math.abs(i - this.currentIndex()) <= 10) return true;
+    // Also render thumbnails in the strip's visible scroll window + a small buffer
+    const thumbW = 68;
+    const stripFrom = Math.floor(this.thumbScrollLeft() / thumbW) - 3;
+    const stripTo = stripFrom + Math.ceil((this.thumbStrip?.nativeElement?.clientWidth ?? 600) / thumbW) + 6;
+    return i >= stripFrom && i <= stripTo;
   }
 
   onImageLoad(): void { this.isLoading.set(false); }
