@@ -43,9 +43,10 @@ export class FileService {
 
   private loadGeneration = 0;
 
-  private waitWhilePreviewOpen(): Promise<void> {
-    if (!this.previewOpen()) return Promise.resolve();
-    return new Promise(r => setTimeout(r, 400));
+  private async waitWhilePreviewOpen(): Promise<void> {
+    while (this.previewOpen() || this.searchResults() !== null) {
+      await new Promise(r => setTimeout(r, 400));
+    }
   }
 
   async loadFiles(options: FileListOptions): Promise<void> {
