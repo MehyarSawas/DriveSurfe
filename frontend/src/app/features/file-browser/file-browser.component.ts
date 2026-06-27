@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, OnDestroy, inject, signal, computed, HostListener
+  Component, OnInit, OnDestroy, inject, signal, computed, effect, HostListener
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -54,6 +54,32 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   // reset previewIndex mid-phase. Cleared automatically once the full folder
   // data includes the current file (or when preview closes).
   private readonly previewFileList = signal<DriveFile[] | null>(null);
+
+  private readonly preloadedIds = new Set<string>();
+
+  constructor() {
+    effect(() => {
+      if (!this.previewFile()) return;
+      this.preloadAdjacent(this.previewIndex(), this.mediaFiles());
+    });
+  }
+
+  private preloadAdjacent(idx: number, files: DriveFile[]): void {
+    const w = Math.min(window.screen.width * window.devicePixelRatio, 10000) | 0;
+    const h = Math.min(window.screen.height * window.devicePixelRatio, 10000) | 0;
+    for (let i = Math.max(0, idx - 2); i <= Math.min(files.length - 1, idx + 5); i++) {
+      const f = files[i];
+      if (this.preloadedIds.has(f.id)) continue;
+      const mime = f.mime_type ?? '';
+      const ext = f.extension ?? '';
+      const isVideo = mime.startsWith('video/') || ['mp4','mov','m4v'].includes(ext);
+      const isPdf = mime === 'application/pdf' || ext === 'pdf';
+      if (isVideo || isPdf) continue;
+      this.preloadedIds.add(f.id);
+      const img = new Image();
+      img.src = `/api/files/${f.id}/preview?width=${w}&height=${h}`;
+    }
+  }
 
   readonly previewIndex = computed(() => {
     const file = this.previewFile();
@@ -214,6 +240,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   closePreview(): void {
     this.previewFileList.set(null);
     this.previewFile.set(null);
+    this.preloadedIds.clear();
     this.fileService.previewOpen.set(false);
     this.loadCurrentFolder();
   }
