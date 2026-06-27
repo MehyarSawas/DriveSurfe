@@ -50,7 +50,7 @@ import { debounceTime, distinctUntilChanged, Subject } from 'rxjs';
 export class SearchBarComponent {
   readonly folderId = input<string>('');
   readonly folderName = input<string>('My Drive');
-  readonly search = output<{ query: string; folderId?: string }>();
+  readonly search = output<{ query: string; folderId?: string; folderName?: string }>();
 
   readonly query = signal('');
   readonly folderOnly = signal(false);
@@ -75,7 +75,7 @@ export class SearchBarComponent {
   emitSearch(): void {
     const q = this.query();
     this.search.emit(this.folderOnly() && this.folderId()
-      ? { query: q, folderId: this.folderId() }
+      ? { query: q, folderId: this.folderId(), folderName: this.folderName() }
       : { query: q });
   }
 

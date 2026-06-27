@@ -255,7 +255,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
   }
 
-  async onSearch(event: { query: string; folderId?: string }): Promise<void> {
+  async onSearch(event: { query: string; folderId?: string; folderName?: string }): Promise<void> {
     if (!event.query.trim()) {
       this.fileService.searchResults.set(null);
       this.fileService.searchLoading.set(false);
@@ -264,7 +264,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const results = await this.fileService.search(event.query, event.folderId);
     this.fileService.searchResults.set(results);
     const label = event.folderId
-      ? `"${event.query}" in ${this.fileService.breadcrumb()[this.fileService.breadcrumb().length - 1]?.name ?? 'folder'}`
+      ? `"${event.query}" in ${event.folderName ?? 'folder'}`
       : `Search: "${event.query}"`;
     this.fileService.breadcrumb.set([{ id: '__search__', name: label }]);
   }
