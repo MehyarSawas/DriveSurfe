@@ -106,6 +106,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private pendingFile: DriveFile | null = null;
   private alive = true;
   readonly pendingDeleteFile = signal<DriveFile | null>(null);
+
+  private pendingMoveInterval: ReturnType<typeof setInterval> | null = null;
+  readonly pendingMoveFile = signal<DriveFile | null>(null);
+  private pendingMoveFolderId: string | null = null;
+  readonly moveCountdown = signal(5);
   private boundTouchMove!: (e: TouchEvent) => void;
 
   readonly isImage = computed(() => {
@@ -154,6 +159,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
           this.countdown.set(10);
           this.pendingDeleteFile.set(null);
         }
+        this.flushPendingMove();
       }
     });
 
@@ -237,12 +243,57 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   onImageError(): void { this.isLoading.set(false); this.previewFailed.set(true); }
 
   onFolderSelected(folder: DriveFile): void {
-    this.moveFile.emit({ file: this.file(), folderId: folder.id });
+    this.flushPendingMove();
+    const file = this.file();
     this.folderPanelOpen.set(false);
+    this.pendingMoveFile.set(file);
+    this.pendingMoveFolderId = folder.id;
+    this.moveCountdown.set(5);
+    let c = 5;
+    this.pendingMoveInterval = setInterval(() => {
+      if (!this.alive) return;
+      c--;
+      if (c <= 0) {
+        clearInterval(this.pendingMoveInterval!);
+        this.pendingMoveInterval = null;
+        this.pendingMoveFolderId = null;
+        this.moveFile.emit({ file, folderId: folder.id });
+        this.pendingMoveFile.set(null);
+        this.moveCountdown.set(5);
+      } else {
+        this.moveCountdown.set(c);
+      }
+    }, 1000);
+  }
+
+  cancelMove(): void {
+    if (this.pendingMoveInterval !== null) {
+      clearInterval(this.pendingMoveInterval);
+      this.pendingMoveInterval = null;
+    }
+    this.pendingMoveFile.set(null);
+    this.pendingMoveFolderId = null;
+    this.moveCountdown.set(5);
+  }
+
+  private flushPendingMove(): void {
+    if (this.pendingMoveInterval !== null) {
+      clearInterval(this.pendingMoveInterval);
+      this.pendingMoveInterval = null;
+    }
+    const pf = this.pendingMoveFile();
+    const fid = this.pendingMoveFolderId;
+    if (pf && fid) {
+      this.moveFile.emit({ file: pf, folderId: fid });
+    }
+    this.pendingMoveFile.set(null);
+    this.pendingMoveFolderId = null;
+    this.moveCountdown.set(5);
   }
 
   cancelAllPending(): void {
     this.clearPending();
+    this.cancelMove();
   }
 
   ngOnDestroy(): void {
@@ -462,6 +513,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.isFullscreen.set(false);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     this.flushPending();
+    this.flushPendingMove();
     this.close.emit();
   }
 

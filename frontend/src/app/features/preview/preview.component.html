@@ -207,6 +207,25 @@
     </div>
   }
 
+  <!-- Move countdown toast -->
+  @if (pendingMoveFile(); as pf) {
+    <div class="delete-toast" (click)="$event.stopPropagation()">
+      <div class="progress-bar">
+        <div class="progress-fill" [style.width.%]="(moveCountdown() / 5) * 100"></div>
+      </div>
+      <div class="toast-row">
+        @if (pf.thumbnail_url) {
+          <img class="toast-thumb" [src]="pf.thumbnail_url" [alt]="pf.name" />
+        }
+        <span class="toast-label">
+          <span class="toast-filename">{{ pf.name }}</span>
+          Moving · {{ moveCountdown() }}s
+        </span>
+        <button class="btn-undo" (click)="cancelMove()">Undo</button>
+      </div>
+    </div>
+  }
+
   <!-- Session loading overlay — last in DOM so it paints above header/footer backdrop-filter stacking contexts -->
   @if (sessionLoading()) {
     <div class="session-loading-overlay">
