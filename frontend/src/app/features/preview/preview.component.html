@@ -172,7 +172,7 @@
   <!-- Folder picker (swipe down or header button) -->
   @if (folderPanelOpen()) {
     <ds-folder-picker
-      [startBreadcrumb]="breadcrumb()"
+      [startBreadcrumb]="breadcrumb().slice(0, -1)"
       [recentFolder]="recentFolder()"
       (folderSelected)="onFolderSelected($event)"
       (folderPath)="onFolderPath($event)"

@@ -97,22 +97,10 @@
 }
 
 .recent-row {
-  align-items: center;
-
-  .folder-meta {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    gap: 1px;
-  }
-
-  .folder-path {
-    font-size: 11px;
+  .folder-path-inline {
+    font-size: 13px;
     color: var(--color-text-secondary, #888);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-weight: 400;
   }
 
   .recent-check {
