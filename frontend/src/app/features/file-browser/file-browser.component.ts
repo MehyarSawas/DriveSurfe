@@ -135,9 +135,32 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   private preloadAdjacent(index: number): void {
     this.abortBackground();
-    ++this.preloadGen;
+    const gen = ++this.preloadGen;
     const files = this.mediaFiles();
     this.preloadBatch([index-2, index-1, index+1, index+2, index+3, index+4, index+5], files);
+    this.preloadStrip(index, gen);
+  }
+
+  // After adjacent preload, walk outward from index and load all remaining images in background.
+  private async preloadStrip(index: number, gen: number): Promise<void> {
+    const files = this.mediaFiles();
+    const total = files.length;
+    // Build indices spiralling out from current: index+6, index-3, index+7, index-4, ...
+    const visited = new Set<number>([index-2, index-1, index, index+1, index+2, index+3, index+4, index+5]);
+    const queue: number[] = [];
+    let lo = index - 3;
+    let hi = index + 6;
+    while (lo >= 0 || hi < total) {
+      if (hi < total) { if (!visited.has(hi)) { visited.add(hi); queue.push(hi); } hi++; }
+      if (lo >= 0)    { if (!visited.has(lo)) { visited.add(lo); queue.push(lo); } lo--; }
+    }
+    for (const i of queue) {
+      if (gen !== this.preloadGen) return;
+      const f = files[i];
+      if (!this.isPreloadable(f) || this.preloadCache.has(f.id)) continue;
+      await this.preloadOneAndWait(f, 10000);
+      if (gen !== this.preloadGen) return;
+    }
   }
 
   onStripScrolled(_range: {from: number, to: number}): void {
