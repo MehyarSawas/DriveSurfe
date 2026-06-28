@@ -205,15 +205,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     } else if (folderId && folderId !== HOME_FOLDER_ID) {
       // Point the service at the right folder instantly
       this.fileService.currentFolderId.set(folderId);
-      // Load files and resolve breadcrumb in parallel — neither blocks the other
-      const [, breadcrumb] = await Promise.allSettled([
-        this.loadCurrentFolder(),
-        this.resolveBreadcrumb(folderId),
-      ]);
-      if (breadcrumb.status === 'fulfilled') {
-        this.fileService.breadcrumb.set(breadcrumb.value);
-      }
-      // If breadcrumb failed we already have a minimal one from the service default
+      this.resolveBreadcrumb(folderId).then(crumbs => this.fileService.breadcrumb.set(crumbs));
+      await this.loadCurrentFolder();
     } else {
       await this.loadCurrentFolder();
     }
