@@ -161,7 +161,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
           this.countdown.set(10);
           this.pendingDeleteFile.set(null);
         }
-        this.flushPendingMove();
       }
     });
 
