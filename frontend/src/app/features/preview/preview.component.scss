@@ -480,11 +480,15 @@
   }
 }
 
-/* Delete countdown toast */
+/* Delete/move countdown toast */
 .delete-toast {
   position: absolute;
   bottom: 10px;
   left: 16px;
+
+  &.above-strip {
+    bottom: 86px; /* 76px strip height + 10px gap */
+  }
   background: rgba(20, 20, 20, 0.88);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,0.12);
