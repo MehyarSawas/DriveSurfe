@@ -13,7 +13,7 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/file-browser/file-browser.component').then(m => m.FileBrowserComponent),
     children: [
-      { path: '', redirectTo: 'folder/1', pathMatch: 'full' },
+      { path: '', redirectTo: 'folder/5', pathMatch: 'full' },
       {
         path: 'folder/:folderId',
         children: [
