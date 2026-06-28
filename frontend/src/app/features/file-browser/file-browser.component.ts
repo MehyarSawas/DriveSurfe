@@ -246,13 +246,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (this.lastAppliedFolderId === folderId) return;
     this.lastAppliedFolderId = folderId;
     this.fileService.currentFolderId.set(folderId);
-    const [, breadcrumb] = await Promise.allSettled([
-      this.loadCurrentFolder(),
-      this.resolveBreadcrumb(folderId),
-    ]);
-    if (breadcrumb.status === 'fulfilled') {
-      this.fileService.breadcrumb.set(breadcrumb.value);
-    }
+    // Resolve breadcrumb independently — set it as soon as it's ready, don't wait for files
+    this.resolveBreadcrumb(folderId).then(crumbs => this.fileService.breadcrumb.set(crumbs));
+    await this.loadCurrentFolder();
   }
 
   private async applyTrash(): Promise<void> {
