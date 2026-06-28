@@ -521,6 +521,18 @@
   transition: width 1s linear;
 }
 
+.move-toast {
+  border-color: rgba(52, 199, 89, 0.3);
+
+  .progress-fill { background: #34c759; }
+
+  .btn-undo {
+    color: #34c759;
+    border-color: rgba(52, 199, 89, 0.4);
+    &:hover { background: rgba(52, 199, 89, 0.15); }
+  }
+}
+
 .toast-row {
   display: flex;
   align-items: center;

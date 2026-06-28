@@ -384,6 +384,8 @@
     (deleteStart)="navigateAfterDeleteStart($event)"
     (delete)="deletePreviewFile($event)"
     (undoDelete)="onUndoDelete($event)"
+    (moveStart)="navigateAfterMoveStart($event)"
+    (undoMove)="onUndoMove($event)"
     (moveFile)="handleMove($event)"
     (createFolder)="handleCreateFolderFromPreview($event)"
   />

@@ -209,7 +209,7 @@
 
   <!-- Move countdown toast -->
   @if (pendingMoveFile(); as pf) {
-    <div class="delete-toast" [class.above-strip]="thumbnailBarOpen()" (click)="$event.stopPropagation()">
+    <div class="delete-toast move-toast" [class.above-strip]="thumbnailBarOpen()" (click)="$event.stopPropagation()">
       <div class="progress-bar">
         <div class="progress-fill" [style.width.%]="(moveCountdown() / 5) * 100"></div>
       </div>

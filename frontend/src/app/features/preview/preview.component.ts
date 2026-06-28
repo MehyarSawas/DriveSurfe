@@ -42,6 +42,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly deleteStart = output<DriveFile>();
   readonly delete = output<DriveFile>();
   readonly undoDelete = output<string>();
+  readonly moveStart = output<DriveFile>();
+  readonly undoMove = output<string>();
   readonly moveFile = output<{file: DriveFile, folderId: string}>();
   readonly stripScrolled = output<{from: number, to: number}>();
   readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
@@ -248,6 +250,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.folderPanelOpen.set(false);
     this.pendingMoveFile.set(file);
     this.pendingMoveFolderId = folder.id;
+    this.moveStart.emit(file);
     this.moveCountdown.set(5);
     let c = 5;
     this.pendingMoveInterval = setInterval(() => {
@@ -267,6 +270,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   cancelMove(): void {
+    const fileId = this.pendingMoveFile()?.id;
     if (this.pendingMoveInterval !== null) {
       clearInterval(this.pendingMoveInterval);
       this.pendingMoveInterval = null;
@@ -274,6 +278,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.pendingMoveFile.set(null);
     this.pendingMoveFolderId = null;
     this.moveCountdown.set(5);
+    if (fileId) this.undoMove.emit(fileId);
   }
 
   private flushPendingMove(): void {

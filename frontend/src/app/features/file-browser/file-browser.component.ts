@@ -47,6 +47,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly sidebarOpen = signal(window.innerWidth > 768);
   readonly previewFile = signal<DriveFile | null>(null);
   readonly pendingDeleteIds = signal<Set<string>>(new Set());
+  readonly pendingMoveIds = signal<Set<string>>(new Set());
   readonly sessionLoading = signal(false);
   readonly bulkMoveToast = signal<string | null>(null);
   @ViewChild(SearchBarComponent) private searchBar?: SearchBarComponent;
@@ -145,9 +146,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   readonly mediaFiles = computed(() => {
     const pending = this.pendingDeleteIds();
+    const pendingMove = this.pendingMoveIds();
     const anchor = this.previewFileList();
     const rawFiles = this.fileService.searchResults() ?? this.fileService.files();
-    const folderFiles = rawFiles.filter(f => !f.is_dir && !pending.has(f.id));
+    const folderFiles = rawFiles.filter(f => !f.is_dir && !pending.has(f.id) && !pendingMove.has(f.id));
 
     if (anchor === null) return folderFiles;
 
@@ -436,6 +438,22 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.pendingDeleteIds.update(s => { const n = new Set(s); n.delete(fileId); return n; });
   }
 
+  navigateAfterMoveStart(file: DriveFile): void {
+    const files = this.mediaFiles();
+    const idx = files.findIndex(f => f.id === file.id);
+    if (idx === -1) return;
+    const nextFile = idx < files.length - 1 ? files[idx + 1] : files[idx - 1];
+    this.pendingMoveIds.update(s => new Set([...s, file.id]));
+    if (!nextFile) return;
+    this.previewFile.set(nextFile);
+    this.preloadAdjacent(idx < files.length - 1 ? idx : idx - 1);
+  }
+
+  onUndoMove(fileId: string): void {
+    this.pendingMoveIds.update(s => { const n = new Set(s); n.delete(fileId); return n; });
+    this.previewFile.set(this.fileService.files().find(f => f.id === fileId) ?? this.previewFile());
+  }
+
   async deletePreviewFile(file: DriveFile): Promise<void> {
     await this.fileService.delete(file);
     this.pendingDeleteIds.update(s => { const n = new Set(s); n.delete(file.id); return n; });
@@ -595,6 +613,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   async handleMove(event: {file: DriveFile, folderId: string}): Promise<void> {
+    this.pendingMoveIds.update(s => { const n = new Set(s); n.delete(event.file.id); return n; });
     this.movingFiles.set([event.file]);
     await this.onPickerFolderSelected({ id: event.folderId } as DriveFile);
   }
