@@ -29,6 +29,19 @@
 
     <!-- Folder list -->
     <div class="picker-list">
+      @if (recentFolder(); as rf) {
+        <div class="recent-section">
+          <div class="recent-label">Recent</div>
+          <div class="picker-row recent-row" (click)="selectRecentFolder(rf)">
+            <svg class="folder-icon" viewBox="0 0 24 24">
+              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+            </svg>
+            <span class="folder-name">{{ rf.name }}</span>
+            <svg class="recent-check" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </div>
+          <div class="recent-divider"></div>
+        </div>
+      }
       @if (loading()) {
         <div class="picker-loading"><div class="picker-spinner"></div></div>
       } @else {

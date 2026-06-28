@@ -209,6 +209,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   previewParentFolderName = signal('');
   movingFiles = signal<DriveFile[] | null>(null);
 
+  readonly recentMoveFolder = signal<{id: string; name: string} | null>(
+    (() => { try { const s = localStorage.getItem('recentMoveFolder'); return s ? JSON.parse(s) : null; } catch { return null; } })()
+  );
+
+  private saveRecentMoveFolder(folder: {id: string; name: string}): void {
+    this.recentMoveFolder.set(folder);
+    try { localStorage.setItem('recentMoveFolder', JSON.stringify(folder)); } catch {}
+  }
 
   ngOnDestroy(): void {
     this.abortBackground();
@@ -570,6 +578,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       setTimeout(() => this.bulkMoveToast.set(null), 6000);
     } else {
       this.fileService.clearSelection();
+      this.saveRecentMoveFolder({ id: folder.id, name: folder.name });
     }
 
     if (files.length === 1 && this.previewFile()?.id === files[0].id) {

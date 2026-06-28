@@ -357,6 +357,7 @@
 @if (movingFiles()) {
   <ds-folder-picker
     [startBreadcrumb]="fileService.searchResults() ? [] : fileService.breadcrumb().slice(0, -1)"
+    [recentFolder]="recentMoveFolder()"
     (folderSelected)="onPickerFolderSelected($event)"
     (closed)="movingFiles.set(null)"
   />
@@ -372,7 +373,9 @@
     [loadingMore]="fileService.loading() || fileService.loadingMore()"
     [currentIndex]="previewIndex()"
     [currentFolderId]="previewParentFolderId()"
-[sessionLoading]="sessionLoading()"
+    [breadcrumb]="fileService.breadcrumb()"
+    [recentFolder]="recentMoveFolder()"
+    [sessionLoading]="sessionLoading()"
     (close)="closePreview()"
     (stripScrolled)="onStripScrolled($event)"
     (prev)="navigatePreview(-1)"

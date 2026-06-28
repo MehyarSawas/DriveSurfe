@@ -25,6 +25,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly hasPrev = input(false);
   readonly hasNext = input(false);
   readonly currentFolderId = input('');
+  readonly breadcrumb = input<{id: string; name: string}[]>([]);
+  readonly recentFolder = input<{id: string; name: string} | null>(null);
   readonly files = input<DriveFile[]>([]);
   readonly loadingMore = input(false);
   readonly currentIndex = input(0);

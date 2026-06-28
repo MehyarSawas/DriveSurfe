@@ -20,8 +20,8 @@ export class FolderPickerComponent implements OnInit {
 
   readonly startFolderId = input<string>(HOME_FOLDER_ID);
   readonly startFolderName = input<string>('My Drive');
-  // Optional: pass the full breadcrumb path so back navigation walks up properly
   readonly startBreadcrumb = input<Crumb[]>([]);
+  readonly recentFolder = input<Crumb | null>(null);
 
   readonly folderSelected = output<DriveFile>();
   readonly closed = output<void>();
@@ -105,6 +105,10 @@ export class FolderPickerComponent implements OnInit {
 
   selectFolder(folder: DriveFile): void {
     this.folderSelected.emit(folder);
+  }
+
+  selectRecentFolder(crumb: Crumb): void {
+    this.folderSelected.emit({ id: crumb.id, name: crumb.name } as DriveFile);
   }
 
   async submitNewFolder(): Promise<void> {

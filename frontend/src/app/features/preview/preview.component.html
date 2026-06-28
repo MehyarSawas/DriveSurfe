@@ -172,8 +172,8 @@
   <!-- Folder picker (swipe down or header button) -->
   @if (folderPanelOpen()) {
     <ds-folder-picker
-      [startFolderId]="currentFolderId()"
-      [startFolderName]="'Move to…'"
+      [startBreadcrumb]="breadcrumb()"
+      [recentFolder]="recentFolder()"
       (folderSelected)="onFolderSelected($event)"
       (closed)="folderPanelOpen.set(false)"
       (click)="$event.stopPropagation()"

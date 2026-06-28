@@ -83,6 +83,34 @@
   padding: 4px 0;
 }
 
+.recent-section {
+  padding-top: 4px;
+}
+
+.recent-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary, #888);
+  padding: 4px 20px 2px;
+}
+
+.recent-row {
+  .recent-check {
+    width: 18px;
+    height: 18px;
+    fill: var(--color-primary, #1a73e8);
+    flex-shrink: 0;
+  }
+}
+
+.recent-divider {
+  height: 1px;
+  background: var(--color-border, #e0e0e0);
+  margin: 4px 0;
+}
+
 .picker-loading {
   display: flex;
   justify-content: center;
