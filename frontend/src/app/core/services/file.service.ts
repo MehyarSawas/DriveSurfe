@@ -44,12 +44,6 @@ export class FileService {
 
   private loadGeneration = 0;
 
-  private async waitWhilePreviewOpen(): Promise<void> {
-    while (this.previewOpen() || this.searchResults() !== null) {
-      await new Promise(r => setTimeout(r, 400));
-    }
-  }
-
   async loadFiles(options: FileListOptions): Promise<void> {
     this.folderStats.set(null);
     const generation = ++this.loadGeneration;
@@ -76,7 +70,6 @@ export class FileService {
         this.loadingMore.set(true);
         let cursor: string | null = first.cursor;
         while (cursor) {
-          await this.waitWhilePreviewOpen();
           if (generation !== this.loadGeneration) return;
           const page: FilesResponse = await firstValueFrom(
             this.http.get<FilesResponse>('/api/files', { params: { ...params, cursor } })
