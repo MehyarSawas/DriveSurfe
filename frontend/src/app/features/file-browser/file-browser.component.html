@@ -359,6 +359,7 @@
     [startBreadcrumb]="fileService.searchResults() ? [] : fileService.breadcrumb().slice(0, -1)"
     [recentFolder]="recentMoveFolder()"
     (folderSelected)="onPickerFolderSelected($event)"
+    (folderPath)="onPickerFolderPath($event)"
     (closed)="movingFiles.set(null)"
   />
 }
@@ -390,6 +391,7 @@
     (moveStart)="navigateAfterMoveStart($event)"
     (undoMove)="onUndoMove($event)"
     (moveFile)="handleMove($event)"
+    (moveFilePath)="onPickerFolderPath($event)"
     (createFolder)="handleCreateFolderFromPreview($event)"
   />
 }

@@ -209,13 +209,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   previewParentFolderName = signal('');
   movingFiles = signal<DriveFile[] | null>(null);
 
-  readonly recentMoveFolder = signal<{id: string; name: string} | null>(
+  readonly recentMoveFolder = signal<{id: string; name: string; path: string} | null>(
     (() => { try { const s = localStorage.getItem('recentMoveFolder'); return s ? JSON.parse(s) : null; } catch { return null; } })()
   );
 
-  private saveRecentMoveFolder(folder: {id: string; name: string}): void {
-    this.recentMoveFolder.set(folder);
-    try { localStorage.setItem('recentMoveFolder', JSON.stringify(folder)); } catch {}
+  private saveRecentMoveFolder(folder: DriveFile, breadcrumbPath: string): void {
+    const entry = { id: folder.id, name: folder.name, path: breadcrumbPath };
+    this.recentMoveFolder.set(entry);
+    try { localStorage.setItem('recentMoveFolder', JSON.stringify(entry)); } catch {}
   }
 
   ngOnDestroy(): void {
@@ -546,6 +547,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     }
   }
 
+  private _pendingPickerPath = '';
+  onPickerFolderPath(path: string): void { this._pendingPickerPath = path; }
+
   openMoveForFile(file: DriveFile): void {
     this.movingFiles.set([file]);
   }
@@ -578,7 +582,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       setTimeout(() => this.bulkMoveToast.set(null), 6000);
     } else {
       this.fileService.clearSelection();
-      this.saveRecentMoveFolder({ id: folder.id, name: folder.name });
+      this.saveRecentMoveFolder(folder, this._pendingPickerPath);
     }
 
     if (files.length === 1 && this.previewFile()?.id === files[0].id) {

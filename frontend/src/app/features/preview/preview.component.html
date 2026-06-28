@@ -175,6 +175,7 @@
       [startBreadcrumb]="breadcrumb()"
       [recentFolder]="recentFolder()"
       (folderSelected)="onFolderSelected($event)"
+      (folderPath)="onFolderPath($event)"
       (closed)="folderPanelOpen.set(false)"
       (click)="$event.stopPropagation()"
     />

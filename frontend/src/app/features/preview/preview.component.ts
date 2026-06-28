@@ -47,6 +47,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly moveStart = output<DriveFile>();
   readonly undoMove = output<string>();
   readonly moveFile = output<{file: DriveFile, folderId: string}>();
+  readonly moveFilePath = output<string>();
   readonly stripScrolled = output<{from: number, to: number}>();
   readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
 
@@ -114,6 +115,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private pendingMoveInterval: ReturnType<typeof setInterval> | null = null;
   readonly pendingMoveFile = signal<DriveFile | null>(null);
   private pendingMoveFolderId: string | null = null;
+  private pendingMoveFolderPath = '';
   readonly moveCountdown = signal(5);
   private boundTouchMove!: (e: TouchEvent) => void;
 
@@ -262,12 +264,17 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         this.pendingMoveInterval = null;
         this.pendingMoveFolderId = null;
         this.moveFile.emit({ file, folderId: folder.id });
+        this.moveFilePath.emit(this.pendingMoveFolderPath);
         this.pendingMoveFile.set(null);
         this.moveCountdown.set(5);
       } else {
         this.moveCountdown.set(c);
       }
     }, 1000);
+  }
+
+  onFolderPath(path: string): void {
+    this.pendingMoveFolderPath = path;
   }
 
   cancelMove(): void {
@@ -291,9 +298,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     const fid = this.pendingMoveFolderId;
     if (pf && fid) {
       this.moveFile.emit({ file: pf, folderId: fid });
+      this.moveFilePath.emit(this.pendingMoveFolderPath);
     }
     this.pendingMoveFile.set(null);
     this.pendingMoveFolderId = null;
+    this.pendingMoveFolderPath = '';
     this.moveCountdown.set(5);
   }
 
