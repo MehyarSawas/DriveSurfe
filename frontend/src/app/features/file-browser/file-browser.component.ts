@@ -3,6 +3,7 @@ import {
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PreviewCacheService } from '../../core/services/preview-cache.service';
@@ -37,6 +38,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   protected fileService = inject(FileService);
   protected auth = inject(AuthService);
   private previewCache = inject(PreviewCacheService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
 
   readonly viewMode = signal<ViewMode>('grid');
   readonly sortBy = signal<SortBy>('name');
@@ -190,26 +193,30 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
-    // Load sessions immediately — must not be delayed by folder pagination.
     this.fileService.loadSessions();
-
-    // Show spinner immediately before any async work
     this.fileService.loading.set(true);
 
-    const rawFolderId = new URLSearchParams(window.location.search).get('folder');
-    const folderId = rawFolderId && /^(\d+|__trash__|__starred__)$/.test(rawFolderId) ? rawFolderId : null;
+    const params = this.route.snapshot.params;
+    const folderId: string = params['folderId'] ?? HOME_FOLDER_ID;
+    const fileId: string | null = params['fileId'] ?? null;
+
     if (folderId === '__trash__') {
       await this.showTrash();
     } else if (folderId === '__starred__') {
       await this.showStarred();
-    } else if (folderId && folderId !== HOME_FOLDER_ID) {
-      // Point the service at the right folder instantly
+    } else if (folderId !== HOME_FOLDER_ID) {
       this.fileService.currentFolderId.set(folderId);
       this.resolveBreadcrumb(folderId).then(crumbs => this.fileService.breadcrumb.set(crumbs));
       await this.loadCurrentFolder();
     } else {
       await this.loadCurrentFolder();
     }
+
+    if (fileId) {
+      const file = await this.fileService.getFile(fileId).catch(() => null);
+      if (file) await this.openPreview(file);
+    }
+
     this.fileService.loadFolderTree();
   }
 
@@ -240,8 +247,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   private syncUrl(folderId: string): void {
-    const url = folderId === HOME_FOLDER_ID ? '/' : `/?folder=${encodeURIComponent(folderId)}`;
-    window.history.replaceState(null, '', url);
+    this.router.navigate(['/folder', folderId], { replaceUrl: true });
   }
 
   private async loadCurrentFolder(): Promise<void> {
@@ -362,7 +368,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       && this.fileService.files().length > 0;
 
     this.fileService.navigateToFolder(session.folder_id, session.folder_name);
-    this.syncUrl(session.folder_id);
+    this.router.navigate(['/folder', session.folder_id], { replaceUrl: true });
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
     this.resolveBreadcrumb(session.folder_id).then(crumbs => this.fileService.breadcrumb.set(crumbs));
 
@@ -484,7 +490,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
     this.fileService.currentFolderId.set('__trash__');
     this.fileService.searchResults.set(null);
-    this.syncUrl('__trash__');
+    this.router.navigate(['/folder', '__trash__'], { replaceUrl: true });
   }
 
   async showStarred(): Promise<void> {
@@ -492,13 +498,13 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.searchResults.set(results);
     this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
     this.fileService.currentFolderId.set('__starred__');
-    this.syncUrl('__starred__');
+    this.router.navigate(['/folder', '__starred__'], { replaceUrl: true });
   }
 
   navigateToFolder(id: string, name: string): void {
     this.fileService.clearSelection();
     this.fileService.navigateToFolder(id, name);
-    this.syncUrl(id);
+    this.router.navigate(['/folder', id]);
     this.loadCurrentFolder();
   }
 
