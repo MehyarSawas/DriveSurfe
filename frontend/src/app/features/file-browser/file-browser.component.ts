@@ -3,6 +3,9 @@ import {
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router, ActivatedRoute, NavigationEnd, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs/operators';
+import { Subscription } from 'rxjs';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PreviewCacheService } from '../../core/services/preview-cache.service';
@@ -22,6 +25,7 @@ import { FolderPickerComponent } from '../../shared/components/folder-picker/fol
     CommonModule,
     DatePipe,
     FormsModule,
+    RouterOutlet,
     FileGridComponent,
     FileListComponent,
     FolderTreeComponent,
@@ -37,6 +41,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   protected fileService = inject(FileService);
   protected auth = inject(AuthService);
   private previewCache = inject(PreviewCacheService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private routeSub?: Subscription;
 
   readonly viewMode = signal<ViewMode>('grid');
   readonly sortBy = signal<SortBy>('name');
@@ -187,37 +194,94 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.abortBackground();
     this.fileService.cancelLoad();
+    this.routeSub?.unsubscribe();
   }
 
   async ngOnInit(): Promise<void> {
-    // Load sessions immediately — must not be delayed by folder pagination.
     this.fileService.loadSessions();
-
-    // Show spinner immediately before any async work
     this.fileService.loading.set(true);
 
-    const rawFolderId = new URLSearchParams(window.location.search).get('folder');
-    const folderId = rawFolderId && /^(\d+|__trash__|__starred__)$/.test(rawFolderId) ? rawFolderId : null;
-    if (folderId === '__trash__') {
-      await this.showTrash();
-    } else if (folderId === '__starred__') {
-      await this.showStarred();
-    } else if (folderId && folderId !== HOME_FOLDER_ID) {
-      // Point the service at the right folder instantly
-      this.fileService.currentFolderId.set(folderId);
-      // Load files and resolve breadcrumb in parallel — neither blocks the other
-      const [, breadcrumb] = await Promise.allSettled([
-        this.loadCurrentFolder(),
-        this.resolveBreadcrumb(folderId),
-      ]);
-      if (breadcrumb.status === 'fulfilled') {
-        this.fileService.breadcrumb.set(breadcrumb.value);
-      }
-      // If breadcrumb failed we already have a minimal one from the service default
-    } else {
-      await this.loadCurrentFolder();
-    }
+    // Handle initial URL
+    await this.handleRouteSnapshot();
+
+    // React to subsequent navigation (back/forward, in-app router.navigate calls)
+    this.routeSub = this.router.events
+      .pipe(filter(e => e instanceof NavigationEnd))
+      .subscribe(() => this.handleRouteSnapshot());
+
     this.fileService.loadFolderTree();
+  }
+
+  /** Read the current activated route snapshot and load the appropriate content. */
+  private async handleRouteSnapshot(): Promise<void> {
+    // Walk child routes to collect params (paramsInheritanceStrategy: always propagates them)
+    const child = this.route.snapshot.firstChild;        // folder/:folderId | trash | starred
+    const grandchild = child?.firstChild ?? null;        // preview/:fileId
+
+    const path = child?.routeConfig?.path ?? '';
+    const folderId = child?.params['folderId'] ?? null;
+    const fileId = grandchild?.params['fileId'] ?? null;
+
+    if (path === 'trash') {
+      await this.applyTrash();
+    } else if (path === 'starred') {
+      await this.applyStarred();
+    } else if (folderId && folderId !== HOME_FOLDER_ID) {
+      await this.applyFolder(folderId);
+    } else {
+      await this.applyFolder(HOME_FOLDER_ID);
+    }
+
+    // Open or close preview based on route
+    if (fileId) {
+      await this.applyPreviewFile(fileId);
+    } else if (this.previewFile()) {
+      this.closePreviewSilent();
+    }
+  }
+
+  private lastAppliedFolderId = '';
+
+  private async applyFolder(folderId: string): Promise<void> {
+    if (this.lastAppliedFolderId === folderId) return;
+    this.lastAppliedFolderId = folderId;
+    this.fileService.currentFolderId.set(folderId);
+    const [, breadcrumb] = await Promise.allSettled([
+      this.loadCurrentFolder(),
+      this.resolveBreadcrumb(folderId),
+    ]);
+    if (breadcrumb.status === 'fulfilled') {
+      this.fileService.breadcrumb.set(breadcrumb.value);
+    }
+  }
+
+  private async applyTrash(): Promise<void> {
+    if (this.lastAppliedFolderId === '__trash__') return;
+    this.lastAppliedFolderId = '__trash__';
+    await this.fileService.loadTrash();
+    this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
+    this.fileService.currentFolderId.set('__trash__');
+    this.fileService.searchResults.set(null);
+  }
+
+  private async applyStarred(): Promise<void> {
+    if (this.lastAppliedFolderId === '__starred__') return;
+    this.lastAppliedFolderId = '__starred__';
+    const results = await this.fileService.loadFavorites();
+    this.fileService.searchResults.set(results);
+    this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
+    this.fileService.currentFolderId.set('__starred__');
+  }
+
+  private lastAppliedFileId = '';
+
+  private async applyPreviewFile(fileId: string): Promise<void> {
+    if (this.lastAppliedFileId === fileId && this.previewFile()) return;
+    this.lastAppliedFileId = fileId;
+    // If file is already in the list, open immediately; otherwise fetch it
+    const existing = this.fileService.files().find(f => f.id === fileId);
+    const file = existing ?? await this.fileService.getFile(fileId);
+    this.openPreviewInternal(file);
   }
 
   // Walk up parent_id chain to build a full breadcrumb from root to folderId.
@@ -244,11 +308,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   selectAll(): void {
     const allIds = new Set(this.displayFiles().map(f => f.id));
     this.fileService.selectedIds.set(allIds);
-  }
-
-  private syncUrl(folderId: string): void {
-    const url = folderId === HOME_FOLDER_ID ? '/' : `/?folder=${encodeURIComponent(folderId)}`;
-    window.history.replaceState(null, '', url);
   }
 
   private async loadCurrentFolder(): Promise<void> {
@@ -310,11 +369,17 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       if (window.innerWidth <= 768) this.sidebarOpen.set(false);
       return;
     }
+    const folderId = this.fileService.currentFolderId();
+    this.lastAppliedFileId = file.id;
+    this.openPreviewInternal(file);
+    this.router.navigate(['folder', folderId, 'preview', file.id], { replaceUrl: false });
+  }
+
+  private openPreviewInternal(file: DriveFile): void {
     this.fileService.previewOpen.set(true);
     this.previewFile.set(file);
     const idx = this.mediaFiles().findIndex(f => f.id === file.id);
     this.preloadAdjacent(idx >= 0 ? idx : 0);
-    // Load parent folder's dirs for the move panel
     const crumbs = this.fileService.breadcrumb();
     const parentCrumb = crumbs.length >= 2 ? crumbs[crumbs.length - 2] : crumbs[0];
     this.previewParentFolderId.set(parentCrumb?.id ?? '1');
@@ -322,13 +387,21 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   closePreview(): void {
+    this.closePreviewSilent();
+    const folderId = this.fileService.currentFolderId();
+    this.lastAppliedFileId = '';
+    this.router.navigate(
+      folderId === HOME_FOLDER_ID ? ['folder', HOME_FOLDER_ID] : ['folder', folderId],
+      { replaceUrl: false }
+    );
+  }
+
+  private closePreviewSilent(): void {
     this.abortBackground();
     ++this.preloadGen;
     this.previewFileList.set(null);
     this.previewFile.set(null);
     this.fileService.previewOpen.set(false);
-    // Do not reload — folder files are already loaded (or loading in background).
-    // Reloading would reset files to page 1 and lose scroll position.
   }
 
   async saveCurrentSession(): Promise<void> {
@@ -369,7 +442,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       && this.fileService.files().length > 0;
 
     this.fileService.navigateToFolder(session.folder_id, session.folder_name);
-    this.syncUrl(session.folder_id);
+    this.lastAppliedFolderId = session.folder_id;
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
     this.resolveBreadcrumb(session.folder_id).then(crumbs => this.fileService.breadcrumb.set(crumbs));
 
@@ -387,7 +460,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.loadCurrentFolder();         // fire-and-forget
     }
 
-    this.openPreview(file);
+    this.lastAppliedFileId = file.id;
+    this.openPreviewInternal(file);
+    this.router.navigate(['folder', session.folder_id, 'preview', file.id]);
 
     // Phase 1: current image fully downloaded
     await this.preloadOneAndWait(file);
@@ -409,6 +484,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (idx === -1) return;
     this.previewFile.set(file);
     this.preloadAdjacent(idx);
+    this.syncPreviewUrl(file.id);
   }
 
   navigatePreview(delta: number): void {
@@ -417,7 +493,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (next >= 0 && next < files.length) {
       this.previewFile.set(files[next]);
       this.preloadAdjacent(next);
+      this.syncPreviewUrl(files[next].id);
     }
+  }
+
+  private syncPreviewUrl(fileId: string): void {
+    this.lastAppliedFileId = fileId;
+    const folderId = this.fileService.currentFolderId();
+    this.router.navigate(['folder', folderId, 'preview', fileId], { replaceUrl: true });
   }
 
   navigateAfterDeleteStart(file: DriveFile): void {
@@ -432,10 +515,12 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (!nextFile) return; // was the only file
     this.previewFile.set(nextFile);
     this.preloadAdjacent(idx < files.length - 1 ? idx : idx - 1);
+    this.syncPreviewUrl(nextFile.id);
   }
 
   onUndoDelete(fileId: string): void {
     this.pendingDeleteIds.update(s => { const n = new Set(s); n.delete(fileId); return n; });
+    this.syncPreviewUrl(fileId);
   }
 
   navigateAfterMoveStart(file: DriveFile): void {
@@ -447,11 +532,13 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (!nextFile) return;
     this.previewFile.set(nextFile);
     this.preloadAdjacent(idx < files.length - 1 ? idx : idx - 1);
+    this.syncPreviewUrl(nextFile.id);
   }
 
   onUndoMove(fileId: string): void {
     this.pendingMoveIds.update(s => { const n = new Set(s); n.delete(fileId); return n; });
-    this.previewFile.set(this.fileService.files().find(f => f.id === fileId) ?? this.previewFile());
+    const f = this.fileService.files().find(f => f.id === fileId) ?? this.previewFile();
+    if (f) { this.previewFile.set(f); this.syncPreviewUrl(f.id); }
   }
 
   async deletePreviewFile(file: DriveFile): Promise<void> {
@@ -486,27 +573,20 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.filterMenuOpen.update(v => !v);
   }
 
-  async showTrash(): Promise<void> {
-    await this.fileService.loadTrash();
-    this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
-    this.fileService.currentFolderId.set('__trash__');
-    this.fileService.searchResults.set(null);
-    this.syncUrl('__trash__');
+  showTrash(): void {
+    this.router.navigate(['trash']);
   }
 
-  async showStarred(): Promise<void> {
-    const results = await this.fileService.loadFavorites();
-    this.fileService.searchResults.set(results);
-    this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
-    this.fileService.currentFolderId.set('__starred__');
-    this.syncUrl('__starred__');
+  showStarred(): void {
+    this.router.navigate(['starred']);
   }
 
   navigateToFolder(id: string, name: string): void {
     this.fileService.clearSelection();
     this.fileService.navigateToFolder(id, name);
-    this.syncUrl(id);
+    this.lastAppliedFolderId = id;
     this.loadCurrentFolder();
+    this.router.navigate(['folder', id]);
   }
 
   async toggleFavorite(file: DriveFile): Promise<void> {
