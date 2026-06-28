@@ -1,7 +1,7 @@
 import {
   Component, OnInit, OnDestroy, inject, signal, computed, HostListener, ViewChild
 } from '@angular/core';
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule, DatePipe, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute, NavigationEnd, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
@@ -43,6 +43,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private previewCache = inject(PreviewCacheService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private location = inject(Location);
   private routeSub?: Subscription;
 
   readonly viewMode = signal<ViewMode>('grid');
@@ -496,7 +497,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private syncPreviewUrl(fileId: string): void {
     this.lastAppliedFileId = fileId;
     const folderId = this.fileService.currentFolderId();
-    this.router.navigate(['folder', folderId, 'preview', fileId], { replaceUrl: true });
+    this.location.replaceState(`/folder/${folderId}/preview/${fileId}`);
   }
 
   navigateAfterDeleteStart(file: DriveFile): void {
