@@ -518,6 +518,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   async showTrash(): Promise<void> {
+    this.closeSidebarOnMobile();
     await this.fileService.loadTrash();
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
     this.fileService.currentFolderId.set('__trash__');
@@ -526,6 +527,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   async showStarred(): Promise<void> {
+    this.closeSidebarOnMobile();
     const results = await this.fileService.loadFavorites();
     this.fileService.searchResults.set(results);
     this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
@@ -533,11 +535,16 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.router.navigate(['/folder', '__starred__'], { replaceUrl: true });
   }
 
+  closeSidebarOnMobile(): void {
+    if (window.innerWidth <= 768) this.sidebarOpen.set(false);
+  }
+
   navigateToFolder(id: string, name: string): void {
     this.fileService.clearSelection();
     this.fileService.navigateToFolder(id, name);
     this.router.navigate(['/folder', id]);
     this.loadCurrentFolder();
+    this.closeSidebarOnMobile();
   }
 
   async toggleFavorite(file: DriveFile): Promise<void> {
