@@ -24,6 +24,7 @@
 
 .sidebar-header {
   padding: 16px;
+  padding-top: max(16px, env(safe-area-inset-top));
   border-bottom: 1px solid var(--color-border);
 }
 
