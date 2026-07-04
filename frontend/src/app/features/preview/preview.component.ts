@@ -421,8 +421,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       if (!this.isSwiping) return;
       this.isSwiping = false;
       const dx = this.touchCurrentX - this.touchStartX;
+      const elapsed = Date.now() - this.touchStartTime;
+      const flickX = Math.abs(dx) / elapsed >= 0.3 && Math.abs(dx) >= 20;
       this.isTransitioning.set(true);
-      if (Math.abs(dx) > 80) {
+      if (Math.abs(dx) > 60 || flickX) {
         if (dx < 0 && this.hasNext()) {
           this.swipeOffsetX.set(-window.innerWidth);
           setTimeout(() => { this.swipeOffsetX.set(0); this.isTransitioning.set(false); this.next.emit(); }, 250);
@@ -462,15 +464,22 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
     const dx = this.touchCurrentX - this.touchStartX;
     const dy = this.touchCurrentY - this.touchStartY;
+    const elapsed = Date.now() - this.touchStartTime;
+    const vx = Math.abs(dx) / elapsed; // px/ms
+    const vy = Math.abs(dy) / elapsed;
+
+    // Quick flick: velocity ≥ 0.3 px/ms with at least 20px travel
+    const flickX = vx >= 0.3 && Math.abs(dx) >= 20;
+    const flickY = vy >= 0.3 && Math.abs(dy) >= 20;
 
     this.isTransitioning.set(true);
 
-    if (Math.abs(dy) > Math.abs(dx) && dy > 120) {
+    if (Math.abs(dy) > Math.abs(dx) && (dy > 80 || (flickY && dy > 0))) {
       // Swipe down → show folder picker
       this.swipeOffsetY.set(0);
       this.isTransitioning.set(false);
       this.folderPanelOpen.set(true);
-    } else if (Math.abs(dy) > Math.abs(dx) && dy < -150) {
+    } else if (Math.abs(dy) > Math.abs(dx) && (dy < -100 || (flickY && dy < 0))) {
       // Swipe up to delete
       this.swipeOffsetY.set(-window.innerHeight);
       setTimeout(() => {
@@ -478,7 +487,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         this.isTransitioning.set(false);
         this.initiateDelete();
       }, 300);
-    } else if (Math.abs(dx) > 80) {
+    } else if (Math.abs(dx) > Math.abs(dy) && (Math.abs(dx) > 60 || flickX)) {
       if (dx < 0 && this.hasNext()) {
         // Swipe left → next
         this.swipeOffsetX.set(-window.innerWidth);
@@ -503,7 +512,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
       // Tap detection: short touch with minimal movement → toggle fullscreen
-      const elapsed = Date.now() - this.touchStartTime;
       const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
       if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
         this.toggleFullscreen();
