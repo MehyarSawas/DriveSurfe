@@ -339,6 +339,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchStart(e: TouchEvent): void {
+    if (this.menuOpen()) { this.isSwiping = false; return; }
     this.isTwoFingerTouch.set(e.touches.length >= 2);
     if (e.touches.length === 2) {
       this.isPinching = true;
