@@ -41,14 +41,14 @@
           <svg viewBox="0 0 24 24"><path d="M2 5h20v14H2V5zm2 2v10h16V7H4zm2 2h12v6H6V9z"/></svg>
         }
       </button>
-      <!-- Three dots menu — rightmost action -->
+      <!-- Three dots menu — rightmost -->
       <div class="preview-menu-wrap" (click)="$event.stopPropagation()">
         <button class="icon-btn" (click)="menuOpen.update(v => !v)" title="More options">
           <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
         </button>
         @if (menuOpen()) {
           <div class="preview-menu" (click)="$event.stopPropagation()">
-            <button class="preview-menu-item" (click)="openRename()">
+            <button class="preview-menu-item" (click)="rename.emit(file()); menuOpen.set(false)">
               <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
               Rename
             </button>
@@ -195,24 +195,6 @@
       (closed)="folderPanelOpen.set(false)"
       (click)="$event.stopPropagation()"
     />
-  }
-
-  <!-- Rename dialog (inside preview so z-index works correctly) -->
-  @if (renamingFile(); as r) {
-    <div class="preview-rename-overlay" (click)="renamingFile.set(null)" (touchstart)="$event.stopPropagation()">
-      <div class="preview-rename-dialog" (click)="$event.stopPropagation()">
-        <p>Rename "{{ r.file.name }}"</p>
-        <input class="folder-name-input" type="text" [ngModel]="r.value"
-               (ngModelChange)="renamingFile.set({file: r.file, value: $event})"
-               (keydown.enter)="submitRename()"
-               (keydown.escape)="renamingFile.set(null)"
-               autofocus />
-        <div class="rename-actions">
-          <button class="btn-cancel" (click)="renamingFile.set(null)">Cancel</button>
-          <button class="btn-ok" (click)="submitRename()">Rename</button>
-        </div>
-      </div>
-    </div>
   }
 
   <!-- Session saved toast -->

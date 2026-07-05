@@ -5,7 +5,6 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DriveFile } from '../../core/models/drive-file.model';
-import { FileService } from '../../core/services/file.service';
 import { FolderPickerComponent } from '../../shared/components/folder-picker/folder-picker.component';
 import { PdfViewerComponent } from '../../shared/components/pdf-viewer/pdf-viewer.component';
 
@@ -61,7 +60,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
   readonly menuOpen = signal(false);
-  readonly renamingFile = signal<{file: DriveFile, value: string} | null>(null);
   readonly thumbnailBarOpen = signal(false);
   readonly thumbScrollLeft = signal(0);
   readonly thumbAtEnd = signal(false);
@@ -150,7 +148,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     return `/api/files/${fileId}/preview?width=${w}&height=${h}`;
   }
 
-  constructor(private zone: NgZone, private el: ElementRef, private fileService: FileService) {
+  constructor(private zone: NgZone, private el: ElementRef) {
     let prevFileId = '';
     effect(() => {
       const f = this.file();
@@ -341,7 +339,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchStart(e: TouchEvent): void {
-    if (this.menuOpen()) { this.isSwiping = false; return; }
     this.isTwoFingerTouch.set(e.touches.length >= 2);
     if (e.touches.length === 2) {
       this.isPinching = true;
@@ -518,7 +515,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.swipeOffsetY.set(0);
       // Tap detection: short touch with minimal movement → toggle fullscreen
       const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
-      if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch() && !this.menuOpen()) {
+      if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
         this.toggleFullscreen();
       }
     }
@@ -599,21 +596,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     const fileId = this.pendingDeleteFile()?.id;
     this.clearPending();
     if (fileId) this.undoDelete.emit(fileId);
-  }
-
-  openRename(): void {
-    const f = this.file();
-    this.renamingFile.set({ file: f, value: f.name });
-    this.menuOpen.set(false);
-  }
-
-  async submitRename(): Promise<void> {
-    const r = this.renamingFile();
-    const name = r?.value.trim();
-    if (!r || !name) return;
-    await this.fileService.renameFile(r.file.id, name);
-    this.rename.emit({ ...r.file, name });
-    this.renamingFile.set(null);
   }
 
   onSaveSession(): void {
