@@ -1,4 +1,4 @@
-import { Component, input, output, HostListener, ElementRef, NgZone, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, input, output, ElementRef, NgZone, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DriveFile } from '../../../../core/models/drive-file.model';
 
@@ -8,6 +8,7 @@ import { DriveFile } from '../../../../core/models/drive-file.model';
   imports: [CommonModule],
   templateUrl: './file-grid.component.html',
   styleUrls: ['./file-grid.component.scss'],
+  host: { '(document:click)': 'onDocClick()' },
 })
 export class FileGridComponent implements AfterViewInit, OnDestroy {
   readonly files = input.required<DriveFile[]>();
@@ -150,7 +151,6 @@ export class FileGridComponent implements AfterViewInit, OnDestroy {
     this.stopAutoScroll();
   }
 
-  @HostListener('document:click')
   onDocClick(): void { this.openMenuId = null; }
 
   toggleMenu(e: Event, fileId: string): void {

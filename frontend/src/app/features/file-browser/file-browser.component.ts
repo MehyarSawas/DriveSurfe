@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, OnDestroy, inject, signal, computed, HostListener, ViewChild
+  Component, OnInit, OnDestroy, inject, signal, computed, ViewChild
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -33,6 +33,10 @@ import { FolderPickerComponent } from '../../shared/components/folder-picker/fol
   ],
   templateUrl: './file-browser.component.html',
   styleUrls: ['./file-browser.component.scss'],
+  host: {
+    '(document:click)': 'onDocClick()',
+    '(window:keydown)': 'onKeyDown($event)',
+  },
 })
 export class FileBrowserComponent implements OnInit, OnDestroy {
   protected fileService = inject(FileService);
@@ -688,14 +692,12 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.auth.logout();
   }
 
-  @HostListener('document:click')
   onDocClick(): void {
     this.filterMenuOpen.set(false);
     this.viewMenuOpen.set(false);
     this.statsPopoverOpen.set(false);
   }
 
-  @HostListener('window:keydown', ['$event'])
   onKeyDown(e: KeyboardEvent): void {
     if (this.previewFile()) return;
 

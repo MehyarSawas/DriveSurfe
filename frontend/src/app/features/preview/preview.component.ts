@@ -1,5 +1,5 @@
 import {
-  Component, input, output, signal, computed, HostListener,
+  Component, input, output, signal, computed,
   ElementRef, ViewChild, OnDestroy, AfterViewInit, NgZone, effect
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -16,6 +16,7 @@ type DeletePhase = 'idle' | 'confirming' | 'countdown';
   imports: [CommonModule, FormsModule, FolderPickerComponent, PdfViewerComponent],
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],
+  host: { '(window:keydown)': 'onKeyDown($event)' },
 })
 export class PreviewComponent implements OnDestroy, AfterViewInit {
   @ViewChild('mediaEl') mediaEl?: ElementRef<HTMLElement>;
@@ -325,7 +326,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
-  @HostListener('window:keydown', ['$event'])
   onKeyDown(e: KeyboardEvent): void {
     switch (e.key) {
       case 'ArrowLeft': this.prev.emit(); break;

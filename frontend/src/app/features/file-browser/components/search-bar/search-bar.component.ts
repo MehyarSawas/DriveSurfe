@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, ViewChild, input, output, signal } from '@angular/core';
+import { Component, ElementRef, ViewChild, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { debounceTime, distinctUntilChanged, Subject } from 'rxjs';
 
@@ -53,6 +53,7 @@ import { debounceTime, distinctUntilChanged, Subject } from 'rxjs';
     </div>
   `,
   styleUrls: ['./search-bar.component.scss'],
+  host: { '(document:click)': 'onDocClick()' },
 })
 export class SearchBarComponent {
   @ViewChild('inputEl') inputEl!: ElementRef<HTMLInputElement>;
@@ -74,7 +75,6 @@ export class SearchBarComponent {
     });
   }
 
-  @HostListener('document:click')
   onDocClick(): void { this.dropdownOpen.set(false); }
 
   onInput(value: string): void {
