@@ -724,13 +724,13 @@
   padding: 0 8px;
 }
 
-@media (hover: none) {
+@media (hover: none) and (max-width: 768px) {
   .nav-arrow { display: none; }
   .swipe-hint { display: none; }
   .footer-filename { display: block; }
 }
 
-@media (hover: hover) {
+@media (hover: hover), (min-width: 769px) {
   .swipe-hint { display: none; }
   .footer-filename { display: none; }
 }
