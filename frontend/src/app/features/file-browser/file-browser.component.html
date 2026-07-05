@@ -402,19 +402,6 @@
   <div class="bulk-toast">{{ bulkMoveToast() }}</div>
 }
 
-<!-- Bulk move conflict prompt -->
-@if (moveConflictPending()) {
-  <div class="rename-overlay" (click)="moveConflictPending.set(null)">
-    <div class="rename-dialog" (click)="$event.stopPropagation()">
-      <p>Files already exist in the destination</p>
-      <p class="rename-sub">What should happen when a file with the same name exists?</p>
-      <div class="rename-actions">
-        <button class="btn-cancel" (click)="moveConflictPending.set(null)">Cancel</button>
-        <button class="btn-ok btn-secondary" (click)="executeMoveWithStrategy('skip')">Skip</button>
-        <button class="btn-ok" (click)="executeMoveWithStrategy('override')">Override</button>
-      </div>
-    </div>
-  </div>
-}
+
 
 
