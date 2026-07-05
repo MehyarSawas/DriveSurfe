@@ -208,6 +208,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   previewParentFolderId = signal('');
   previewParentFolderName = signal('');
   movingFiles = signal<DriveFile[] | null>(null);
+  moveConflictPending = signal<{files: DriveFile[], folderId: string} | null>(null);
 
   readonly recentMoveFolder = signal<{id: string; name: string; path: string} | null>(
     (() => { try { const s = localStorage.getItem('recentMoveFolder'); return s ? JSON.parse(s) : null; } catch { return null; } })()
@@ -571,7 +572,23 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const files = this.movingFiles();
     this.movingFiles.set(null);
     if (!files) return;
-    // Snapshot next file BEFORE moveFile removes it from mediaFiles()
+
+    if (files.length > 1) {
+      // Show conflict strategy prompt before bulk move
+      this.moveConflictPending.set({ files, folderId: folder.id });
+      return;
+    }
+    await this.executeMoveFiles(files, folder.id, 'override');
+  }
+
+  async executeMoveWithStrategy(strategy: 'override' | 'skip'): Promise<void> {
+    const pending = this.moveConflictPending();
+    this.moveConflictPending.set(null);
+    if (!pending) return;
+    await this.executeMoveFiles(pending.files, pending.folderId, strategy);
+  }
+
+  private async executeMoveFiles(files: DriveFile[], folderId: string, strategy: 'override' | 'skip'): Promise<void> {
     let nextAfterMove: DriveFile | null = null;
     if (files.length === 1 && this.previewFile()?.id === files[0].id) {
       const all = this.mediaFiles();
@@ -579,7 +596,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       nextAfterMove = all[idx + 1] ?? all[idx - 1] ?? null;
     }
 
-    const results = await Promise.allSettled(files.map(f => this.fileService.moveFile(f.id, folder.id).then(() => f.id)));
+    const results = await Promise.allSettled(
+      files.map(f => this.fileService.moveFile(f.id, folderId, strategy).then(() => f.id))
+    );
     const failedIds = new Set(
       results.flatMap((r, i) => r.status === 'rejected' ? [files[i].id] : [])
     );
@@ -589,7 +608,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       setTimeout(() => this.bulkMoveToast.set(null), 6000);
     } else {
       this.fileService.clearSelection();
-      this.saveRecentMoveFolder(folder, this._pendingPickerPath);
+      this.saveRecentMoveFolder({ id: folderId, name: '' } as DriveFile, this._pendingPickerPath);
     }
 
     if (files.length === 1 && this.previewFile()?.id === files[0].id) {

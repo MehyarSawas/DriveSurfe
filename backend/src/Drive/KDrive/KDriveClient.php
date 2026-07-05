@@ -163,11 +163,11 @@ final class KDriveClient implements DriveInterface
         $this->post("{$driveId}/trash/{$fileId}/restore");
     }
 
-    public function moveFile(string $fileId, string $destinationFolderId): void
+    public function moveFile(string $fileId, string $destinationFolderId, string $strategy = 'override'): void
     {
-        $driveId = $this->getDriveId();
-        // Response is a CancelResource {cancel_id, valid_until}, not file data
-        $this->post("{$driveId}/files/{$fileId}/move/{$destinationFolderId}", ['conflict' => 'rename'], self::API_V3);
+        $driveId  = $this->getDriveId();
+        $conflict = $strategy === 'skip' ? 'rename' : 'force';
+        $this->post("{$driveId}/files/{$fileId}/move/{$destinationFolderId}", ['conflict' => $conflict], self::API_V3);
     }
 
     public function renameFile(string $fileId, string $name): array

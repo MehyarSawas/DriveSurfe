@@ -635,10 +635,28 @@ ds-search-bar {
   .folder-name-input { flex: none; }
 }
 
+.rename-sub {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: var(--color-text-secondary) !important;
+}
+
 .rename-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--color-hover);
+  color: var(--color-text);
+  transition: background var(--transition);
+
+  &:hover { background: var(--color-border); }
 }
 
 .btn-cancel {

@@ -253,8 +253,8 @@ export class FileService {
     return folder;
   }
 
-  async moveFile(fileId: string, destinationFolderId: string): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/files/${fileId}/move`, { destination_folder_id: destinationFolderId }));
+  async moveFile(fileId: string, destinationFolderId: string, strategy: 'override' | 'skip' = 'override'): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/files/${fileId}/move`, { destination_folder_id: destinationFolderId, strategy }));
     const update = (files: DriveFile[]) => files.filter(f => f.id !== fileId);
     this.files.update(update);
     if (this.searchResults() !== null) {

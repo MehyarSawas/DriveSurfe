@@ -329,6 +329,7 @@
           (favorite)="toggleFavorite($event)"
           (download)="fileService.downloadFile($event.id, $event.name)"
           (delete)="fileService.delete($event)"
+          (rename)="handleRename($event)"
           (move)="openMoveForFile($event)"
         />
       }
@@ -392,12 +393,28 @@
     (undoMove)="onUndoMove($event)"
     (moveFile)="handleMove($event)"
     (moveFilePath)="onPickerFolderPath($event)"
+    (rename)="handleRename($event)"
     (createFolder)="handleCreateFolderFromPreview($event)"
   />
 }
 
 @if (bulkMoveToast()) {
   <div class="bulk-toast">{{ bulkMoveToast() }}</div>
+}
+
+<!-- Bulk move conflict prompt -->
+@if (moveConflictPending()) {
+  <div class="rename-overlay" (click)="moveConflictPending.set(null)">
+    <div class="rename-dialog" (click)="$event.stopPropagation()">
+      <p>Files already exist in the destination</p>
+      <p class="rename-sub">What should happen when a file with the same name exists?</p>
+      <div class="rename-actions">
+        <button class="btn-cancel" (click)="moveConflictPending.set(null)">Cancel</button>
+        <button class="btn-ok btn-secondary" (click)="executeMoveWithStrategy('skip')">Skip</button>
+        <button class="btn-ok" (click)="executeMoveWithStrategy('override')">Override</button>
+      </div>
+    </div>
+  </div>
 }
 
 

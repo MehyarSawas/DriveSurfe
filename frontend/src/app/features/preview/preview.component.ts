@@ -48,6 +48,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly undoMove = output<string>();
   readonly moveFile = output<{file: DriveFile, folderId: string}>();
   readonly moveFilePath = output<string>();
+  readonly rename = output<DriveFile>();
   readonly stripScrolled = output<{from: number, to: number}>();
   readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
 
@@ -57,6 +58,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly deletePhase = signal<DeletePhase>('idle');
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
+  readonly menuOpen = signal(false);
   readonly thumbnailBarOpen = signal(false);
   readonly thumbScrollLeft = signal(0);
   readonly thumbAtEnd = signal(false);
@@ -328,7 +330,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     switch (e.key) {
       case 'ArrowLeft': this.prev.emit(); break;
       case 'ArrowRight': this.next.emit(); break;
-      case 'Escape': this.requestClose(); break;
+      case 'Escape': if (this.menuOpen()) { this.menuOpen.set(false); } else { this.requestClose(); } break;
       case 'Delete': this.initiateDelete(); break;
       case 'f': case 'F': this.toggleFullscreen(); break;
       case '+': case '=': this.zoomIn(); break;
