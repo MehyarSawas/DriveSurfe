@@ -677,6 +677,60 @@
   svg { width: 18px; height: 18px; fill: white; }
 }
 
+/* Rename dialog inside preview */
+.preview-rename-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-rename-dialog {
+  background: #1e1e1e;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 24px;
+  width: 320px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  p { font-size: 16px; font-weight: 500; color: #fff; margin: 0; word-break: break-all; }
+
+  .folder-name-input {
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    box-sizing: border-box;
+    &:focus { outline: none; border-color: #4285f4; }
+  }
+
+  .rename-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .btn-cancel, .btn-ok {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+  }
+  .btn-cancel { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
+  .btn-ok { background: #4285f4; color: #fff; }
+}
+
 /* Three-dot menu */
 .preview-menu-wrap {
   position: relative;
