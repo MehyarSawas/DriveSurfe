@@ -515,7 +515,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.swipeOffsetY.set(0);
       // Tap detection: short touch with minimal movement → toggle fullscreen
       const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
-      if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
+      if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch() && !this.menuOpen()) {
         this.toggleFullscreen();
       }
     }
