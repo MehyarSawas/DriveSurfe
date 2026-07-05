@@ -348,7 +348,7 @@
 .preview-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 0 20px;
   height: 56px;
   background: rgba(0,0,0,0.6);
@@ -365,6 +365,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 
   .icon-btn {
     color: rgba(255,255,255,0.8);
