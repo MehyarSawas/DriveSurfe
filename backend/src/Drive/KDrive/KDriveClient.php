@@ -166,7 +166,7 @@ final class KDriveClient implements DriveInterface
     public function moveFile(string $fileId, string $destinationFolderId, string $strategy = 'override'): void
     {
         $driveId  = $this->getDriveId();
-        $conflict = $strategy === 'skip' ? 'skip' : 'force';
+        $conflict = $strategy === 'skip' ? 'error' : 'rename';
         $this->post("{$driveId}/files/{$fileId}/move/{$destinationFolderId}", ['conflict' => $conflict], self::API_V3);
     }
 
