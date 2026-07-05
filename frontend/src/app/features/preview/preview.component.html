@@ -24,24 +24,6 @@
       <button class="icon-btn" (click)="folderPanelOpen.set(true)" title="Move to folder">
         <svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM16 11h-5V8l-5 5 5 5v-3h5z"/></svg>
       </button>
-      <!-- Three dots menu -->
-      <div class="preview-menu-wrap" (click)="$event.stopPropagation()">
-        <button class="icon-btn" (click)="menuOpen.update(v => !v)" title="More options">
-          <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
-        </button>
-        @if (menuOpen()) {
-          <div class="preview-menu" (click)="$event.stopPropagation()">
-            <button class="preview-menu-item" (click)="rename.emit(file()); menuOpen.set(false)">
-              <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-              Rename
-            </button>
-            <button class="preview-menu-item" [class.active]="sessionSaved()" (click)="onSaveSession(); menuOpen.set(false)">
-              <svg viewBox="0 0 24 24"><path d="M12 2C10.34 2 9 3.34 9 5c0 1.31.84 2.41 2 2.83V8H8v2h3v7.93C8.17 17.44 6 14.97 6 12H4c0 4.41 3.59 8 8 8s8-3.59 8-8h-2c0 2.97-2.17 5.44-5 5.93V10h3V8h-3V7.83C14.16 7.41 15 6.31 15 5c0-1.66-1.34-3-3-3zm0 2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1z"/></svg>
-              Save position
-            </button>
-          </div>
-        }
-      </div>
       <button class="icon-btn danger" (click)="initiateDelete()" title="Delete">
         <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
       </button>
@@ -59,6 +41,24 @@
           <svg viewBox="0 0 24 24"><path d="M2 5h20v14H2V5zm2 2v10h16V7H4zm2 2h12v6H6V9z"/></svg>
         }
       </button>
+      <!-- Three dots menu — rightmost action -->
+      <div class="preview-menu-wrap" (click)="$event.stopPropagation()">
+        <button class="icon-btn" (click)="menuOpen.update(v => !v)" title="More options">
+          <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+        </button>
+        @if (menuOpen()) {
+          <div class="preview-menu" (click)="$event.stopPropagation()">
+            <button class="preview-menu-item" (click)="rename.emit(file()); menuOpen.set(false)">
+              <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+              Rename
+            </button>
+            <button class="preview-menu-item" [class.active]="sessionSaved()" (click)="onSaveSession(); menuOpen.set(false)">
+              <svg viewBox="0 0 24 24"><path d="M12 2C10.34 2 9 3.34 9 5c0 1.31.84 2.41 2 2.83V8H8v2h3v7.93C8.17 17.44 6 14.97 6 12H4c0 4.41 3.59 8 8 8s8-3.59 8-8h-2c0 2.97-2.17 5.44-5 5.93V10h3V8h-3V7.83C14.16 7.41 15 6.31 15 5c0-1.66-1.34-3-3-3zm0 2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1z"/></svg>
+              Save position
+            </button>
+          </div>
+        }
+      </div>
     </div>
   </header>
 
