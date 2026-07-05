@@ -682,6 +682,19 @@
   position: relative;
 }
 
+.preview-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+}
+
+.preview-menu-toplevel {
+  position: fixed;
+  top: calc(56px + env(safe-area-inset-top));
+  right: 16px;
+  z-index: 1051;
+}
+
 .preview-menu {
   position: absolute;
   top: calc(100% + 4px);
