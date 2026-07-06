@@ -16,7 +16,7 @@ type DeletePhase = 'idle' | 'confirming' | 'countdown';
   imports: [CommonModule, FormsModule, FolderPickerComponent, PdfViewerComponent],
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],
-  host: { '(window:keydown)': 'onKeyDown($event)' },
+  host: { '(window:keydown)': 'onKeyDown($event)', '(document:click)': 'onDocClick()' },
 })
 export class PreviewComponent implements OnDestroy, AfterViewInit {
   @ViewChild('mediaEl') mediaEl?: ElementRef<HTMLElement>;
@@ -537,9 +537,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
+  onDocClick(): void { this.titlePopupOpen.set(false); }
+
   onTitleClick(el: HTMLElement): void {
     if (el.scrollWidth > el.offsetWidth) {
-      this.titlePopupOpen.set(true);
+      this.titlePopupOpen.update(v => !v);
     }
   }
 
