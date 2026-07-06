@@ -63,6 +63,26 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: default;
+  min-width: 0;
+}
+
+.title-popup {
+  position: fixed;
+  top: calc(56px + env(safe-area-inset-top) + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(80vw, 480px);
+  background: rgba(30, 30, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.92);
+  word-break: break-all;
+  z-index: 1150;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 
 .header-actions {

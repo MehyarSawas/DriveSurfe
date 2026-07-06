@@ -61,6 +61,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
   readonly menuOpen = signal(false);
+  readonly titlePopupOpen = signal(false);
   readonly thumbnailBarOpen = signal(false);
   readonly thumbScrollLeft = signal(0);
   readonly thumbAtEnd = signal(false);
@@ -159,6 +160,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
       this.folderPanelOpen.set(false);
+      this.titlePopupOpen.set(false);
       this.isPinching = false;
       this.isSwiping = false;
       if (isNewFile) {
@@ -331,7 +333,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     switch (e.key) {
       case 'ArrowLeft': this.prev.emit(); break;
       case 'ArrowRight': this.next.emit(); break;
-      case 'Escape': if (this.menuOpen()) { this.menuOpen.set(false); } else { this.requestClose(); } break;
+      case 'Escape': if (this.menuOpen()) { this.menuOpen.set(false); } else if (this.titlePopupOpen()) { this.titlePopupOpen.set(false); } else { this.requestClose(); } break;
       case 'Delete': this.initiateDelete(); break;
       case 'f': case 'F': this.toggleFullscreen(); break;
       case '+': case '=': this.zoomIn(); break;
@@ -532,6 +534,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
+    }
+  }
+
+  onTitleClick(el: HTMLElement): void {
+    if (el.scrollWidth > el.offsetWidth) {
+      this.titlePopupOpen.update(v => !v);
     }
   }
 
