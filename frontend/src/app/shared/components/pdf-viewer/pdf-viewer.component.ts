@@ -1,6 +1,6 @@
 import {
   Component, input, OnChanges, SimpleChanges,
-  ElementRef, ViewChild, signal, NgZone, computed
+  ElementRef, ViewChild, signal, NgZone
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -12,14 +12,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/pdf.worker.min.mjs';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="pdf-scroll" #scrollEl [class.zoomed]="zoom() > 1">
+    <div class="pdf-scroll" #scrollEl [class.zoom-locked]="zoom() > 1">
       @if (loading()) {
         <div class="pdf-spinner-wrap"><div class="pdf-spinner"></div></div>
       }
       @if (error()) {
         <div class="pdf-error">{{ error() }}</div>
       }
-      <div class="pdf-pages" #pagesEl [style.transform]="pagesTransform()"></div>
+      <div class="pdf-pages" #pagesEl></div>
     </div>
   `,
   styles: [`
@@ -30,7 +30,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/pdf.worker.min.mjs';
       height: 100%;
       overflow-y: auto;
       overflow-x: hidden;
-      &.zoomed { overflow-x: auto; }
+      &.zoom-locked { overflow: hidden; }
       background: #404040;
       display: flex;
       flex-direction: column;
@@ -64,8 +64,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/pdf.worker.min.mjs';
       gap: 12px;
       padding: 16px 0;
       width: 100%;
-      transform-origin: top center;
-      transition: transform 0.05s linear;
     }
 
     .pdf-error {
@@ -84,11 +82,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = '/assets/pdf.worker.min.mjs';
 export class PdfViewerComponent implements OnChanges {
   readonly fileId = input.required<string>();
   readonly zoom = input(1);
-
-  readonly pagesTransform = computed(() => {
-    const z = this.zoom();
-    return z === 1 ? 'none' : `scale(${z})`;
-  });
 
   @ViewChild('pagesEl') pagesEl!: ElementRef<HTMLDivElement>;
 

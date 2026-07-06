@@ -383,11 +383,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       const newTx = midX - this.pinchCx - imageX * newZoom;
       const newTy = midY - this.pinchCy - imageY * newZoom;
       this.zoom.set(newZoom);
-      // For PDFs, don't offset the container — the PDF viewer handles pan internally
-      if (!this.isPdf()) {
-        this.swipeOffsetX.set(newTx);
-        this.swipeOffsetY.set(newTy);
-      }
+      this.swipeOffsetX.set(newTx);
+      this.swipeOffsetY.set(newTy);
       return;
     }
 
@@ -628,8 +625,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     const x = this.swipeOffsetX();
     const y = this.swipeOffsetY();
     const z = this.zoom();
-    // PDF zoom is applied inside PdfViewerComponent; don't scale the container
-    if (this.isPdf()) return `translate(${x}px, ${y}px)`;
     return `translate(${x}px, ${y}px) scale(${z})`;
   }
 
