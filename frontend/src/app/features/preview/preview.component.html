@@ -192,6 +192,7 @@
 
   <!-- Folder picker (swipe down or header button) -->
   @if (titlePopupOpen()) {
+    <div class="title-popup-backdrop" (click)="titlePopupOpen.set(false)" (touchstart)="titlePopupOpen.set(false)"></div>
     <div class="title-popup">{{ file().name }}</div>
   }
 
