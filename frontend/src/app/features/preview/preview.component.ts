@@ -370,8 +370,29 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchMove(e: TouchEvent): void {
+    // Pinch handled for all file types
+    if (this.isPinching && e.touches.length === 2) {
+      e.preventDefault();
+      const [t1, t2] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const newZoom = Math.min(Math.max(this.pinchStartZoom * (dist / this.pinchStartDist), 0.5), 4);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      const imageX = (this.pinchStartMidX - this.pinchCx - this.pinchStartTx) / this.pinchStartZoom;
+      const imageY = (this.pinchStartMidY - this.pinchCy - this.pinchStartTy) / this.pinchStartZoom;
+      const newTx = midX - this.pinchCx - imageX * newZoom;
+      const newTy = midY - this.pinchCy - imageY * newZoom;
+      this.zoom.set(newZoom);
+      // For PDFs, don't offset the container — the PDF viewer handles pan internally
+      if (!this.isPdf()) {
+        this.swipeOffsetX.set(newTx);
+        this.swipeOffsetY.set(newTy);
+      }
+      return;
+    }
+
     if (this.isPdf()) {
-      // Only track horizontal movement; don't preventDefault so PDF scrolls vertically
+      // Single finger on PDF: only track horizontal for swipe-to-navigate; vertical scrolls natively
       if (!this.isSwiping) return;
       const t = e.touches[0];
       const dx = t.clientX - this.touchStartX;
@@ -383,30 +404,14 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       }
       return;
     }
-    if (!this.isPinching && !this.isSwiping) return; // touch started outside media-area (e.g. strip)
+
+    if (!this.isPinching && !this.isSwiping) return;
     e.preventDefault();
-    if (this.isPinching && e.touches.length === 2) {
-      const [t1, t2] = [e.touches[0], e.touches[1]];
-      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-      const newZoom = Math.min(Math.max(this.pinchStartZoom * (dist / this.pinchStartDist), 0.5), 4);
-      const midX = (t1.clientX + t2.clientX) / 2;
-      const midY = (t1.clientY + t2.clientY) / 2;
-      // Keep the image point under the pinch focal point fixed as zoom changes
-      const imageX = (this.pinchStartMidX - this.pinchCx - this.pinchStartTx) / this.pinchStartZoom;
-      const imageY = (this.pinchStartMidY - this.pinchCy - this.pinchStartTy) / this.pinchStartZoom;
-      const newTx = midX - this.pinchCx - imageX * newZoom;
-      const newTy = midY - this.pinchCy - imageY * newZoom;
-      this.zoom.set(newZoom);
-      this.swipeOffsetX.set(newTx);
-      this.swipeOffsetY.set(newTy);
-      return;
-    }
     if (!this.isSwiping) return;
     const t = e.touches[0];
     this.touchCurrentX = t.clientX;
     this.touchCurrentY = t.clientY;
 
-    // While zoomed in, don't drag the whole image off-screen via swipe gestures
     if (this.zoom() > 1) return;
 
     const dx = t.clientX - this.touchStartX;
@@ -623,6 +628,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     const x = this.swipeOffsetX();
     const y = this.swipeOffsetY();
     const z = this.zoom();
+    // PDF zoom is applied inside PdfViewerComponent; don't scale the container
+    if (this.isPdf()) return `translate(${x}px, ${y}px)`;
     return `translate(${x}px, ${y}px) scale(${z})`;
   }
 

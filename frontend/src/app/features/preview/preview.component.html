@@ -112,7 +112,7 @@
           Your browser does not support video playback.
         </video>
       } @else if (isPdf()) {
-        <ds-pdf-viewer [fileId]="file().id" class="pdf-viewer-wrap" />
+        <ds-pdf-viewer [fileId]="file().id" [zoom]="zoom()" class="pdf-viewer-wrap" />
       } @else if (!previewFailed()) {
         @if (isLoading()) {
           <div class="media-loading">
