@@ -92,6 +92,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private touchStartX = 0;
   private touchStartY = 0;
   private touchStartTime = 0;
+  private lastTapTime = 0;
   private touchCurrentX = 0;
   private touchCurrentY = 0;
   private isSwiping = false;
@@ -517,10 +518,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     } else {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
-      // Tap detection: short touch with minimal movement → toggle fullscreen
+      // Double-tap detection: two short taps within 300ms with minimal movement
       const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
       if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
-        this.toggleFullscreen();
+        const now = Date.now();
+        if (now - this.lastTapTime < 300) {
+          this.toggleFullscreen();
+          this.lastTapTime = 0;
+        } else {
+          this.lastTapTime = now;
+        }
       }
     }
   }
