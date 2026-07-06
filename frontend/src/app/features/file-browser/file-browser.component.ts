@@ -602,6 +602,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.bulkMoveToast.set(msg);
       setTimeout(() => this.bulkMoveToast.set(null), 6000);
     } else {
+      const msg = files.length === 1 ? 'Copy created' : `${files.length} copies created`;
+      this.bulkMoveToast.set(msg);
+      setTimeout(() => this.bulkMoveToast.set(null), 4000);
       this.saveRecentMoveFolder({ id: folderId, name: '' } as DriveFile, this._pendingPickerPath);
     }
   }
