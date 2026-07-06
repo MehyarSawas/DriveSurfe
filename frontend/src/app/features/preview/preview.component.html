@@ -7,9 +7,6 @@
     </button>
 
     <span class="file-title" #titleEl (click)="onTitleClick(titleEl)">{{ file().name }}</span>
-    @if (titlePopupOpen()) {
-      <div class="title-popup" (click)="$event.stopPropagation()">{{ file().name }}</div>
-    }
 
     <div class="header-actions">
       <button class="icon-btn" [class.starred]="file().is_favorite" (click)="favorite.emit(file())" [title]="file().is_favorite ? 'Remove star' : 'Star'">
@@ -181,7 +178,7 @@
   <!-- Footer -->
   <footer class="preview-footer" (click)="$event.stopPropagation()">
     <div class="swipe-hint">Swipe up to delete · Swipe left/right to navigate</div>
-    <span class="footer-filename">{{ file().name }}</span>
+    <span class="footer-filename" #footerTitleEl (click)="onTitleClick(footerTitleEl)">{{ file().name }}</span>
     <div class="zoom-controls">
       <button class="icon-btn" (click)="zoomOut()" title="Zoom out (-)">
         <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7V9z"/></svg>
@@ -194,6 +191,11 @@
   </footer>
 
   <!-- Folder picker (swipe down or header button) -->
+  @if (titlePopupOpen()) {
+    <div class="title-popup-backdrop" (click)="titlePopupOpen.set(false)" (touchstart)="titlePopupOpen.set(false)"></div>
+    <div class="title-popup">{{ file().name }}</div>
+  }
+
   @if (folderPanelOpen()) {
     <ds-folder-picker
       [startBreadcrumb]="breadcrumb().slice(0, -1)"

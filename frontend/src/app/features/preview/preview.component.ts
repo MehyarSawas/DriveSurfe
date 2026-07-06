@@ -539,7 +539,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   onTitleClick(el: HTMLElement): void {
     if (el.scrollWidth > el.offsetWidth) {
-      this.titlePopupOpen.update(v => !v);
+      this.titlePopupOpen.set(true);
     }
   }
 
