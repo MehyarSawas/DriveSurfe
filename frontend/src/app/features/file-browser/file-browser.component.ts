@@ -212,6 +212,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   previewParentFolderId = signal('');
   previewParentFolderName = signal('');
   movingFiles = signal<DriveFile[] | null>(null);
+  copyingFiles = signal<DriveFile[] | null>(null);
 
   readonly recentMoveFolder = signal<{id: string; name: string; path: string} | null>(
     (() => { try { const s = localStorage.getItem('recentMoveFolder'); return s ? JSON.parse(s) : null; } catch { return null; } })()
@@ -569,6 +570,40 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const ids = [...this.fileService.selectedIds()];
     const files = ids.map(id => this.displayFiles().find(f => f.id === id)).filter(Boolean) as DriveFile[];
     this.movingFiles.set(files);
+  }
+
+  openCopyForFile(file: DriveFile): void {
+    this.copyingFiles.set([file]);
+  }
+
+  openBulkCopy(): void {
+    const ids = [...this.fileService.selectedIds()];
+    const files = ids.map(id => this.displayFiles().find(f => f.id === id)).filter(Boolean) as DriveFile[];
+    this.copyingFiles.set(files);
+  }
+
+  async onCopyFolderSelected(folder: DriveFile): Promise<void> {
+    const files = this.copyingFiles();
+    this.copyingFiles.set(null);
+    if (!files) return;
+    await this.executeCopyFiles(files, folder.id);
+  }
+
+  private async executeCopyFiles(files: DriveFile[], folderId: string): Promise<void> {
+    const results = await Promise.allSettled(
+      files.map(f => this.fileService.copyFile(f.id, folderId))
+    );
+    const failed = results.filter(r => r.status === 'rejected').length;
+    const copied = files.length - failed;
+    if (failed > 0) {
+      const msg = copied > 0
+        ? `${copied} copied, ${failed} failed`
+        : `Copy failed for all ${failed} files`;
+      this.bulkMoveToast.set(msg);
+      setTimeout(() => this.bulkMoveToast.set(null), 6000);
+    } else {
+      this.saveRecentMoveFolder({ id: folderId, name: '' } as DriveFile, this._pendingPickerPath);
+    }
   }
 
   async onPickerFolderSelected(folder: DriveFile): Promise<void> {

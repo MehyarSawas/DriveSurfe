@@ -50,6 +50,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly moveFile = output<{file: DriveFile, folderId: string}>();
   readonly moveFilePath = output<string>();
   readonly rename = output<DriveFile>();
+  readonly copy = output<DriveFile>();
   readonly stripScrolled = output<{from: number, to: number}>();
   readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
 
@@ -339,7 +340,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchStart(e: TouchEvent): void {
-    if (this.menuOpen()) { this.isSwiping = false; return; }
+    if (this.menuOpen()) { this.menuOpen.set(false); this.isSwiping = false; return; }
     this.isTwoFingerTouch.set(e.touches.length >= 2);
     if (e.touches.length === 2) {
       this.isPinching = true;

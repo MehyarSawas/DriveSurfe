@@ -170,6 +170,17 @@ final class KDriveClient implements DriveInterface
         $this->post("{$driveId}/files/{$fileId}/move/{$destinationFolderId}", ['conflict' => $conflict], self::API_V3);
     }
 
+    public function copyFile(string $fileId, string $destinationFolderId): array
+    {
+        $driveId = $this->getDriveId();
+        $data = $this->post("{$driveId}/files/{$fileId}/duplicate", [], self::API_V3);
+        $copy = $data['data'] ?? [];
+        if (!empty($copy['id']) && (string)$copy['id'] !== (string)$destinationFolderId) {
+            $this->post("{$driveId}/files/{$copy['id']}/move/{$destinationFolderId}", ['conflict' => 'rename'], self::API_V3);
+        }
+        return $copy;
+    }
+
     public function renameFile(string $fileId, string $name): array
     {
         $driveId = $this->getDriveId();

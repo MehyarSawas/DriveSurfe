@@ -21,6 +21,7 @@ export class FileGridComponent implements AfterViewInit, OnDestroy {
   readonly restore = output<DriveFile>();
   readonly rename = output<DriveFile>();
   readonly move = output<DriveFile>();
+  readonly copy = output<DriveFile>();
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();

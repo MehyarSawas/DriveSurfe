@@ -262,6 +262,10 @@ export class FileService {
     }
   }
 
+  async copyFile(fileId: string, destinationFolderId: string): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/files/${fileId}/copy`, { destination_folder_id: destinationFolderId }));
+  }
+
   async renameFile(fileId: string, name: string): Promise<void> {
     await firstValueFrom(this.http.post(`/api/files/${fileId}/rename`, { name }));
     const update = (files: DriveFile[]) => files.map(f => f.id === fileId ? { ...f, name } : f);

@@ -22,6 +22,7 @@ export class FolderPickerComponent implements OnInit {
   readonly startFolderName = input<string>('My Drive');
   readonly startBreadcrumb = input<Crumb[]>([]);
   readonly recentFolder = input<{id: string; name: string; path: string} | null>(null);
+  readonly title = input('Move to');
 
   readonly folderSelected = output<DriveFile>();
   readonly folderPath = output<string>();

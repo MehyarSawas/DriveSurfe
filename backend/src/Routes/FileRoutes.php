@@ -162,6 +162,15 @@ final class FileRoutes
             return self::json($res, ['data' => true]);
         })->add($auth);
 
+        $group->post('/files/{id}/copy', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
+            $body   = (array) $req->getParsedBody();
+            $destId = $body['destination_folder_id'] ?? '';
+            if (!self::validFileId($destId)) return self::fileIdError($res);
+            $copy = $drive->copyFile($args['id'], $destId);
+            return self::json($res, ['data' => $copy]);
+        })->add($auth);
+
         $group->post('/files/{id}/rename', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $body = (array) $req->getParsedBody();
