@@ -619,6 +619,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   zoomIn(): void { this.zoom.update(z => Math.min(z + 0.25, 4)); }
   zoomOut(): void { this.zoom.update(z => Math.max(z - 0.25, 0.25)); }
+  resetZoom(): void { this.zoom.set(1); this.swipeOffsetX.set(0); this.swipeOffsetY.set(0); }
   resetZoom(): void { this.zoom.set(1); }
 
   mediaTransform(): string {
