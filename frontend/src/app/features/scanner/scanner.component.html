@@ -37,7 +37,7 @@
           <polygon [attr.points]="svgPoints()" class="quad-poly" />
           @for (c of corners(); track $index) {
             <circle [attr.cx]="c.x / frozenSize().w" [attr.cy]="c.y / frozenSize().h"
-                    r="0.025" class="quad-handle"
+                    r="0.04" class="quad-handle"
                     (pointerdown)="onHandlePointerDown($event, $index)" />
           }
         </svg>
@@ -77,7 +77,7 @@
     <div class="format-wrap">
       <div class="pages-preview">
         @for (p of pages(); track $index) {
-          <img class="page-thumb" [src]="p.thumbUrl" />
+          <img class="page-thumb" [src]="pageThumbUrl(p)" />
         }
       </div>
       <div class="format-row">

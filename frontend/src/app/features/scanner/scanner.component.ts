@@ -46,7 +46,6 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   readonly uploadError = signal('');
   readonly draggingCorner = signal<number | null>(null);
 
-  // Frozen source image (as data URL for display and canvas for warp)
   readonly frozenDataUrl = signal('');
   readonly frozenSize = signal<{ w: number; h: number }>({ w: 1, h: 1 });
 
@@ -61,7 +60,6 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     return `brightness(${b}%) contrast(${con}%) saturate(${sat * 100}%)`;
   });
 
-  // SVG polygon points string (0–1 coordinate space)
   readonly svgPoints = computed(() => {
     const { w, h } = this.frozenSize();
     return this.corners().map(c => `${c.x / w},${c.y / h}`).join(' ');
@@ -141,7 +139,6 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     snap.getContext('2d')!.drawImage(video, 0, 0);
     this.frozenCanvas = snap;
 
-    // Store as data URL so <img> in review can display it without @ViewChild timing issues
     this.frozenDataUrl.set(snap.toDataURL('image/jpeg', 0.85));
     this.frozenSize.set({ w: snap.width, h: snap.height });
 
@@ -151,7 +148,6 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const imgData = snap.getContext('2d')!.getImageData(0, 0, snap.width, snap.height);
     this.corners.set(detectQuad(imgData));
     this.phase.set('review');
-    // No setTimeout / @ViewChild needed — review uses <img> + SVG, no canvas
   }
 
   retake(): void {
@@ -224,7 +220,8 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
         this.uploaded.emit(results);
       }
     } catch (e) {
-      this.uploadError.set('Upload failed. Please try again.');
+      const apiMsg = (e as any)?.error?.error;
+      this.uploadError.set(apiMsg ? `Upload failed: ${apiMsg}` : 'Upload failed. Please try again.');
       this.phase.set('format');
     }
   }

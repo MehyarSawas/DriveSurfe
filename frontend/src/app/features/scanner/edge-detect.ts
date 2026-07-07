@@ -1,54 +1,94 @@
 export interface Point { x: number; y: number; }
 
-// Detect the document quad by finding the largest bright (or dark) rectangular region.
-// This is far more reliable than edge-based flood-fill because it identifies the
-// document as a solid blob rather than a noise-filled edge map.
 export function detectQuad(imageData: ImageData): [Point, Point, Point, Point] {
   const { data, width, height } = imageData;
   const def = makeDefault(width, height);
   try {
-    // Work at 400px for speed — large enough for reliable detection
     const scale = Math.min(1, 400 / Math.max(width, height));
     const dw = Math.round(width * scale);
     const dh = Math.round(height * scale);
 
     const gray = downsampleGray(data, width, height, dw, dh);
-    // Double-blur removes text, texture, and noise so Otsu sees regions, not detail
     const blurred = gaussianBlur(gaussianBlur(gray, dw, dh), dw, dh);
-    const t = otsuThreshold(blurred);
 
-    // Try bright document on dark background, then dark document on light background
-    for (const bright of [true, false]) {
-      const bin = new Uint8Array(dw * dh);
-      for (let i = 0; i < blurred.length; i++) bin[i] = (blurred[i] > t) === bright ? 1 : 0;
+    // Primary: find document as the largest interior region enclosed by edges
+    const byGrad = detectByGradient(blurred, dw, dh, scale, width, height);
+    if (byGrad) return byGrad;
 
-      // Morphological close: fills holes within the document region
-      const closed = morphClose(bin, dw, dh, 10);
-
-      const region = findLargestRegion(closed, dw, dh);
-      if (!region) continue;
-
-      const ratio = region.length / (dw * dh);
-      // Skip if too small (noise) or too large (entire background)
-      if (ratio < 0.05 || ratio > 0.90) continue;
-
-      const hull = convexHull(region);
-      if (hull.length < 4) continue;
-
-      const quad = reduceToQuad(hull);
-      if (!quad) continue;
-
-      if (quadArea(quad) < dw * dh * 0.05) continue;
-
-      const ordered = orderQuad(quad);
-      // Add a small inset so the green quad line doesn't sit exactly on the edge
-      const inset = 4 / scale;
-      return clampAndInset(ordered, inset, width, height);
-    }
-    return def;
+    // Fallback: brightness-blob (bright doc on dark bg, or vice-versa)
+    return detectByBrightness(blurred, dw, dh, scale, width, height) ?? def;
   } catch {
     return def;
   }
+}
+
+// ── Primary algorithm: gradient-edge → flood-fill exterior → interior region ──
+
+function detectByGradient(
+  blurred: Float32Array, dw: number, dh: number,
+  scale: number, origW: number, origH: number
+): [Point, Point, Point, Point] | null {
+  const grad = sobelMagnitude(blurred, dw, dh);
+
+  let maxG = 0;
+  for (let i = 0; i < grad.length; i++) if (grad[i] > maxG) maxG = grad[i];
+  if (maxG < 5) return null;
+
+  // Threshold at 12 % of max gradient to mark document boundary edges
+  const thresh = maxG * 0.12;
+  const edges = new Uint8Array(dw * dh);
+  for (let i = 0; i < grad.length; i++) edges[i] = grad[i] > thresh ? 1 : 0;
+
+  // Dilate edges 3 px to close small gaps in the document outline
+  const dilated = dilate(edges, dw, dh, 3);
+
+  // Flood-fill from every border pixel through non-edge pixels → exterior
+  const exterior = floodFillFromBorder(dilated, dw, dh);
+
+  // Interior = pixels not reached by the exterior fill AND not an edge
+  const interior = new Uint8Array(dw * dh);
+  for (let i = 0; i < dw * dh; i++) {
+    interior[i] = !exterior[i] && !dilated[i] ? 1 : 0;
+  }
+
+  return extractQuad(interior, dw, dh, scale, origW, origH);
+}
+
+// ── Fallback: Otsu threshold on blurred gray, try bright-on-dark then dark-on-bright ──
+
+function detectByBrightness(
+  blurred: Float32Array, dw: number, dh: number,
+  scale: number, origW: number, origH: number
+): [Point, Point, Point, Point] | null {
+  const t = otsuThreshold(blurred);
+  for (const bright of [true, false]) {
+    const bin = new Uint8Array(dw * dh);
+    for (let i = 0; i < blurred.length; i++) bin[i] = (blurred[i] > t) === bright ? 1 : 0;
+    const closed = morphClose(bin, dw, dh, 10);
+    const q = extractQuad(closed, dw, dh, scale, origW, origH);
+    if (q) return q;
+  }
+  return null;
+}
+
+// ── Shared: find largest connected region → hull → quad ──────────────────────
+
+function extractQuad(
+  binary: Uint8Array, dw: number, dh: number,
+  scale: number, origW: number, origH: number
+): [Point, Point, Point, Point] | null {
+  const region = findLargestRegion(binary, dw, dh);
+  if (!region) return null;
+  const ratio = region.length / (dw * dh);
+  if (ratio < 0.05 || ratio > 0.90) return null;
+  const hull = convexHull(region);
+  if (hull.length < 4) return null;
+  const quad = reduceToQuad(hull);
+  if (!quad) return null;
+  if (quadArea(quad) < dw * dh * 0.05) return null;
+  const ordered = orderQuad(quad);
+  const inset = 4 / scale;
+  return clampAndInset(ordered, inset, origW, origH);
 }
 
 function makeDefault(w: number, h: number): [Point, Point, Point, Point] {
@@ -101,6 +141,44 @@ function gaussianBlur(src: Float32Array, w: number, h: number): Float32Array {
   return out;
 }
 
+function sobelMagnitude(gray: Float32Array, w: number, h: number): Float32Array {
+  const out = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const tl = gray[(y-1)*w+(x-1)], tc = gray[(y-1)*w+x], tr = gray[(y-1)*w+(x+1)];
+      const ml = gray[y*w+(x-1)],                             mr = gray[y*w+(x+1)];
+      const bl = gray[(y+1)*w+(x-1)], bc = gray[(y+1)*w+x],  brv = gray[(y+1)*w+(x+1)];
+      const gx = -tl - 2*ml - bl + tr + 2*mr + brv;
+      const gy = -tl - 2*tc - tr + bl + 2*bc + brv;
+      out[y*w+x] = Math.sqrt(gx*gx + gy*gy);
+    }
+  }
+  return out;
+}
+
+function floodFillFromBorder(dilated: Uint8Array, dw: number, dh: number): Uint8Array {
+  const exterior = new Uint8Array(dw * dh);
+  const stack = new Int32Array(dw * dh);
+  let sp = 0;
+
+  const seed = (idx: number) => {
+    if (!dilated[idx] && !exterior[idx]) { exterior[idx] = 1; stack[sp++] = idx; }
+  };
+
+  for (let x = 0; x < dw; x++) { seed(x); seed((dh - 1) * dw + x); }
+  for (let y = 1; y < dh - 1; y++) { seed(y * dw); seed(y * dw + dw - 1); }
+
+  while (sp > 0) {
+    const idx = stack[--sp];
+    const px = idx % dw, py = (idx / dw) | 0;
+    if (px > 0)    seed(idx - 1);
+    if (px < dw-1) seed(idx + 1);
+    if (py > 0)    seed(idx - dw);
+    if (py < dh-1) seed(idx + dw);
+  }
+  return exterior;
+}
+
 function otsuThreshold(gray: Float32Array): number {
   let max = 0;
   for (let i = 0; i < gray.length; i++) if (gray[i] > max) max = gray[i];
@@ -121,7 +199,7 @@ function otsuThreshold(gray: Float32Array): number {
   return (bestT / bins) * max;
 }
 
-// ── Morphological operations (separable for O(n) per pass) ──────────────────
+// ── Morphological operations ──────────────────────────────────────────────────
 
 function morphClose(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
   return erode(dilate(src, w, h, r), w, h, r);
@@ -195,21 +273,18 @@ function erodeV(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
   return out;
 }
 
-// ── Connected components ─────────────────────────────────────────────────────
+// ── Connected components ──────────────────────────────────────────────────────
 
 function findLargestRegion(binary: Uint8Array, w: number, h: number): Point[] | null {
   const visited = new Uint8Array(w * h);
-  // Use typed array as stack for performance
   const stack = new Int32Array(w * h);
   let best: Point[] = [];
 
   for (let start = 0; start < w * h; start++) {
     if (!binary[start] || visited[start]) continue;
-
     let sp = 0;
     stack[sp++] = start;
     const pts: Point[] = [];
-
     while (sp > 0) {
       const idx = stack[--sp];
       if (visited[idx]) continue;
@@ -221,14 +296,12 @@ function findLargestRegion(binary: Uint8Array, w: number, h: number): Point[] | 
       if (py > 0     && binary[idx - w] && !visited[idx - w]) stack[sp++] = idx - w;
       if (py < h - 1 && binary[idx + w] && !visited[idx + w]) stack[sp++] = idx + w;
     }
-
     if (pts.length > best.length) best = pts;
   }
-
   return best.length > 10 ? best : null;
 }
 
-// ── Geometry ─────────────────────────────────────────────────────────────────
+// ── Geometry ──────────────────────────────────────────────────────────────────
 
 function convexHull(points: Point[]): Point[] {
   const pts = [...points].sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y);
@@ -236,15 +309,13 @@ function convexHull(points: Point[]): Point[] {
     (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
   const lower: Point[] = [];
   for (const p of pts) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0)
-      lower.pop();
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
     lower.push(p);
   }
   const upper: Point[] = [];
   for (let i = pts.length - 1; i >= 0; i--) {
     const p = pts[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0)
-      upper.pop();
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
     upper.push(p);
   }
   upper.pop(); lower.pop();
@@ -253,7 +324,6 @@ function convexHull(points: Point[]): Point[] {
 
 function reduceToQuad(hull: Point[]): [Point, Point, Point, Point] | null {
   if (hull.length < 4) return null;
-  // Try RDP to get exactly 4 points
   const diag = Math.sqrt(
     (hull[0].x - hull[hull.length >> 1].x) ** 2 +
     (hull[0].y - hull[hull.length >> 1].y) ** 2
@@ -262,10 +332,8 @@ function reduceToQuad(hull: Point[]): [Point, Point, Point, Point] | null {
   for (let attempt = 0; attempt < 5; attempt++) {
     const r = rdp(hull, eps);
     if (r.length === 4) return r as [Point, Point, Point, Point];
-    // Too many points → increase epsilon; too few → decrease
     eps = r.length > 4 ? eps * 1.5 : eps * 0.6;
   }
-  // Fallback: pick 4 extreme corners
   const tl = hull.reduce((a, b) => a.x + a.y < b.x + b.y ? a : b);
   const br = hull.reduce((a, b) => a.x + a.y > b.x + b.y ? a : b);
   const tr = hull.reduce((a, b) => a.x - a.y > b.x - b.y ? a : b);
@@ -305,7 +373,7 @@ function orderQuad(q: [Point, Point, Point, Point]): [Point, Point, Point, Point
   let minIdx = 0;
   for (let i = 1; i < 4; i++)
     if (sorted[i].x + sorted[i].y < sorted[minIdx].x + sorted[minIdx].y) minIdx = i;
-  return [sorted[minIdx], sorted[(minIdx + 1) % 4], sorted[(minIdx + 2) % 4], sorted[(minIdx + 3) % 4]];
+  return [sorted[minIdx], sorted[(minIdx+1)%4], sorted[(minIdx+2)%4], sorted[(minIdx+3)%4]];
 }
 
 function quadArea(q: [Point, Point, Point, Point]): number {
