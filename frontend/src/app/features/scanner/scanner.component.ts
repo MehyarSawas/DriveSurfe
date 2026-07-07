@@ -13,6 +13,25 @@ import { PDFDocument } from 'pdf-lib';
 type Phase = 'camera' | 'review' | 'format' | 'uploading';
 type Enhance = 'color' | 'grayscale' | 'bw';
 
+function applyPixelEnhance(data: Uint8ClampedArray, brightness: number, contrast: number, enhance: Enhance): void {
+  const b = brightness / 100;
+  const c = enhance === 'bw' ? Math.max(contrast, 150) / 100 : contrast / 100;
+  const factor = (259 * (c * 255 - 255)) / (255 * (259 - (c * 255 - 255)));
+  for (let i = 0; i < data.length; i += 4) {
+    let r = data[i], g = data[i + 1], bl2 = data[i + 2];
+    if (enhance === 'grayscale' || enhance === 'bw') {
+      const luma = 0.299 * r + 0.587 * g + 0.114 * bl2;
+      r = g = bl2 = luma;
+    }
+    r  = factor * (r  - 128) + 128 * b * (1 + factor);
+    g  = factor * (g  - 128) + 128 * b * (1 + factor);
+    bl2 = factor * (bl2 - 128) + 128 * b * (1 + factor);
+    data[i]     = Math.max(0, Math.min(255, r));
+    data[i + 1] = Math.max(0, Math.min(255, g));
+    data[i + 2] = Math.max(0, Math.min(255, bl2));
+  }
+}
+
 interface ScannedPage {
   blob: Blob;
   thumbUrl: string;
@@ -179,9 +198,12 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     offscreen.width = warped.width;
     offscreen.height = warped.height;
     const ctx = offscreen.getContext('2d')!;
-    ctx.filter = this.reviewFilter();
     ctx.drawImage(warped, 0, 0);
-    ctx.filter = 'none';
+
+    // Apply brightness/contrast/enhance via pixel manipulation (ctx.filter unsupported on iOS Safari)
+    const imgData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
+    applyPixelEnhance(imgData.data, this.brightness(), this.contrast(), this.enhance());
+    ctx.putImageData(imgData, 0, 0);
 
     const blob = await new Promise<Blob>(resolve =>
       offscreen.toBlob(b => resolve(b!), 'image/jpeg', 0.9)

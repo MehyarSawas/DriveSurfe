@@ -4,93 +4,183 @@ export function detectQuad(imageData: ImageData): [Point, Point, Point, Point] {
   const { data, width, height } = imageData;
   const def = makeDefault(width, height);
   try {
-    const scale = Math.min(1, 400 / Math.max(width, height));
+    // Work at 480 px — larger than before for better contour accuracy
+    const scale = Math.min(1, 480 / Math.max(width, height));
     const dw = Math.round(width * scale);
     const dh = Math.round(height * scale);
 
     const gray = downsampleGray(data, width, height, dw, dh);
-    const blurred = gaussianBlur(gaussianBlur(gray, dw, dh), dw, dh);
+    const blurred = gaussianBlur(gray, dw, dh);
 
-    // Primary: find document as the largest interior region enclosed by edges
-    const byGrad = detectByGradient(blurred, dw, dh, scale, width, height);
-    if (byGrad) return byGrad;
+    // Canny: Sobel → NMS → hysteresis
+    const { mag, ang } = sobelGradient(blurred, dw, dh);
+    const nms = nonMaxSuppress(mag, ang, dw, dh);
+    const edges = hysteresisCanny(nms, dw, dh);
 
-    // Fallback: brightness-blob (bright doc on dark bg, or vice-versa)
-    return detectByBrightness(blurred, dw, dh, scale, width, height) ?? def;
+    // Find the edge component whose convex hull is the best quad
+    const quad = findDocumentQuad(edges, dw, dh, scale, width, height);
+    return quad ?? def;
   } catch {
     return def;
   }
 }
 
-// ── Primary algorithm: gradient-edge → flood-fill exterior → interior region ──
+// ── Canny pipeline ────────────────────────────────────────────────────────────
 
-function detectByGradient(
-  blurred: Float32Array, dw: number, dh: number,
-  scale: number, origW: number, origH: number
-): [Point, Point, Point, Point] | null {
-  const grad = sobelMagnitude(blurred, dw, dh);
-
-  let maxG = 0;
-  for (let i = 0; i < grad.length; i++) if (grad[i] > maxG) maxG = grad[i];
-  if (maxG < 5) return null;
-
-  // Threshold at 12 % of max gradient to mark document boundary edges
-  const thresh = maxG * 0.12;
-  const edges = new Uint8Array(dw * dh);
-  for (let i = 0; i < grad.length; i++) edges[i] = grad[i] > thresh ? 1 : 0;
-
-  // Dilate edges 3 px to close small gaps in the document outline
-  const dilated = dilate(edges, dw, dh, 3);
-
-  // Flood-fill from every border pixel through non-edge pixels → exterior
-  const exterior = floodFillFromBorder(dilated, dw, dh);
-
-  // Interior = pixels not reached by the exterior fill AND not an edge
-  const interior = new Uint8Array(dw * dh);
-  for (let i = 0; i < dw * dh; i++) {
-    interior[i] = !exterior[i] && !dilated[i] ? 1 : 0;
+function sobelGradient(
+  gray: Float32Array, w: number, h: number
+): { mag: Float32Array; ang: Float32Array } {
+  const mag = new Float32Array(w * h);
+  const ang = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const tl = gray[(y-1)*w+(x-1)], tc = gray[(y-1)*w+x], tr = gray[(y-1)*w+(x+1)];
+      const ml = gray[y*w+(x-1)],                             mr = gray[y*w+(x+1)];
+      const bl = gray[(y+1)*w+(x-1)], bc = gray[(y+1)*w+x],  br = gray[(y+1)*w+(x+1)];
+      const gx = -tl - 2*ml - bl + tr + 2*mr + br;
+      const gy = -tl - 2*tc - tr + bl + 2*bc + br;
+      const idx = y * w + x;
+      mag[idx] = Math.sqrt(gx*gx + gy*gy);
+      ang[idx] = Math.atan2(gy, gx);
+    }
   }
-
-  return extractQuad(interior, dw, dh, scale, origW, origH);
+  return { mag, ang };
 }
 
-// ── Fallback: Otsu threshold on blurred gray, try bright-on-dark then dark-on-bright ──
+function nonMaxSuppress(mag: Float32Array, ang: Float32Array, w: number, h: number): Float32Array {
+  const out = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = y * w + x;
+      const m = mag[idx];
+      if (m === 0) continue;
 
-function detectByBrightness(
-  blurred: Float32Array, dw: number, dh: number,
-  scale: number, origW: number, origH: number
-): [Point, Point, Point, Point] | null {
-  const t = otsuThreshold(blurred);
-  for (const bright of [true, false]) {
-    const bin = new Uint8Array(dw * dh);
-    for (let i = 0; i < blurred.length; i++) bin[i] = (blurred[i] > t) === bright ? 1 : 0;
-    const closed = morphClose(bin, dw, dh, 10);
-    const q = extractQuad(closed, dw, dh, scale, origW, origH);
-    if (q) return q;
+      // Quantize angle to 4 directions (0°/45°/90°/135°)
+      const deg = (((ang[idx] * 180 / Math.PI) % 180) + 180) % 180;
+      let n1: number, n2: number;
+      if (deg < 22.5 || deg >= 157.5) {
+        n1 = mag[idx - 1]; n2 = mag[idx + 1];
+      } else if (deg < 67.5) {
+        n1 = mag[(y-1)*w+(x+1)]; n2 = mag[(y+1)*w+(x-1)];
+      } else if (deg < 112.5) {
+        n1 = mag[(y-1)*w+x];    n2 = mag[(y+1)*w+x];
+      } else {
+        n1 = mag[(y-1)*w+(x-1)]; n2 = mag[(y+1)*w+(x+1)];
+      }
+
+      if (m >= n1 && m >= n2) out[idx] = m;
+    }
   }
-  return null;
+  return out;
 }
 
-// ── Shared: find largest connected region → hull → quad ──────────────────────
+function hysteresisCanny(nms: Float32Array, w: number, h: number): Uint8Array {
+  // Auto-threshold: bucket the non-zero magnitudes, use 75th percentile as high
+  let maxG = 0, nonZeroCount = 0;
+  for (let i = 0; i < nms.length; i++) {
+    if (nms[i] > 0) { nonZeroCount++; if (nms[i] > maxG) maxG = nms[i]; }
+  }
+  if (maxG === 0) return new Uint8Array(w * h);
 
-function extractQuad(
-  binary: Uint8Array, dw: number, dh: number,
+  const bins = 200;
+  const hist = new Uint32Array(bins);
+  for (let i = 0; i < nms.length; i++) {
+    if (nms[i] > 0) hist[Math.min(bins - 1, Math.floor(nms[i] / maxG * bins))]++;
+  }
+  let cumul = 0;
+  const target = nonZeroCount * 0.75;
+  let highBin = bins - 1;
+  for (let b = 0; b < bins; b++) {
+    cumul += hist[b];
+    if (cumul >= target) { highBin = b; break; }
+  }
+  const highThresh = (highBin / bins) * maxG;
+  const lowThresh  = highThresh * 0.35;
+
+  // Mark strong (2) and weak (1) candidates
+  const mark = new Uint8Array(w * h);
+  for (let i = 0; i < nms.length; i++) {
+    if      (nms[i] >= highThresh) mark[i] = 2;
+    else if (nms[i] >= lowThresh)  mark[i] = 1;
+  }
+
+  // BFS from strong pixels — accept weak neighbours
+  const result = new Uint8Array(w * h);
+  const stack  = new Int32Array(w * h);
+  let sp = 0;
+  for (let i = 0; i < mark.length; i++) {
+    if (mark[i] === 2) { result[i] = 1; stack[sp++] = i; }
+  }
+  while (sp > 0) {
+    const idx = stack[--sp];
+    const px = idx % w, py = (idx / w) | 0;
+    const nbrs = [idx-1, idx+1, idx-w, idx+w, idx-w-1, idx-w+1, idx+w-1, idx+w+1];
+    for (const n of nbrs) {
+      if (n < 0 || n >= w * h) continue;
+      const nx = n % w;
+      // skip wrap-around pixels
+      if (Math.abs(nx - px) > 1) continue;
+      if (mark[n] >= 1 && !result[n]) { result[n] = 1; stack[sp++] = n; }
+    }
+  }
+  return result;
+}
+
+// ── Contour → quad ────────────────────────────────────────────────────────────
+
+function findDocumentQuad(
+  edges: Uint8Array, dw: number, dh: number,
   scale: number, origW: number, origH: number
 ): [Point, Point, Point, Point] | null {
-  const region = findLargestRegion(binary, dw, dh);
-  if (!region) return null;
-  const ratio = region.length / (dw * dh);
-  if (ratio < 0.05 || ratio > 0.90) return null;
-  const hull = convexHull(region);
-  if (hull.length < 4) return null;
-  const quad = reduceToQuad(hull);
-  if (!quad) return null;
-  if (quadArea(quad) < dw * dh * 0.05) return null;
-  const ordered = orderQuad(quad);
-  // Scale corners from downsampled pixel space back to original image pixel space
+  const visited = new Uint8Array(dw * dh);
+  const stack   = new Int32Array(dw * dh);
+  let bestQuad: [Point, Point, Point, Point] | null = null;
+  let bestArea = dw * dh * 0.04; // minimum 4 % of image area
+
+  for (let start = 0; start < dw * dh; start++) {
+    if (!edges[start] || visited[start]) continue;
+
+    let sp = 0;
+    stack[sp++] = start;
+    const pts: Point[] = [];
+
+    while (sp > 0) {
+      const idx = stack[--sp];
+      if (visited[idx]) continue;
+      visited[idx] = 1;
+      const x = idx % dw, y = (idx / dw) | 0;
+      pts.push({ x, y });
+      if (x > 0      && edges[idx - 1]  && !visited[idx - 1])  stack[sp++] = idx - 1;
+      if (x < dw - 1 && edges[idx + 1]  && !visited[idx + 1])  stack[sp++] = idx + 1;
+      if (y > 0      && edges[idx - dw] && !visited[idx - dw]) stack[sp++] = idx - dw;
+      if (y < dh - 1 && edges[idx + dw] && !visited[idx + dw]) stack[sp++] = idx + dw;
+    }
+
+    if (pts.length < 20) continue;
+
+    const hull = convexHull(pts);
+    if (hull.length < 4) continue;
+
+    const quad = reduceToQuad(hull);
+    if (!quad) continue;
+
+    const area = quadArea(quad);
+    // Accept quads that cover 4%–93% of the image
+    if (area > bestArea && area < dw * dh * 0.93) {
+      bestArea = area;
+      bestQuad = quad;
+    }
+  }
+
+  if (!bestQuad) return null;
+
+  const ordered  = orderQuad(bestQuad);
+  // Scale corners from downsampled → original pixel space
   const upscaled = ordered.map(p => ({ x: p.x / scale, y: p.y / scale })) as [Point, Point, Point, Point];
   return clampAndInset(upscaled, 4, origW, origH);
 }
+
+// ── Geometry helpers ──────────────────────────────────────────────────────────
 
 function makeDefault(w: number, h: number): [Point, Point, Point, Point] {
   const i = 12;
@@ -119,7 +209,7 @@ function downsampleGray(
     for (let dx = 0; dx < dw; dx++) {
       const sx = Math.min(sw - 1, Math.round((dx + 0.5) * xr));
       const sy = Math.min(sh - 1, Math.round((dy + 0.5) * yr));
-      const i = (sy * sw + sx) * 4;
+      const i  = (sy * sw + sx) * 4;
       out[dy * dw + dx] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
     }
   }
@@ -141,168 +231,6 @@ function gaussianBlur(src: Float32Array, w: number, h: number): Float32Array {
   }
   return out;
 }
-
-function sobelMagnitude(gray: Float32Array, w: number, h: number): Float32Array {
-  const out = new Float32Array(w * h);
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const tl = gray[(y-1)*w+(x-1)], tc = gray[(y-1)*w+x], tr = gray[(y-1)*w+(x+1)];
-      const ml = gray[y*w+(x-1)],                             mr = gray[y*w+(x+1)];
-      const bl = gray[(y+1)*w+(x-1)], bc = gray[(y+1)*w+x],  brv = gray[(y+1)*w+(x+1)];
-      const gx = -tl - 2*ml - bl + tr + 2*mr + brv;
-      const gy = -tl - 2*tc - tr + bl + 2*bc + brv;
-      out[y*w+x] = Math.sqrt(gx*gx + gy*gy);
-    }
-  }
-  return out;
-}
-
-function floodFillFromBorder(dilated: Uint8Array, dw: number, dh: number): Uint8Array {
-  const exterior = new Uint8Array(dw * dh);
-  const stack = new Int32Array(dw * dh);
-  let sp = 0;
-
-  const seed = (idx: number) => {
-    if (!dilated[idx] && !exterior[idx]) { exterior[idx] = 1; stack[sp++] = idx; }
-  };
-
-  for (let x = 0; x < dw; x++) { seed(x); seed((dh - 1) * dw + x); }
-  for (let y = 1; y < dh - 1; y++) { seed(y * dw); seed(y * dw + dw - 1); }
-
-  while (sp > 0) {
-    const idx = stack[--sp];
-    const px = idx % dw, py = (idx / dw) | 0;
-    if (px > 0)    seed(idx - 1);
-    if (px < dw-1) seed(idx + 1);
-    if (py > 0)    seed(idx - dw);
-    if (py < dh-1) seed(idx + dw);
-  }
-  return exterior;
-}
-
-function otsuThreshold(gray: Float32Array): number {
-  let max = 0;
-  for (let i = 0; i < gray.length; i++) if (gray[i] > max) max = gray[i];
-  if (max < 1) return 128;
-  const n = gray.length, bins = 256;
-  const hist = new Float64Array(bins);
-  for (let i = 0; i < n; i++) hist[Math.min(bins - 1, (gray[i] / max * bins) | 0)]++;
-  let sum = 0;
-  for (let i = 0; i < bins; i++) sum += i * hist[i];
-  let sumB = 0, wB = 0, best = 0, bestT = bins >> 1;
-  for (let t = 0; t < bins; t++) {
-    wB += hist[t]; if (!wB) continue;
-    const wF = n - wB; if (!wF) break;
-    sumB += t * hist[t];
-    const v = wB * wF * ((sumB / wB) - ((sum - sumB) / wF)) ** 2;
-    if (v > best) { best = v; bestT = t; }
-  }
-  return (bestT / bins) * max;
-}
-
-// ── Morphological operations ──────────────────────────────────────────────────
-
-function morphClose(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
-  return erode(dilate(src, w, h, r), w, h, r);
-}
-
-function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
-  return dilateV(dilateH(src, w, h, r), w, h, r);
-}
-
-function erode(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
-  return erodeV(erodeH(src, w, h, r), w, h, r);
-}
-
-function dilateH(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
-  const out = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) {
-    const b = y * w;
-    let cnt = 0;
-    for (let k = 0; k <= Math.min(r, w - 1); k++) if (src[b + k]) cnt++;
-    out[b] = cnt > 0 ? 1 : 0;
-    for (let x = 1; x < w; x++) {
-      if (x + r < w && src[b + x + r]) cnt++;
-      if (x - r - 1 >= 0 && src[b + x - r - 1]) cnt--;
-      out[b + x] = cnt > 0 ? 1 : 0;
-    }
-  }
-  return out;
-}
-
-function dilateV(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
-  const out = new Uint8Array(w * h);
-  for (let x = 0; x < w; x++) {
-    let cnt = 0;
-    for (let k = 0; k <= Math.min(r, h - 1); k++) if (src[k * w + x]) cnt++;
-    out[x] = cnt > 0 ? 1 : 0;
-    for (let y = 1; y < h; y++) {
-      if (y + r < h && src[(y + r) * w + x]) cnt++;
-      if (y - r - 1 >= 0 && src[(y - r - 1) * w + x]) cnt--;
-      out[y * w + x] = cnt > 0 ? 1 : 0;
-    }
-  }
-  return out;
-}
-
-function erodeH(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
-  const out = new Uint8Array(w * h);
-  const ps = new Int32Array(w + 1);
-  for (let y = 0; y < h; y++) {
-    const b = y * w;
-    ps[0] = 0;
-    for (let x = 0; x < w; x++) ps[x + 1] = ps[x] + (src[b + x] ? 1 : 0);
-    for (let x = 0; x < w; x++) {
-      const lo = Math.max(0, x - r), hi = Math.min(w, x + r + 1);
-      out[b + x] = ps[hi] - ps[lo] === hi - lo ? 1 : 0;
-    }
-  }
-  return out;
-}
-
-function erodeV(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
-  const out = new Uint8Array(w * h);
-  const ps = new Int32Array(h + 1);
-  for (let x = 0; x < w; x++) {
-    ps[0] = 0;
-    for (let y = 0; y < h; y++) ps[y + 1] = ps[y] + (src[y * w + x] ? 1 : 0);
-    for (let y = 0; y < h; y++) {
-      const lo = Math.max(0, y - r), hi = Math.min(h, y + r + 1);
-      out[y * w + x] = ps[hi] - ps[lo] === hi - lo ? 1 : 0;
-    }
-  }
-  return out;
-}
-
-// ── Connected components ──────────────────────────────────────────────────────
-
-function findLargestRegion(binary: Uint8Array, w: number, h: number): Point[] | null {
-  const visited = new Uint8Array(w * h);
-  const stack = new Int32Array(w * h);
-  let best: Point[] = [];
-
-  for (let start = 0; start < w * h; start++) {
-    if (!binary[start] || visited[start]) continue;
-    let sp = 0;
-    stack[sp++] = start;
-    const pts: Point[] = [];
-    while (sp > 0) {
-      const idx = stack[--sp];
-      if (visited[idx]) continue;
-      visited[idx] = 1;
-      const px = idx % w, py = (idx / w) | 0;
-      pts.push({ x: px, y: py });
-      if (px > 0     && binary[idx - 1] && !visited[idx - 1]) stack[sp++] = idx - 1;
-      if (px < w - 1 && binary[idx + 1] && !visited[idx + 1]) stack[sp++] = idx + 1;
-      if (py > 0     && binary[idx - w] && !visited[idx - w]) stack[sp++] = idx - w;
-      if (py < h - 1 && binary[idx + w] && !visited[idx + w]) stack[sp++] = idx + w;
-    }
-    if (pts.length > best.length) best = pts;
-  }
-  return best.length > 10 ? best : null;
-}
-
-// ── Geometry ──────────────────────────────────────────────────────────────────
 
 function convexHull(points: Point[]): Point[] {
   const pts = [...points].sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y);
@@ -330,7 +258,7 @@ function reduceToQuad(hull: Point[]): [Point, Point, Point, Point] | null {
     (hull[0].y - hull[hull.length >> 1].y) ** 2
   );
   let eps = diag * 0.02;
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     const r = rdp(hull, eps);
     if (r.length === 4) return r as [Point, Point, Point, Point];
     eps = r.length > 4 ? eps * 1.5 : eps * 0.6;
