@@ -15,6 +15,7 @@ import { BreadcrumbComponent } from './components/breadcrumb/breadcrumb.componen
 import { SearchBarComponent } from './components/search-bar/search-bar.component';
 import { PreviewComponent } from '../preview/preview.component';
 import { FolderPickerComponent } from '../../shared/components/folder-picker/folder-picker.component';
+import { ScannerComponent } from '../scanner/scanner.component';
 
 @Component({
   selector: 'ds-file-browser',
@@ -30,6 +31,7 @@ import { FolderPickerComponent } from '../../shared/components/folder-picker/fol
     SearchBarComponent,
     PreviewComponent,
     FolderPickerComponent,
+    ScannerComponent,
   ],
   templateUrl: './file-browser.component.html',
   styleUrls: ['./file-browser.component.scss'],
@@ -212,7 +214,13 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   previewParentFolderId = signal('');
   previewParentFolderName = signal('');
   movingFiles = signal<DriveFile[] | null>(null);
-  moveConflictPending = signal<{files: DriveFile[], folderId: string} | null>(null);
+  copyingFiles = signal<DriveFile[] | null>(null);
+  moveConflictPending = signal<{ files: DriveFile[]; folderId: string } | null>(null);
+  addMenuOpen = signal(false);
+  uploadTotal = signal(0);
+  uploadDone = signal(0);
+  uploadErrors = signal(0);
+  scanOpen = signal(false);
 
   readonly recentMoveFolder = signal<{id: string; name: string; path: string} | null>(
     (() => { try { const s = localStorage.getItem('recentMoveFolder'); return s ? JSON.parse(s) : null; } catch { return null; } })()
@@ -692,10 +700,68 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.auth.logout();
   }
 
+  onNewFolderFromMenu(): void {
+    this.addMenuOpen.set(false);
+    this.showCreateFolder.set(true);
+  }
+
+  async onFilesSelected(event: Event): Promise<void> {
+    const files = Array.from((event.target as HTMLInputElement).files ?? []);
+    (event.target as HTMLInputElement).value = '';
+    if (!files.length) return;
+    await this.uploadFiles(files);
+  }
+
+  async onMediaSelected(event: Event): Promise<void> {
+    const files = Array.from((event.target as HTMLInputElement).files ?? []);
+    (event.target as HTMLInputElement).value = '';
+    if (!files.length) return;
+    await this.uploadFiles(files);
+  }
+
+  private async uploadFiles(files: File[]): Promise<void> {
+    const folderId = this.fileService.currentFolderId();
+    this.uploadTotal.set(files.length);
+    this.uploadDone.set(0);
+    this.uploadErrors.set(0);
+    const results = await Promise.allSettled(files.map(async f => {
+      const base64 = await this.fileToBase64(f);
+      const uploaded = await this.fileService.uploadFile(folderId, f.name, f.type || 'application/octet-stream', base64);
+      this.uploadDone.update(n => n + 1);
+      return uploaded;
+    }));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    this.uploadTotal.set(0);
+    this.uploadDone.set(0);
+    if (failed > 0) {
+      this.bulkMoveToast.set(`${results.length - failed} uploaded, ${failed} failed`);
+      setTimeout(() => this.bulkMoveToast.set(null), 5000);
+    } else {
+      this.bulkMoveToast.set(`${results.length} file${results.length > 1 ? 's' : ''} uploaded`);
+      setTimeout(() => this.bulkMoveToast.set(null), 3000);
+    }
+    this.loadCurrentFolder();
+  }
+
+  private fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  onScanUploaded(_files: DriveFile[]): void {
+    this.scanOpen.set(false);
+    this.loadCurrentFolder();
+  }
+
   onDocClick(): void {
     this.filterMenuOpen.set(false);
     this.viewMenuOpen.set(false);
     this.statsPopoverOpen.set(false);
+    this.addMenuOpen.set(false);
   }
 
   onKeyDown(e: KeyboardEvent): void {

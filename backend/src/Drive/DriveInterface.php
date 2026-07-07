@@ -31,4 +31,6 @@ interface DriveInterface
     public function getFolderCount(string $folderId, string $depth = 'folder'): array;
 
     public function getFolderSize(string $folderId): int;
+
+    public function uploadFile(string $parentId, string $filename, string $mimeType, string $base64Data): array;
 }

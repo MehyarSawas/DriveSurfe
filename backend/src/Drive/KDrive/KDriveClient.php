@@ -170,6 +170,37 @@ final class KDriveClient implements DriveInterface
         $this->post("{$driveId}/files/{$fileId}/move/{$destinationFolderId}", ['conflict' => $conflict], self::API_V3);
     }
 
+    public function copyFile(string $fileId, string $destinationFolderId): array
+    {
+        $driveId = $this->getDriveId();
+        $data = $this->post("{$driveId}/files/{$fileId}/duplicate", [], self::API_V3);
+        $copy = $data['data'] ?? [];
+        if (!empty($copy['id']) && (string)$copy['id'] !== (string)$destinationFolderId) {
+            $this->post("{$driveId}/files/{$copy['id']}/move/{$destinationFolderId}", ['conflict' => 'rename'], self::API_V3);
+        }
+        return $copy;
+    }
+
+    public function uploadFile(string $parentId, string $filename, string $mimeType, string $base64Data): array
+    {
+        $driveId = $this->getDriveId();
+        $token   = $this->getToken();
+        $binary  = base64_decode($base64Data, true);
+        $url     = self::API_V3 . "/{$driveId}/files/{$parentId}/upload";
+
+        $response = $this->http->post($url, [
+            'headers'   => ['Authorization' => "Bearer {$token}"],
+            'multipart' => [
+                ['name' => 'file',      'contents' => $binary, 'filename' => $filename,
+                 'headers' => ['Content-Type' => $mimeType]],
+                ['name' => 'file_name', 'contents' => $filename],
+                ['name' => 'conflict',  'contents' => 'rename'],
+            ],
+        ]);
+        $data = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        return $this->normalizeFile($data['data'] ?? []);
+    }
+
     public function renameFile(string $fileId, string $name): array
     {
         $driveId = $this->getDriveId();
