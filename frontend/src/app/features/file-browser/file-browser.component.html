@@ -123,8 +123,7 @@
           <!-- Add menu (hidden in trash) -->
           @if (!isTrash()) {
             <!-- hidden file inputs -->
-            <input #fileInput  type="file" multiple                          hidden (change)="onFilesSelected($event)" />
-            <input #mediaInput type="file" accept="image/*,video/*" multiple hidden (change)="onMediaSelected($event)" />
+            <input #fileInput  type="file" multiple hidden (change)="onFilesSelected($event)" />
 
             <div class="add-menu-wrap" (click)="$event.stopPropagation()">
               <button class="icon-btn" (click)="addMenuOpen.update(v => !v)" title="Add">
@@ -140,11 +139,7 @@
                     <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
                     Upload Files
                   </button>
-                  <button class="add-menu-item" (click)="mediaInput.click(); addMenuOpen.set(false)">
-                    <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
-                    Upload Photos & Videos
-                  </button>
-                  <button class="add-menu-item" (click)="scanOpen.set(true); addMenuOpen.set(false)">
+<button class="add-menu-item" (click)="scanOpen.set(true); addMenuOpen.set(false)">
                     <svg viewBox="0 0 24 24"><path d="M9.5 6.5v3h-3v-3h3M11 5H5v6h6V5zm-1.5 9.5v3h-3v-3h3M11 13H5v6h6v-6zm6.5-6.5v3h-3v-3h3M20 5h-6v6h6V5zm-6 8h1.5v1.5H14V13zm1.5 1.5H17V16h-1.5v-1.5zM17 13h1.5v1.5H17V13zm-3 3h1.5v1.5H14V16zm1.5 1.5H17V19h-1.5v-1.5zM17 16h1.5v1.5H17V16zm1.5-1.5H20V16h-1.5v-1.5zM20 13h-1.5v-1.5H20V13zm-1.5 4.5V19H17v-1.5h1.5zM18.5 19H20v1.5h-1.5V19zM20 20.5h1.5V22H20v-1.5z"/></svg>
                     Scan Document
                   </button>

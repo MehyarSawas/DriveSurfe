@@ -740,13 +740,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     await this.uploadFiles(files);
   }
 
-  async onMediaSelected(event: Event): Promise<void> {
-    const files = Array.from((event.target as HTMLInputElement).files ?? []);
-    (event.target as HTMLInputElement).value = '';
-    if (!files.length) return;
-    await this.uploadFiles(files);
-  }
-
   private async uploadFiles(files: File[]): Promise<void> {
     const folderId = this.fileService.currentFolderId();
     this.uploadTotal.set(files.length);

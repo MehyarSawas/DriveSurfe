@@ -14,11 +14,8 @@ type Phase = 'camera' | 'review' | 'format' | 'uploading';
 type Enhance = 'color' | 'grayscale' | 'bw';
 
 interface ScannedPage {
-  warped: HTMLCanvasElement;
   blob: Blob;
-  enhance: Enhance;
-  brightness: number;
-  contrast: number;
+  thumbUrl: string;
 }
 
 @Component({
@@ -35,7 +32,6 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
   @ViewChild('videoEl') videoEl!: ElementRef<HTMLVideoElement>;
   @ViewChild('overlayEl') overlayEl!: ElementRef<HTMLCanvasElement>;
-  @ViewChild('reviewEl') reviewEl!: ElementRef<HTMLCanvasElement>;
 
   readonly phase = signal<Phase>('camera');
   readonly pages = signal<ScannedPage[]>([]);
@@ -50,6 +46,10 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   readonly uploadError = signal('');
   readonly draggingCorner = signal<number | null>(null);
 
+  // Frozen source image (as data URL for display and canvas for warp)
+  readonly frozenDataUrl = signal('');
+  readonly frozenSize = signal<{ w: number; h: number }>({ w: 1, h: 1 });
+
   private stream: MediaStream | null = null;
   private frameTimer: ReturnType<typeof setInterval> | null = null;
   private frozenCanvas: HTMLCanvasElement | null = null;
@@ -61,20 +61,16 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     return `brightness(${b}%) contrast(${con}%) saturate(${sat * 100}%)`;
   });
 
+  // SVG polygon points string (0–1 coordinate space)
+  readonly svgPoints = computed(() => {
+    const { w, h } = this.frozenSize();
+    return this.corners().map(c => `${c.x / w},${c.y / h}`).join(' ');
+  });
+
   readonly defaultFileName = computed(() => {
     const d = new Date();
     return `Scan ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
-
-  private thumbCache = new Map<ScannedPage, string>();
-
-  pageThumbUrl(page: ScannedPage): string {
-    if (!this.thumbCache.has(page)) {
-      const url = page.warped.toDataURL('image/jpeg', 0.5);
-      this.thumbCache.set(page, url);
-    }
-    return this.thumbCache.get(page)!;
-  }
 
   constructor(private zone: NgZone, private fileService: FileService) {}
 
@@ -96,7 +92,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
       await video.play();
       this.startFrameLoop();
     } catch {
-      // camera denied — still let user use file upload path
+      // camera denied
     }
   }
 
@@ -124,7 +120,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.strokeStyle = '#00e676';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = Math.max(2, canvas.width / 300);
     ctx.beginPath();
     const [tl, tr, br, bl] = quad;
     ctx.moveTo(tl.x, tl.y);
@@ -145,28 +141,22 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     snap.getContext('2d')!.drawImage(video, 0, 0);
     this.frozenCanvas = snap;
 
+    // Store as data URL so <img> in review can display it without @ViewChild timing issues
+    this.frozenDataUrl.set(snap.toDataURL('image/jpeg', 0.85));
+    this.frozenSize.set({ w: snap.width, h: snap.height });
+
     if (this.frameTimer) clearInterval(this.frameTimer);
     this.stopCamera();
 
     const imgData = snap.getContext('2d')!.getImageData(0, 0, snap.width, snap.height);
-    const quad = detectQuad(imgData);
-    this.corners.set(quad);
+    this.corners.set(detectQuad(imgData));
     this.phase.set('review');
-    setTimeout(() => this.renderReview(), 50);
-  }
-
-  renderReview(): void {
-    if (!this.frozenCanvas) return;
-    const warped = perspectiveWarp(this.frozenCanvas, this.corners());
-    const canvas = this.reviewEl?.nativeElement;
-    if (!canvas) return;
-    canvas.width = warped.width;
-    canvas.height = warped.height;
-    canvas.getContext('2d')!.drawImage(warped, 0, 0);
+    // No setTimeout / @ViewChild needed — review uses <img> + SVG, no canvas
   }
 
   retake(): void {
     this.frozenCanvas = null;
+    this.frozenDataUrl.set('');
     this.phase.set('camera');
     setTimeout(() => this.startCamera(), 50);
   }
@@ -174,6 +164,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   async addPage(): Promise<void> {
     await this.bakeCurrentPage();
     this.frozenCanvas = null;
+    this.frozenDataUrl.set('');
     this.phase.set('camera');
     setTimeout(() => this.startCamera(), 50);
   }
@@ -199,12 +190,8 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const blob = await new Promise<Blob>(resolve =>
       offscreen.toBlob(b => resolve(b!), 'image/jpeg', 0.9)
     );
-    this.pages.update(pages => [...pages, {
-      warped: offscreen, blob,
-      enhance: this.enhance(),
-      brightness: this.brightness(),
-      contrast: this.contrast(),
-    }]);
+    const thumbUrl = offscreen.toDataURL('image/jpeg', 0.4);
+    this.pages.update(pages => [...pages, { blob, thumbUrl }]);
   }
 
   async upload(): Promise<void> {
@@ -224,15 +211,14 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
           pg.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
         }
         const bytes = await pdf.save();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+        const base64 = this.uint8ToBase64(new Uint8Array(bytes));
         const file = await this.fileService.uploadFile(folderId, name + '.pdf', 'application/pdf', base64);
         this.uploaded.emit([file]);
       } else {
         const results: DriveFile[] = [];
         for (let i = 0; i < pages.length; i++) {
           const buf = await pages[i].blob.arrayBuffer();
-          const bytes = new Uint8Array(buf);
-          const base64 = btoa(String.fromCharCode(...bytes));
+          const base64 = this.uint8ToBase64(new Uint8Array(buf));
           const fname = pages.length === 1 ? name + '.jpg' : `${name}_${i + 1}.jpg`;
           const file = await this.fileService.uploadFile(folderId, fname, 'image/jpeg', base64);
           results.push(file);
@@ -245,36 +231,41 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  // --- Corner dragging ---
+  private uint8ToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    const chunk = 8192;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  }
 
-  onCornerPointerDown(e: PointerEvent, idx: number): void {
+  // --- SVG corner dragging ---
+
+  onHandlePointerDown(e: PointerEvent, idx: number): void {
     e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    e.stopPropagation();
+    (e.target as SVGElement).setPointerCapture(e.pointerId);
     this.draggingCorner.set(idx);
   }
 
-  onReviewPointerMove(e: PointerEvent): void {
+  onSvgPointerMove(e: PointerEvent): void {
     const idx = this.draggingCorner();
     if (idx === null) return;
-    const canvas = this.reviewEl?.nativeElement;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = Math.max(0, Math.min(canvas.width, (e.clientX - rect.left) * scaleX));
-    const y = Math.max(0, Math.min(canvas.height, (e.clientY - rect.top) * scaleY));
+    const svg = e.currentTarget as SVGSVGElement;
+    const rect = svg.getBoundingClientRect();
+    const rx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const ry = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const { w, h } = this.frozenSize();
     this.corners.update(c => {
-      const next: [Point, Point, Point, Point] = [...c] as any;
-      next[idx] = { x, y };
+      const next = [...c] as [Point, Point, Point, Point];
+      next[idx] = { x: rx * w, y: ry * h };
       return next;
     });
   }
 
-  onReviewPointerUp(): void {
-    if (this.draggingCorner() !== null) {
-      this.draggingCorner.set(null);
-      this.renderReview();
-    }
+  onSvgPointerUp(): void {
+    this.draggingCorner.set(null);
   }
 
   private stopCamera(): void {
