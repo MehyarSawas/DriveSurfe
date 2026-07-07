@@ -263,8 +263,10 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     if (idx === null) return;
     const svg = e.currentTarget as SVGSVGElement;
     const rect = svg.getBoundingClientRect();
-    const rx = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const ry = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    // Keep handle centres at least 5% from each edge so circles stay visible
+    const pad = 0.05;
+    const rx = Math.max(pad, Math.min(1 - pad, (e.clientX - rect.left) / rect.width));
+    const ry = Math.max(pad, Math.min(1 - pad, (e.clientY - rect.top) / rect.height));
     const { w, h } = this.frozenSize();
     this.corners.update(c => {
       const next = [...c] as [Point, Point, Point, Point];
