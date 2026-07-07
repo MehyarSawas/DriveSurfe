@@ -14,21 +14,22 @@ type Phase = 'camera' | 'review' | 'format' | 'uploading';
 type Enhance = 'color' | 'grayscale' | 'bw';
 
 function applyPixelEnhance(data: Uint8ClampedArray, brightness: number, contrast: number, enhance: Enhance): void {
+  // b=1 and c=1 at defaults (100/100) → pixel unchanged
   const b = brightness / 100;
-  const c = enhance === 'bw' ? Math.max(contrast, 150) / 100 : contrast / 100;
-  const factor = (259 * (c * 255 - 255)) / (255 * (259 - (c * 255 - 255)));
+  const c = (enhance === 'bw' ? Math.max(contrast, 150) : contrast) / 100;
   for (let i = 0; i < data.length; i += 4) {
-    let r = data[i], g = data[i + 1], bl2 = data[i + 2];
+    let r = data[i], g = data[i + 1], bl = data[i + 2];
     if (enhance === 'grayscale' || enhance === 'bw') {
-      const luma = 0.299 * r + 0.587 * g + 0.114 * bl2;
-      r = g = bl2 = luma;
+      const luma = 0.299 * r + 0.587 * g + 0.114 * bl;
+      r = g = bl = luma;
     }
-    r  = factor * (r  - 128) + 128 * b * (1 + factor);
-    g  = factor * (g  - 128) + 128 * b * (1 + factor);
-    bl2 = factor * (bl2 - 128) + 128 * b * (1 + factor);
+    // brightness multiplies, then contrast pivots around 128 — matches CSS filter order
+    r  = (r  * b - 128) * c + 128;
+    g  = (g  * b - 128) * c + 128;
+    bl = (bl * b - 128) * c + 128;
     data[i]     = Math.max(0, Math.min(255, r));
     data[i + 1] = Math.max(0, Math.min(255, g));
-    data[i + 2] = Math.max(0, Math.min(255, bl2));
+    data[i + 2] = Math.max(0, Math.min(255, bl));
   }
 }
 

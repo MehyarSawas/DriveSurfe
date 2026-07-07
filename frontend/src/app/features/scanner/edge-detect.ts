@@ -17,8 +17,9 @@ export function detectQuad(imageData: ImageData): [Point, Point, Point, Point] {
     const nms = nonMaxSuppress(mag, ang, dw, dh);
     const edges = hysteresisCanny(nms, dw, dh);
 
-    // Find the edge component whose convex hull is the best quad
-    const quad = findDocumentQuad(edges, dw, dh, scale, width, height);
+    // Dilate edges 2 px to close small gaps before component search
+    const dilated = dilateEdges(edges, dw, dh, 2);
+    const quad = findDocumentQuad(dilated, dw, dh, scale, width, height);
     return quad ?? def;
   } catch {
     return def;
@@ -126,6 +127,20 @@ function hysteresisCanny(nms: Float32Array, w: number, h: number): Uint8Array {
   return result;
 }
 
+function dilateEdges(edges: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const out = new Uint8Array(w * h);
+  for (let y = r; y < h - r; y++) {
+    for (let x = r; x < w - r; x++) {
+      let found = false;
+      outer: for (let dy = -r; dy <= r && !found; dy++)
+        for (let dx = -r; dx <= r; dx++)
+          if (edges[(y + dy) * w + (x + dx)]) { found = true; break outer; }
+      if (found) out[y * w + x] = 1;
+    }
+  }
+  return out;
+}
+
 // ── Contour → quad ────────────────────────────────────────────────────────────
 
 function findDocumentQuad(
@@ -165,8 +180,8 @@ function findDocumentQuad(
     if (!quad) continue;
 
     const area = quadArea(quad);
-    // Accept quads that cover 4%–93% of the image
-    if (area > bestArea && area < dw * dh * 0.93) {
+    // Accept quads that cover 4%–98% of the image
+    if (area > bestArea && area < dw * dh * 0.98) {
       bestArea = area;
       bestQuad = quad;
     }
