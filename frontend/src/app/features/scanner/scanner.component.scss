@@ -129,7 +129,8 @@
 .review-img {
   display: block;
   max-width: 100%;
-  max-height: 45vh;
+  // 220px = scanner header (~56px) + controls (~140px) + breathing room
+  max-height: calc(100vh - 220px);
   object-fit: contain;
   width: auto;
   height: auto;
