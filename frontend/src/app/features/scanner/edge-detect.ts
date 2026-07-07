@@ -2,35 +2,68 @@ export interface Point { x: number; y: number; }
 
 export function detectQuad(imageData: ImageData): [Point, Point, Point, Point] {
   const { data, width, height } = imageData;
-  const inset = 10;
-  const defaultQuad: [Point, Point, Point, Point] = [
-    { x: inset, y: inset },
-    { x: width - inset, y: inset },
-    { x: width - inset, y: height - inset },
-    { x: inset, y: height - inset },
-  ];
+  const defaultQuad = makeDefault(width, height);
 
   try {
-    const gray = toGray(data, width, height);
-    const blurred = gaussianBlur(gray, width, height);
-    const edges = sobel(blurred, width, height);
-    const thresh = threshold(edges, width, height);
-    const contour = findLargestContour(thresh, width, height);
-    if (!contour || contour.length < 4) return defaultQuad;
-    const hull = convexHull(contour);
+    // Downsample to max 640px for speed and noise reduction
+    const scale = Math.min(1, 640 / Math.max(width, height));
+    const dw = Math.round(width * scale);
+    const dh = Math.round(height * scale);
+
+    const gray = downsampleGray(data, width, height, dw, dh);
+    const blurred = gaussianBlur(gray, dw, dh);
+    const edges = sobel(blurred, dw, dh);
+
+    // Otsu's method on edge magnitudes for adaptive threshold
+    const t = otsuThreshold(edges);
+    const binary = new Uint8Array(dw * dh);
+    for (let i = 0; i < edges.length; i++) binary[i] = edges[i] > t ? 1 : 0;
+
+    // Dilate to connect nearby edge pixels
+    const dilated = dilate(binary, dw, dh, 2);
+
+    // Find largest connected region
+    const region = findLargestContour(dilated, dw, dh);
+    if (!region || region.length < 50) return defaultQuad;
+
+    const hull = convexHull(region);
     if (hull.length < 4) return defaultQuad;
+
     const quad = reduceToQuad(hull);
     if (!quad) return defaultQuad;
-    return orderQuad(quad);
+
+    const ordered = orderQuad(quad);
+
+    // Reject if quad area < 5% of image (too small to be a document)
+    if (quadArea(ordered) < dw * dh * 0.05) return defaultQuad;
+
+    // Scale back to original image coordinates
+    return ordered.map(p => ({
+      x: Math.round(p.x / scale),
+      y: Math.round(p.y / scale),
+    })) as [Point, Point, Point, Point];
   } catch {
     return defaultQuad;
   }
 }
 
-function toGray(data: Uint8ClampedArray, w: number, h: number): Float32Array {
-  const out = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    out[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+function makeDefault(w: number, h: number): [Point, Point, Point, Point] {
+  const i = 10;
+  return [{ x: i, y: i }, { x: w - i, y: i }, { x: w - i, y: h - i }, { x: i, y: h - i }];
+}
+
+function downsampleGray(
+  data: Uint8ClampedArray, sw: number, sh: number, dw: number, dh: number
+): Float32Array {
+  const out = new Float32Array(dw * dh);
+  const xr = sw / dw, yr = sh / dh;
+  for (let dy = 0; dy < dh; dy++) {
+    for (let dx = 0; dx < dw; dx++) {
+      const sx = Math.min(sw - 1, Math.round((dx + 0.5) * xr));
+      const sy = Math.min(sh - 1, Math.round((dy + 0.5) * yr));
+      const i = (sy * sw + sx) * 4;
+      out[dy * dw + dx] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    }
   }
   return out;
 }
@@ -42,11 +75,9 @@ function gaussianBlur(src: Float32Array, w: number, h: number): Float32Array {
   for (let y = 2; y < h - 2; y++) {
     for (let x = 2; x < w - 2; x++) {
       let v = 0;
-      for (let ky = -2; ky <= 2; ky++) {
-        for (let kx = -2; kx <= 2; kx++) {
+      for (let ky = -2; ky <= 2; ky++)
+        for (let kx = -2; kx <= 2; kx++)
           v += src[(y + ky) * w + (x + kx)] * kernel[(ky + 2) * 5 + (kx + 2)];
-        }
-      }
       out[y * w + x] = v / ksum;
     }
   }
@@ -70,12 +101,52 @@ function sobel(src: Float32Array, w: number, h: number): Float32Array {
   return out;
 }
 
-function threshold(edges: Float32Array, w: number, h: number): Uint8Array {
+function otsuThreshold(edges: Float32Array): number {
   let max = 0;
   for (let i = 0; i < edges.length; i++) if (edges[i] > max) max = edges[i];
-  const t = max * 0.15;
+  if (max < 1) return 1;
+
+  const bins = 256;
+  const n = edges.length;
+  const hist = new Float64Array(bins);
+  for (let i = 0; i < n; i++) hist[Math.min(bins - 1, (edges[i] / max * bins) | 0)]++;
+
+  let sum = 0;
+  for (let i = 0; i < bins; i++) sum += i * hist[i];
+
+  let sumB = 0, wB = 0, bestVar = 0, bestT = 0;
+  for (let t = 0; t < bins; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = n - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const v = wB * wF * (mB - mF) ** 2;
+    if (v > bestVar) { bestVar = v; bestT = t; }
+  }
+
+  // At least 20% of max to avoid very low thresholds on low-contrast images
+  return Math.max(max * 0.2, (bestT / bins) * max);
+}
+
+function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
   const out = new Uint8Array(w * h);
-  for (let i = 0; i < edges.length; i++) out[i] = edges[i] > t ? 1 : 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      outer:
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h && src[ny * w + nx]) {
+            out[y * w + x] = 1;
+            break outer;
+          }
+        }
+      }
+    }
+  }
   return out;
 }
 
@@ -105,7 +176,7 @@ function findLargestContour(thresh: Uint8Array, w: number, h: number): Point[] |
       if (pts.length > best.length) best = pts;
     }
   }
-  return best.length > 100 ? best : null;
+  return best.length > 50 ? best : null;
 }
 
 function convexHull(points: Point[]): Point[] {
@@ -131,19 +202,20 @@ function convexHull(points: Point[]): Point[] {
 
 function reduceToQuad(hull: Point[]): [Point, Point, Point, Point] | null {
   if (hull.length < 4) return null;
-  const eps = 0.02 * Math.sqrt(
-    Math.pow(hull[0].x - hull[hull.length >> 1].x, 2) +
-    Math.pow(hull[0].y - hull[hull.length >> 1].y, 2)
+  // Try RDP first
+  const diag = Math.sqrt(
+    (hull[0].x - hull[hull.length >> 1].x) ** 2 +
+    (hull[0].y - hull[hull.length >> 1].y) ** 2
   );
+  const eps = diag * 0.03;
   const reduced = rdp(hull, eps);
-  if (reduced.length < 4) return null;
   if (reduced.length === 4) return reduced as [Point, Point, Point, Point];
-  // Pick 4 most extreme points
-  const pts = reduced;
-  const tl = pts.reduce((a, b) => (a.x + a.y < b.x + b.y ? a : b));
-  const br = pts.reduce((a, b) => (a.x + a.y > b.x + b.y ? a : b));
-  const tr = pts.reduce((a, b) => (a.x - a.y > b.x - b.y ? a : b));
-  const bl = pts.reduce((a, b) => (a.x - a.y < b.x - b.y ? a : b));
+  // Fall back to 4 extreme corners
+  const pts = reduced.length >= 4 ? reduced : hull;
+  const tl = pts.reduce((a, b) => a.x + a.y < b.x + b.y ? a : b);
+  const br = pts.reduce((a, b) => a.x + a.y > b.x + b.y ? a : b);
+  const tr = pts.reduce((a, b) => a.x - a.y > b.x - b.y ? a : b);
+  const bl = pts.reduce((a, b) => a.x - a.y < b.x - b.y ? a : b);
   return [tl, tr, br, bl];
 }
 
@@ -173,14 +245,22 @@ function pointToLineDistance(p: Point, a: Point, b: Point): number {
 function orderQuad(q: [Point, Point, Point, Point]): [Point, Point, Point, Point] {
   const cx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4;
   const cy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
-  const angles = q.map(p => Math.atan2(p.y - cy, p.x - cx));
-  const sorted = q.slice().sort((a, b) =>
-    angles[q.indexOf(a)] - angles[q.indexOf(b)]
+  const sorted = [...q].sort((a, b) =>
+    Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx)
   ) as [Point, Point, Point, Point];
-  // rotate to top-left
   let minIdx = 0;
   for (let i = 1; i < 4; i++) {
     if (sorted[i].x + sorted[i].y < sorted[minIdx].x + sorted[minIdx].y) minIdx = i;
   }
   return [sorted[minIdx], sorted[(minIdx + 1) % 4], sorted[(minIdx + 2) % 4], sorted[(minIdx + 3) % 4]];
+}
+
+function quadArea(q: [Point, Point, Point, Point]): number {
+  // Shoelace formula
+  let area = 0;
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    area += q[i].x * q[j].y - q[j].x * q[i].y;
+  }
+  return Math.abs(area) / 2;
 }
