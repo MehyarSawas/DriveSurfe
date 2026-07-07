@@ -185,18 +185,21 @@ final class KDriveClient implements DriveInterface
     {
         $driveId = $this->getDriveId();
         $token   = $this->getToken();
-        $url = self::API_V3 . "/{$driveId}/files/{$parentId}/upload";
+        $url = self::API_V3 . "/{$driveId}/upload?" . http_build_query([
+            'directory_id' => (int) $parentId,
+            'file_name'    => $filename,
+            'conflict'     => 'rename',
+            'total_size'   => strlen($binary),
+        ]);
 
         try {
             $response = $this->http->post($url, [
-                'headers'   => ['Authorization' => "Bearer {$token}"],
-                'timeout'   => 300,
-                'multipart' => [
-                    ['name' => 'file', 'contents' => $binary, 'filename' => $filename,
-                     'headers' => ['Content-Type' => $mimeType]],
-                    ['name' => 'file_name', 'contents' => $filename],
-                    ['name' => 'conflict',  'contents' => 'rename'],
+                'headers' => [
+                    'Authorization' => "Bearer {$token}",
+                    'Content-Type'  => $mimeType,
                 ],
+                'timeout' => 300,
+                'body'    => $binary,
             ]);
         } catch (\GuzzleHttp\Exception\GuzzleException $e) {
             throw new \RuntimeException('Upload to storage failed: ' . $e->getMessage(), 0, $e);
