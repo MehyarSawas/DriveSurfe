@@ -54,8 +54,8 @@ function computeHomography(
   for (let i = 0; i < 4; i++) {
     const { x: x1, y: y1 } = src[i];
     const { x: x2, y: y2 } = dst[i];
-    A.push([x1, y1, 1, 0, 0, 0, -x2 * x1, -x2 * y1, -x2]);
-    A.push([0, 0, 0, x1, y1, 1, -y2 * x1, -y2 * y1, -y2]);
+    A.push([x1, y1, 1, 0, 0, 0, -x2 * x1, -x2 * y1, x2]);
+    A.push([0, 0, 0, x1, y1, 1, -y2 * x1, -y2 * y1, y2]);
   }
   const h = gaussianElim(A);
   return [...h, 1];
