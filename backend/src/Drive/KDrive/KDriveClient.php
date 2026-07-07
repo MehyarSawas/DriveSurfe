@@ -181,6 +181,26 @@ final class KDriveClient implements DriveInterface
         return $copy;
     }
 
+    public function uploadFile(string $parentId, string $filename, string $mimeType, string $base64Data): array
+    {
+        $driveId = $this->getDriveId();
+        $token   = $this->getToken();
+        $binary  = base64_decode($base64Data, true);
+        $url     = self::API_V3 . "/{$driveId}/files/{$parentId}/upload";
+
+        $response = $this->http->post($url, [
+            'headers'   => ['Authorization' => "Bearer {$token}"],
+            'multipart' => [
+                ['name' => 'file',      'contents' => $binary, 'filename' => $filename,
+                 'headers' => ['Content-Type' => $mimeType]],
+                ['name' => 'file_name', 'contents' => $filename],
+                ['name' => 'conflict',  'contents' => 'rename'],
+            ],
+        ]);
+        $data = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        return $this->normalizeFile($data['data'] ?? []);
+    }
+
     public function renameFile(string $fileId, string $name): array
     {
         $driveId = $this->getDriveId();

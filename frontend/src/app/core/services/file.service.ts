@@ -266,6 +266,15 @@ export class FileService {
     await firstValueFrom(this.http.post(`/api/files/${fileId}/copy`, { destination_folder_id: destinationFolderId }));
   }
 
+  async uploadFile(parentFolderId: string, fileName: string, mimeType: string, base64Data: string): Promise<DriveFile> {
+    const res = await firstValueFrom(
+      this.http.post<{data: DriveFile}>(`/api/folders/${parentFolderId}/upload`, {
+        file_name: fileName, mime_type: mimeType, data: base64Data
+      })
+    );
+    return res.data;
+  }
+
   async renameFile(fileId: string, name: string): Promise<void> {
     await firstValueFrom(this.http.post(`/api/files/${fileId}/rename`, { name }));
     const update = (files: DriveFile[]) => files.map(f => f.id === fileId ? { ...f, name } : f);

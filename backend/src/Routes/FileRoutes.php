@@ -171,6 +171,17 @@ final class FileRoutes
             return self::json($res, ['data' => $copy]);
         })->add($auth);
 
+        $group->post('/folders/{id}/upload', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
+            $body     = (array) $req->getParsedBody();
+            $filename = trim($body['file_name'] ?? '');
+            $mimeType = $body['mime_type'] ?? 'application/octet-stream';
+            $data     = $body['data'] ?? '';
+            if ($filename === '' || $data === '') return self::fileIdError($res);
+            $file = $drive->uploadFile($args['id'], $filename, $mimeType, $data);
+            return self::json($res, ['data' => $file]);
+        })->add($auth);
+
         $group->post('/files/{id}/rename', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $body = (array) $req->getParsedBody();
