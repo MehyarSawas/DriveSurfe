@@ -211,7 +211,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
           pg.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
         }
         const bytes = await pdf.save();
-        const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+        const pdfBlob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
         const file = await this.fileService.uploadFile(folderId, name + '.pdf', 'application/pdf', pdfBlob);
         this.uploaded.emit([file]);
       } else {
