@@ -27,19 +27,21 @@
       </button>
       <span class="scanner-title">Adjust</span>
     </div>
-    <div class="review-wrap"
-         (pointermove)="onReviewPointerMove($event)"
-         (pointerup)="onReviewPointerUp()"
-         (pointercancel)="onReviewPointerUp()">
-      <canvas #reviewEl class="review-canvas" [style.filter]="reviewFilter()"></canvas>
-
-      <!-- corner handles -->
-      @for (corner of corners(); track $index) {
-        <div class="corner-handle"
-             [style.left.px]="corner.x"
-             [style.top.px]="corner.y"
-             (pointerdown)="onCornerPointerDown($event, $index)"></div>
-      }
+    <div class="review-wrap">
+      <div class="review-image-wrap">
+        <img class="review-img" [src]="frozenDataUrl()" [style.filter]="reviewFilter()" />
+        <svg class="review-svg" viewBox="0 0 1 1" preserveAspectRatio="none"
+             (pointermove)="onSvgPointerMove($event)"
+             (pointerup)="onSvgPointerUp()"
+             (pointercancel)="onSvgPointerUp()">
+          <polygon [attr.points]="svgPoints()" class="quad-poly" />
+          @for (c of corners(); track $index) {
+            <circle [attr.cx]="c.x / frozenSize().w" [attr.cy]="c.y / frozenSize().h"
+                    r="0.04" class="quad-handle"
+                    (pointerdown)="onHandlePointerDown($event, $index)" />
+          }
+        </svg>
+      </div>
     </div>
 
     <div class="review-controls">

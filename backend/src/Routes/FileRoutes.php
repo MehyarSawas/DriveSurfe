@@ -173,12 +173,25 @@ final class FileRoutes
 
         $group->post('/folders/{id}/upload', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
-            $body     = (array) $req->getParsedBody();
-            $filename = trim($body['file_name'] ?? '');
-            $mimeType = $body['mime_type'] ?? 'application/octet-stream';
-            $data     = $body['data'] ?? '';
-            if ($filename === '' || $data === '') return self::fileIdError($res);
-            $file = $drive->uploadFile($args['id'], $filename, $mimeType, $data);
+            $filename = trim(rawurldecode($req->getHeaderLine('X-File-Name')));
+            $mimeType = $req->getHeaderLine('Content-Type') ?: 'application/octet-stream';
+            if (($semi = strpos($mimeType, ';')) !== false) {
+                $mimeType = trim(substr($mimeType, 0, $semi));
+            }
+            if ($filename === '') {
+                $res->getBody()->write(json_encode(['error' => 'Missing X-File-Name header'], JSON_THROW_ON_ERROR));
+                return $res->withStatus(400)->withHeader('Content-Type', 'application/json');
+            }
+            // Rewind: Slim's BodyParsingMiddleware reads the stream even for unknown
+            // content types, leaving the pointer at EOF. We must seek back before reading.
+            $bodyStream = $req->getBody();
+            $bodyStream->rewind();
+            $binary = (string) $bodyStream;
+            if ($binary === '') {
+                $res->getBody()->write(json_encode(['error' => 'Empty file body'], JSON_THROW_ON_ERROR));
+                return $res->withStatus(400)->withHeader('Content-Type', 'application/json');
+            }
+            $file = $drive->uploadFile($args['id'], $filename, $mimeType, $binary);
             return self::json($res, ['data' => $file]);
         })->add($auth);
 
