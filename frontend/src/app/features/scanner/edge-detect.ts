@@ -87,8 +87,9 @@ function extractQuad(
   if (!quad) return null;
   if (quadArea(quad) < dw * dh * 0.05) return null;
   const ordered = orderQuad(quad);
-  const inset = 4 / scale;
-  return clampAndInset(ordered, inset, origW, origH);
+  // Scale corners from downsampled pixel space back to original image pixel space
+  const upscaled = ordered.map(p => ({ x: p.x / scale, y: p.y / scale })) as [Point, Point, Point, Point];
+  return clampAndInset(upscaled, 4, origW, origH);
 }
 
 function makeDefault(w: number, h: number): [Point, Point, Point, Point] {
