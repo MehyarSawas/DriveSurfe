@@ -746,8 +746,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.uploadDone.set(0);
     this.uploadErrors.set(0);
     const results = await Promise.allSettled(files.map(async f => {
-      const base64 = await this.fileToBase64(f);
-      const uploaded = await this.fileService.uploadFile(folderId, f.name, f.type || 'application/octet-stream', base64);
+      const uploaded = await this.fileService.uploadFile(folderId, f.name, f.type || 'application/octet-stream', f);
       this.uploadDone.update(n => n + 1);
       return uploaded;
     }));
@@ -764,16 +763,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.loadCurrentFolder();
   }
 
-  private fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve((reader.result as string).split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-
-  onScanUploaded(_files: DriveFile[]): void {
+onScanUploaded(_files: DriveFile[]): void {
     this.scanOpen.set(false);
     this.loadCurrentFolder();
   }

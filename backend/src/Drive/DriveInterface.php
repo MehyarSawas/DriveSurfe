@@ -32,5 +32,5 @@ interface DriveInterface
 
     public function getFolderSize(string $folderId): int;
 
-    public function uploadFile(string $parentId, string $filename, string $mimeType, string $base64Data): array;
+    public function uploadFile(string $parentId, string $filename, string $mimeType, string $binary): array;
 }

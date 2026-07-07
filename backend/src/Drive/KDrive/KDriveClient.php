@@ -181,14 +181,10 @@ final class KDriveClient implements DriveInterface
         return $copy;
     }
 
-    public function uploadFile(string $parentId, string $filename, string $mimeType, string $base64Data): array
+    public function uploadFile(string $parentId, string $filename, string $mimeType, string $binary): array
     {
         $driveId = $this->getDriveId();
         $token   = $this->getToken();
-        $binary  = base64_decode($base64Data, true);
-        if ($binary === false) {
-            throw new \InvalidArgumentException('Invalid base64 data for upload');
-        }
         $url = self::API_V3 . "/{$driveId}/files/{$parentId}/upload";
 
         try {

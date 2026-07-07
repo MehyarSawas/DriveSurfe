@@ -266,11 +266,14 @@ export class FileService {
     await firstValueFrom(this.http.post(`/api/files/${fileId}/copy`, { destination_folder_id: destinationFolderId }));
   }
 
-  async uploadFile(parentFolderId: string, fileName: string, mimeType: string, base64Data: string): Promise<DriveFile> {
+  async uploadFile(parentFolderId: string, fileName: string, mimeType: string, data: Blob): Promise<DriveFile> {
+    const effectiveMime = mimeType || data.type || 'application/octet-stream';
     const res = await firstValueFrom(
-      this.http.post<{data: DriveFile}>(`/api/folders/${parentFolderId}/upload`, {
-        file_name: fileName, mime_type: mimeType, data: base64Data
-      })
+      this.http.post<{data: DriveFile}>(
+        `/api/folders/${parentFolderId}/upload`,
+        data,
+        { headers: { 'Content-Type': effectiveMime, 'X-File-Name': encodeURIComponent(fileName) } }
+      )
     );
     return res.data;
   }

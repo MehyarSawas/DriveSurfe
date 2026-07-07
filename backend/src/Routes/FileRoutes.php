@@ -173,15 +173,23 @@ final class FileRoutes
 
         $group->post('/folders/{id}/upload', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
-            $body     = (array) $req->getParsedBody();
-            $filename = trim($body['file_name'] ?? '');
-            $mimeType = $body['mime_type'] ?? 'application/octet-stream';
-            $data     = $body['data'] ?? '';
-            if ($filename === '' || $data === '') {
-                $res->getBody()->write(json_encode(['error' => 'Missing file_name or data'], JSON_THROW_ON_ERROR));
+            $filename = trim(rawurldecode($req->getHeaderLine('X-File-Name')));
+            $mimeType = $req->getHeaderLine('Content-Type') ?: 'application/octet-stream';
+            // Strip any charset / boundary suffix (e.g. "image/jpeg; charset=utf-8")
+            if (($semi = strpos($mimeType, ';')) !== false) {
+                $mimeType = trim(substr($mimeType, 0, $semi));
+            }
+            if ($filename === '') {
+                $res->getBody()->write(json_encode(['error' => 'Missing X-File-Name header'], JSON_THROW_ON_ERROR));
                 return $res->withStatus(400)->withHeader('Content-Type', 'application/json');
             }
-            $file = $drive->uploadFile($args['id'], $filename, $mimeType, $data);
+            // Raw binary body — not subject to post_max_size
+            $binary = (string) $req->getBody();
+            if ($binary === '') {
+                $res->getBody()->write(json_encode(['error' => 'Empty file body'], JSON_THROW_ON_ERROR));
+                return $res->withStatus(400)->withHeader('Content-Type', 'application/json');
+            }
+            $file = $drive->uploadFile($args['id'], $filename, $mimeType, $binary);
             return self::json($res, ['data' => $file]);
         })->add($auth);
 

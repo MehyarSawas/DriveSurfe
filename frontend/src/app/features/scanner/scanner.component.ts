@@ -211,16 +211,14 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
           pg.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
         }
         const bytes = await pdf.save();
-        const base64 = this.uint8ToBase64(new Uint8Array(bytes));
-        const file = await this.fileService.uploadFile(folderId, name + '.pdf', 'application/pdf', base64);
+        const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
+        const file = await this.fileService.uploadFile(folderId, name + '.pdf', 'application/pdf', pdfBlob);
         this.uploaded.emit([file]);
       } else {
         const results: DriveFile[] = [];
         for (let i = 0; i < pages.length; i++) {
-          const buf = await pages[i].blob.arrayBuffer();
-          const base64 = this.uint8ToBase64(new Uint8Array(buf));
           const fname = pages.length === 1 ? name + '.jpg' : `${name}_${i + 1}.jpg`;
-          const file = await this.fileService.uploadFile(folderId, fname, 'image/jpeg', base64);
+          const file = await this.fileService.uploadFile(folderId, fname, 'image/jpeg', pages[i].blob);
           results.push(file);
         }
         this.uploaded.emit(results);
@@ -229,15 +227,6 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
       this.uploadError.set('Upload failed. Please try again.');
       this.phase.set('format');
     }
-  }
-
-  private uint8ToBase64(bytes: Uint8Array): string {
-    let binary = '';
-    const chunk = 8192;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-    }
-    return btoa(binary);
   }
 
   // --- SVG corner dragging ---

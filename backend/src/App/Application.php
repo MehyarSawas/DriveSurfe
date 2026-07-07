@@ -87,7 +87,7 @@ final class Application
 
             return $response
                 ->withHeader('Access-Control-Allow-Origin', $origin)
-                ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Registration-Token')
+                ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Registration-Token, X-File-Name')
                 ->withHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
                 ->withHeader('Access-Control-Allow-Credentials', 'true')
                 ->withHeader('X-Content-Type-Options', 'nosniff')
