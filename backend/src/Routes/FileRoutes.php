@@ -177,7 +177,10 @@ final class FileRoutes
             $filename = trim($body['file_name'] ?? '');
             $mimeType = $body['mime_type'] ?? 'application/octet-stream';
             $data     = $body['data'] ?? '';
-            if ($filename === '' || $data === '') return self::fileIdError($res);
+            if ($filename === '' || $data === '') {
+                $res->getBody()->write(json_encode(['error' => 'Missing file_name or data'], JSON_THROW_ON_ERROR));
+                return $res->withStatus(400)->withHeader('Content-Type', 'application/json');
+            }
             $file = $drive->uploadFile($args['id'], $filename, $mimeType, $data);
             return self::json($res, ['data' => $file]);
         })->add($auth);

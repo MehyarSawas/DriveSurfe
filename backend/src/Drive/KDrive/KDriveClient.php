@@ -186,18 +186,31 @@ final class KDriveClient implements DriveInterface
         $driveId = $this->getDriveId();
         $token   = $this->getToken();
         $binary  = base64_decode($base64Data, true);
-        $url     = self::API_V3 . "/{$driveId}/files/{$parentId}/upload";
+        if ($binary === false) {
+            throw new \InvalidArgumentException('Invalid base64 data for upload');
+        }
+        $url = self::API_V3 . "/{$driveId}/files/{$parentId}/upload";
 
-        $response = $this->http->post($url, [
-            'headers'   => ['Authorization' => "Bearer {$token}"],
-            'multipart' => [
-                ['name' => 'file',      'contents' => $binary, 'filename' => $filename,
-                 'headers' => ['Content-Type' => $mimeType]],
-                ['name' => 'file_name', 'contents' => $filename],
-                ['name' => 'conflict',  'contents' => 'rename'],
-            ],
-        ]);
-        $data = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        try {
+            $response = $this->http->post($url, [
+                'headers'   => ['Authorization' => "Bearer {$token}"],
+                'timeout'   => 300,
+                'multipart' => [
+                    ['name' => 'file', 'contents' => $binary, 'filename' => $filename,
+                     'headers' => ['Content-Type' => $mimeType]],
+                    ['name' => 'file_name', 'contents' => $filename],
+                    ['name' => 'conflict',  'contents' => 'rename'],
+                ],
+            ]);
+        } catch (\GuzzleHttp\Exception\GuzzleException $e) {
+            throw new \RuntimeException('Upload to storage failed: ' . $e->getMessage(), 0, $e);
+        }
+
+        $body = (string) $response->getBody();
+        $data = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        if (($data['result'] ?? '') === 'error') {
+            throw new \RuntimeException('Storage API error: ' . ($data['error']['description'] ?? $body));
+        }
         return $this->normalizeFile($data['data'] ?? []);
     }
 
