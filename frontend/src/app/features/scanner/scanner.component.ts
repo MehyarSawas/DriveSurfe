@@ -9,7 +9,7 @@ import { DriveFile } from '../../core/models/drive-file.model';
 import { detectQuad, Point } from './edge-detect';
 import { detectQuadCv } from './edge-detect-cv';
 import { perspectiveWarp, perspectiveWarpCv } from './perspective-warp';
-import { loadOpenCv } from './opencv-loader';
+import { loadOpenCv, onOpenCvStatus } from './opencv-loader';
 import { PDFDocument } from 'pdf-lib';
 
 type Phase = 'camera' | 'review' | 'format' | 'uploading';
@@ -71,6 +71,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   readonly frozenDataUrl = signal('');
   readonly frozenSize = signal<{ w: number; h: number }>({ w: 1, h: 1 });
   readonly cvStatus = signal<'loading' | 'ready' | 'failed'>('loading');
+  readonly cvDetail = signal('starting…');
 
   private stream: MediaStream | null = null;
   private frameTimer: ReturnType<typeof setInterval> | null = null;
@@ -99,6 +100,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     // Lazy-load OpenCV.js in the background; detection falls back to the
     // pure-JS detector until it's ready.
+    onOpenCvStatus(msg => this.zone.run(() => this.cvDetail.set(msg)));
     loadOpenCv()
       .then(cv => { this.cv = cv; this.zone.run(() => this.cvStatus.set('ready')); })
       .catch(() => { this.cv = null; this.zone.run(() => this.cvStatus.set('failed')); });
