@@ -3,9 +3,9 @@
 // Multiple CDNs are tried in order so a single blocked host doesn't break scanning.
 
 const OPENCV_URLS = [
+  'https://docs.opencv.org/5.0/opencv.js',
   'https://docs.opencv.org/4.x/opencv.js',
   'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.11.0-release.1/dist/opencv.js',
-  'https://docs.opencv.org/4.10.0/opencv.js',
 ];
 
 let loadPromise: Promise<any> | null = null;
