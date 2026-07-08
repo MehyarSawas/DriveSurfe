@@ -70,6 +70,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
   readonly frozenDataUrl = signal('');
   readonly frozenSize = signal<{ w: number; h: number }>({ w: 1, h: 1 });
+  readonly cvStatus = signal<'loading' | 'ready' | 'failed'>('loading');
 
   private stream: MediaStream | null = null;
   private frameTimer: ReturnType<typeof setInterval> | null = null;
@@ -98,7 +99,9 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     // Lazy-load OpenCV.js in the background; detection falls back to the
     // pure-JS detector until it's ready.
-    loadOpenCv().then(cv => { this.cv = cv; }).catch(() => { this.cv = null; });
+    loadOpenCv()
+      .then(cv => { this.cv = cv; this.zone.run(() => this.cvStatus.set('ready')); })
+      .catch(() => { this.cv = null; this.zone.run(() => this.cvStatus.set('failed')); });
     this.startCamera();
   }
 
@@ -182,9 +185,14 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     this.phase.set('review');
 
     // Ensure the accurate OpenCV detector runs on the captured frame even if
-    // the library hadn't finished loading during the live preview.
-    if (!this.cv) {
-      try { this.cv = await loadOpenCv(); } catch { this.cv = null; }
+    // the library hadn't finished loading during the live preview. Cap the wait
+    // so a slow/blocked CDN can't hang the capture.
+    if (!this.cv && this.cvStatus() === 'loading') {
+      try {
+        const timeout = new Promise<null>(r => setTimeout(() => r(null), 8000));
+        const cv = await Promise.race([loadOpenCv(), timeout]);
+        if (cv) { this.cv = cv; this.cvStatus.set('ready'); }
+      } catch { /* keep fallback */ }
     }
     const imgData = snap.getContext('2d')!.getImageData(0, 0, snap.width, snap.height);
     this.corners.set(this.detect(imgData));
