@@ -35,6 +35,7 @@
     </div>
     <div class="review-wrap">
       <div class="review-image-wrap"
+           [style.aspect-ratio]="frozenSize().w + ' / ' + frozenSize().h"
            (pointermove)="onSvgPointerMove($event)"
            (pointerup)="onSvgPointerUp()"
            (pointercancel)="onSvgPointerUp()">

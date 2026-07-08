@@ -40,22 +40,33 @@ export function detectDocument(cv: any, imageData: ImageData): Detection | null 
     const blur = track(new cv.Mat());
     cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
 
+    // Saturation channel: separates colored documents (ID cards, colored
+    // paper) from neutral backgrounds — and vice versa — even when their
+    // brightness is nearly identical.
+    const rgbM = track(new cv.Mat());
+    cv.cvtColor(small, rgbM, cv.COLOR_RGBA2RGB);
+    const hsv = track(new cv.Mat());
+    cv.cvtColor(rgbM, hsv, cv.COLOR_RGB2HSV);
+    const chans = track(new cv.MatVector());
+    cv.split(hsv, chans);
+    const satBlur = track(new cv.Mat());
+    cv.GaussianBlur(track(chans.get(1)), satBlur, new cv.Size(5, 5), 0);
+
     const frameArea = dw * dh;
     const kernel = track(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(7, 7)));
 
     const masks: Array<[string, any]> = [];
-
-    const otsu = track(new cv.Mat());
-    cv.threshold(blur, otsu, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-    const otsuC = track(new cv.Mat());
-    cv.morphologyEx(otsu, otsuC, cv.MORPH_OPEN, kernel);
-    masks.push(['otsu-bright', otsuC]);
-
-    const otsuInv = track(new cv.Mat());
-    cv.threshold(blur, otsuInv, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
-    const otsuInvC = track(new cv.Mat());
-    cv.morphologyEx(otsuInv, otsuInvC, cv.MORPH_OPEN, kernel);
-    masks.push(['otsu-dark', otsuInvC]);
+    const addOtsu = (srcMat: any, inverted: boolean, name: string) => {
+      const t = track(new cv.Mat());
+      cv.threshold(srcMat, t, 0, 255, (inverted ? cv.THRESH_BINARY_INV : cv.THRESH_BINARY) + cv.THRESH_OTSU);
+      const c = track(new cv.Mat());
+      cv.morphologyEx(t, c, cv.MORPH_OPEN, kernel);
+      masks.push([name, c]);
+    };
+    addOtsu(blur, false, 'lum-bright');
+    addOtsu(blur, true, 'lum-dark');
+    addOtsu(satBlur, false, 'sat-high');
+    addOtsu(satBlur, true, 'sat-low');
 
     const edges = track(new cv.Mat());
     cv.Canny(blur, edges, 75, 200);
@@ -159,12 +170,13 @@ function scoreContour(
   const aspect = Math.max(rw, rh) / Math.max(1, Math.min(rw, rh));
   if (aspect > 4.5) return null;
 
-  // Reject frame-hugging quads (vignette / lighting border).
-  const m = Math.min(dw, dh) * 0.02;
-  const hugs =
-    q.some(p => p!.x <= m) && q.some(p => p!.x >= dw - m) &&
-    q.some(p => p!.y <= m) && q.some(p => p!.y >= dh - m);
-  if (hugs && frac > 0.6) return null;
+  // A scannable document sits INSIDE the frame. Regions clipped by 2+ image
+  // borders (table surfaces, walls, floors) are scenery, not documents.
+  const m = Math.min(dw, dh) * 0.015;
+  const borders =
+    (quad.some(p => p.x <= m) ? 1 : 0) + (quad.some(p => p.x >= dw - m) ? 1 : 0) +
+    (quad.some(p => p.y <= m) ? 1 : 0) + (quad.some(p => p.y >= dh - m) ? 1 : 0);
+  if (borders >= 2) return null;
 
   const score = rectangularity * solidity * Math.sqrt(frac);
   return { quad: q as Point[], score };
