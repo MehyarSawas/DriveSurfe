@@ -1,5 +1,41 @@
 import { Point } from './edge-detect';
 
+// OpenCV-based perspective warp. Uses getPerspectiveTransform + warpPerspective,
+// the same primitives every professional scanner relies on. `cv` is the
+// initialized OpenCV.js module.
+export function perspectiveWarpCv(
+  cv: any,
+  src: HTMLCanvasElement,
+  corners: [Point, Point, Point, Point]
+): HTMLCanvasElement {
+  const [tl, tr, br, bl] = corners;
+  const w = Math.round(Math.max(
+    Math.hypot(tr.x - tl.x, tr.y - tl.y),
+    Math.hypot(br.x - bl.x, br.y - bl.y)
+  ));
+  const h = Math.round(Math.max(
+    Math.hypot(bl.x - tl.x, bl.y - tl.y),
+    Math.hypot(br.x - tr.x, br.y - tr.y)
+  ));
+
+  let srcMat: any, dstMat: any, M: any, srcTri: any, dstTri: any;
+  try {
+    srcMat = cv.imread(src);
+    dstMat = new cv.Mat();
+    srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
+    dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, w, 0, w, h, 0, h]);
+    M = cv.getPerspectiveTransform(srcTri, dstTri);
+    cv.warpPerspective(srcMat, dstMat, M, new cv.Size(w, h), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255));
+
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    cv.imshow(out, dstMat);
+    return out;
+  } finally {
+    srcMat?.delete(); dstMat?.delete(); M?.delete(); srcTri?.delete(); dstTri?.delete();
+  }
+}
+
 export function perspectiveWarp(
   src: HTMLCanvasElement,
   corners: [Point, Point, Point, Point]

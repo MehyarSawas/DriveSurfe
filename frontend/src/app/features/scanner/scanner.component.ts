@@ -7,7 +7,9 @@ import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
 import { DriveFile } from '../../core/models/drive-file.model';
 import { detectQuad, Point } from './edge-detect';
-import { perspectiveWarp } from './perspective-warp';
+import { detectQuadCv } from './edge-detect-cv';
+import { perspectiveWarp, perspectiveWarpCv } from './perspective-warp';
+import { loadOpenCv } from './opencv-loader';
 import { PDFDocument } from 'pdf-lib';
 
 type Phase = 'camera' | 'review' | 'format' | 'uploading';
@@ -72,6 +74,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   private stream: MediaStream | null = null;
   private frameTimer: ReturnType<typeof setInterval> | null = null;
   private frozenCanvas: HTMLCanvasElement | null = null;
+  private cv: any = null;
 
   readonly reviewFilter = computed(() => {
     const b = this.brightness(), c = this.contrast(), e = this.enhance();
@@ -93,7 +96,19 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   constructor(private zone: NgZone, private fileService: FileService) {}
 
   ngAfterViewInit(): void {
+    // Lazy-load OpenCV.js in the background; detection falls back to the
+    // pure-JS detector until it's ready.
+    loadOpenCv().then(cv => { this.cv = cv; }).catch(() => { this.cv = null; });
     this.startCamera();
+  }
+
+  /** Best available quad detector: OpenCV when loaded, pure-JS fallback otherwise. */
+  private detect(imgData: ImageData): [Point, Point, Point, Point] {
+    if (this.cv) {
+      const q = detectQuadCv(this.cv, imgData);
+      if (q) return q;
+    }
+    return detectQuad(imgData);
   }
 
   ngOnDestroy(): void {
@@ -133,7 +148,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     offscreen.getContext('2d')!.drawImage(video, 0, 0);
     const imgData = offscreen.getContext('2d')!.getImageData(0, 0, offscreen.width, offscreen.height);
 
-    const quad = detectQuad(imgData);
+    const quad = this.detect(imgData);
     this.zone.run(() => this.corners.set(quad));
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -166,7 +181,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     this.stopCamera();
 
     const imgData = snap.getContext('2d')!.getImageData(0, 0, snap.width, snap.height);
-    this.corners.set(detectQuad(imgData));
+    this.corners.set(this.detect(imgData));
     this.phase.set('review');
   }
 
@@ -193,7 +208,9 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
   private async bakeCurrentPage(): Promise<void> {
     if (!this.frozenCanvas) return;
-    const warped = perspectiveWarp(this.frozenCanvas, this.corners());
+    const warped = this.cv
+      ? perspectiveWarpCv(this.cv, this.frozenCanvas, this.corners())
+      : perspectiveWarp(this.frozenCanvas, this.corners());
 
     const offscreen = document.createElement('canvas');
     offscreen.width = warped.width;
