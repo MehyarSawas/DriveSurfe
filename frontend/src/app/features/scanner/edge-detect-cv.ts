@@ -1,5 +1,10 @@
 import { Point } from './edge-detect';
 
+// Last error thrown inside detectQuadCv, for surfacing in the UI (the detector
+// itself never throws — it returns null so callers can fall back).
+let _lastCvError: string | null = null;
+export function lastCvError(): string | null { return _lastCvError; }
+
 // OpenCV-based document quad detection. Runs two strategies and keeps the best
 // candidate quad:
 //   A) Edge-based  — Canny → dilate → contours (good for documents on plain,
@@ -71,10 +76,13 @@ export function detectQuadCv(cv: any, imageData: ImageData): [Point, Point, Poin
       }
     }
 
+    _lastCvError = null;
     if (!best) return null;
     const ordered = orderQuad(best as [Point, Point, Point, Point]);
     return ordered.map(p => ({ x: p.x / scale, y: p.y / scale })) as [Point, Point, Point, Point];
-  } catch {
+  } catch (e) {
+    // OpenCV.js throws numbers/strings for WASM aborts; normalize for display.
+    _lastCvError = e instanceof Error ? e.message : String(e);
     return null;
   } finally {
     src?.delete(); small?.delete(); gray?.delete(); blur?.delete();

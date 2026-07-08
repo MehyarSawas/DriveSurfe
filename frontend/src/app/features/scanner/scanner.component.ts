@@ -7,7 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
 import { DriveFile } from '../../core/models/drive-file.model';
 import { detectQuad, Point } from './edge-detect';
-import { detectQuadCv } from './edge-detect-cv';
+import { detectQuadCv, lastCvError } from './edge-detect-cv';
 import { perspectiveWarp, perspectiveWarpCv } from './perspective-warp';
 import { loadOpenCv, onOpenCvStatus } from './opencv-loader';
 import { PDFDocument } from 'pdf-lib';
@@ -72,6 +72,8 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   readonly frozenSize = signal<{ w: number; h: number }>({ w: 1, h: 1 });
   readonly cvStatus = signal<'loading' | 'ready' | 'failed'>('loading');
   readonly cvDetail = signal('starting…');
+  /** True when the CV detector found a document in the last processed frame. */
+  readonly cvFound = signal(false);
 
   private stream: MediaStream | null = null;
   private frameTimer: ReturnType<typeof setInterval> | null = null;
@@ -111,7 +113,9 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   private detect(imgData: ImageData): [Point, Point, Point, Point] {
     if (this.cv) {
       const q = detectQuadCv(this.cv, imgData);
-      if (q) return q;
+      if (lastCvError()) this.cvDetail.set('CV error: ' + lastCvError());
+      if (q) { this.cvFound.set(true); return q; }
+      this.cvFound.set(false);
     }
     return detectQuad(imgData);
   }
@@ -157,7 +161,12 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     this.zone.run(() => this.corners.set(quad));
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#00e676';
+
+    // Green solid = CV detector locked onto a document.
+    // Gray dashed = no document found (frame-default fallback quad).
+    const found = this.cv !== null && this.cvFound();
+    ctx.strokeStyle = found ? '#00e676' : 'rgba(255,255,255,0.45)';
+    ctx.setLineDash(found ? [] : [12, 10]);
     ctx.lineWidth = Math.max(2, canvas.width / 300);
     ctx.beginPath();
     const [tl, tr, br, bl] = quad;
@@ -167,8 +176,10 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     ctx.lineTo(bl.x, bl.y);
     ctx.closePath();
     ctx.stroke();
-    ctx.fillStyle = 'rgba(0,230,118,0.1)';
-    ctx.fill();
+    if (found) {
+      ctx.fillStyle = 'rgba(0,230,118,0.1)';
+      ctx.fill();
+    }
   }
 
   async capture(): Promise<void> {
