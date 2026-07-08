@@ -15,12 +15,11 @@ DriveSurfe/
 │   │   ├── App/Application.php        # DI container, middleware, route registration
 │   │   ├── Drive/DriveInterface.php    # Contract every storage provider must implement
 │   │   ├── Drive/KDrive/KDriveClient.php    # Infomaniak kDrive API client (the core of the backend)
-│   │   ├── Drive/KDrive/KDriveProvider.php   # DEAD CODE — OAuth2 provider, package not installed, unused
 │   │   ├── Middleware/AuthMiddleware.php      # Session-cookie gate for protected routes
 │   │   ├── Routes/{Auth,File,Action,Session}Routes.php
-│   │   ├── Service/SessionService.php   # Encrypted session cookie (AES-256-CBC + HMAC)
-│   │   └── Service/ThumbnailService.php  # DEAD CODE — shell-out thumbnailer, not wired to any route
+│   │   └── Service/SessionService.php   # Encrypted session cookie (AES-256-CBC + HMAC)
 │   ├── passkeys.json        # WebAuthn credential store (flat file, gitignored)
+│   ├── registration_attempts.json  # Failed X-Registration-Token attempts, for rate limiting (gitignored)
 │   ├── sessions.json         # Saved preview-position "sessions" (flat file, gitignored — unrelated to auth)
 │   └── .env                   # Secrets (gitignored) — see Environment Variables below
 └── frontend/               # Angular 22 SPA, all standalone components, signals-based state
@@ -57,7 +56,7 @@ DriveSurfe/
 - **Cookie**: `ds_session`, `HttpOnly`, `SameSite=Strict`, `Secure` (unless `APP_ENV=development`), 7-day TTL, `path=/`.
 - **Encryption** (`SessionService`): AES-256-CBC, key = `sha256(SESSION_KEY)` (raw 32 bytes). Payload = `base64(iv(16) . hmac-sha256(ciphertext)(32) . ciphertext)`. Decrypt verifies HMAC with `hash_equals` before decrypting (encrypt-then-MAC). **Known gap: the HMAC covers only the ciphertext, not the IV** — low practical risk today (a corrupted IV just breaks JSON parsing, caught → `[]`) but if you touch this code, fix it to `hash_hmac('sha256', $iv . $ciphertext, $key, true)` to close the gap properly.
 - **Stored session fields**: `authenticated` (bool), `webauthn_challenge` (base64, single-use, consumed immediately on both success and failure paths).
-- **There is no OAuth login flow wired up.** `KDriveProvider.php` (League OAuth2 provider for Infomaniak) exists but `league/oauth2-client` isn't even in `composer.json` — it's dead code. Don't assume it works; either wire it properly (with CSRF `state` validation) or delete it.
+- **There is no OAuth login flow wired up and no reference implementation to copy.** An earlier, unfinished `KDriveProvider.php` (League OAuth2 provider) was removed as dead code — `league/oauth2-client` was never even in `composer.json`. If you add OAuth, write it fresh with proper CSRF `state` validation, not by reviving that file.
 - **kDrive API access uses a static long-lived `KDRIVE_TOKEN`** (from `.env`), completely separate from the user's own login session. The app owner authenticates to *DriveSurfe* via passkey; DriveSurfe then talks to kDrive using its own fixed service token.
 
 **Registration flow** (`GET/POST /api/auth/passkey/register[/options]`):
@@ -254,7 +253,7 @@ Camera-based document scanner: capture → auto-detect document quad → manual 
 - **`scanner.component.ts/html/scss`** — camera capture, live preview overlay, corner-adjustment UI, enhancement controls, PDF/JPEG assembly, upload.
 
 ### OpenCV.js loading (`opencv-loader.ts`)
-Self-hosted at `frontend/src/assets/opencv/opencv.js` (vendored — WASM embedded as a base64 data URI, no separate `.wasm` fetch) is tried **first**; two remote CDN fallbacks exist (`docs.opencv.org/5.0`, jsDelivr `@techstark/opencv-js`) but should be treated as emergency fallbacks only, not the primary path — self-hosting avoids CDN egress/availability issues that caused real production failures during development. The loader transparently handles three different OpenCV.js build shapes (MODULARIZE factory function, Emscripten thenable, classic global + `onRuntimeInitialized`), since different builds expose `window.cv` differently — **if you swap in a different OpenCV.js build, verify which shape it uses**, this has broken silently before. Polls every 150ms with a 40s per-source timeout before falling through to the next source. `onOpenCvStatus(fn)` streams human-readable progress into the scanner UI badge — keep this wired up; it was added specifically because silent hangs during loading were undiagnosable without it.
+Self-hosted **only** at `frontend/src/assets/opencv/opencv.js` (vendored — WASM embedded as a base64 data URI, no separate `.wasm` fetch). Earlier versions also tried remote CDN fallbacks (`docs.opencv.org`, jsDelivr `@techstark/opencv-js`), but these were removed deliberately: an unpinned third-party `<script>` src is a code-execution vector (no SRI, would run with full same-origin privilege), and the SPA's CSP (`backend/public/.htaccess`) now locks `script-src` to `'self'`, which would silently block them anyway. **Do not re-add a remote fallback without also adding SRI (`integrity`+`crossorigin`) and widening the CSP for that exact host.** The loader transparently handles three different OpenCV.js build shapes (MODULARIZE factory function, Emscripten thenable, classic global + `onRuntimeInitialized`), since different builds expose `window.cv` differently — **if you swap in a different OpenCV.js build, verify which shape it uses**, this has broken silently before. Polls every 150ms with a 40s timeout. `onOpenCvStatus(fn)` streams human-readable progress into the scanner UI badge — keep this wired up; it was added specifically because silent hangs during loading were undiagnosable without it.
 
 ### Document quad detection (`quad-detector.ts`) — read before changing thresholds
 This algorithm was iterated extensively against real failure photos (furniture, textured rugs, low-contrast documents, colored ID cards on wood tables) — **do not loosen the gates without re-testing against those failure modes**. Pipeline:
@@ -357,7 +356,7 @@ Deployment is automated via `.github/workflows/deploy.yml` on every push to `mai
 
 ## Adding a New Drive Provider
 1. Create `backend/src/Drive/NewDrive/NewDriveClient.php` implementing `DriveInterface`.
-2. Register OAuth/auth routes as needed (note: no working OAuth reference implementation currently exists in this codebase — `KDriveProvider.php` is unfinished/unwired dead code, don't copy its pattern uncritically).
+2. Register OAuth/auth routes as needed (note: no OAuth reference implementation currently exists in this codebase — write it fresh with proper CSRF `state` validation).
 3. Add a frontend login option in `LoginComponent`.
 4. `AuthService`/`FileService` currently assume a single fixed provider (`currentDrive` is typed as effectively just `'kdrive'`) — widen types if adding a second provider.
 
@@ -367,11 +366,11 @@ Deployment is automated via `.github/workflows/deploy.yml` on every push to `mai
 
 A full security review has been done on this codebase (backend PHP + frontend Angular). Overall posture is solid for a single-owner personal app: CORS origin is env-derived (not reflected from request headers), session cookie flags are correct (`HttpOnly`+`SameSite=Strict`+`Secure`), all WebAuthn comparisons use `hash_equals`, file/folder IDs are validated everywhere before reaching the upstream API, MIME types on proxied media are validated against the upstream response, and no secrets appear in source control or client-visible responses.
 
-**Known gaps, in priority order if you pick up work here:**
-1. **Session cookie HMAC doesn't cover the IV** (`SessionService::encrypt`) — low practical risk today but violates encrypt-then-MAC best practice; fix is a one-line change to include the IV in the HMAC input.
-2. **No Content-Security-Policy header** anywhere (API or SPA) — add one, especially given the OpenCV.js remote CDN fallbacks below.
-3. **OpenCV.js CDN fallbacks have no SRI/integrity check** — self-hosted is already the primary source; consider dropping the remote fallbacks entirely or adding `integrity`+`crossorigin` attributes.
-4. **`REGISTRATION_TOKEN` never expires or gets consumed** — functionally a permanent secret despite being called "one-time" in comments; either add consumption tracking or accept the risk for a personal-use app.
-5. Two dead-code files reference unbuilt dependencies or shell out via `exec()`: `KDriveProvider.php` (references an uninstalled OAuth package) and `ThumbnailService.php` (unused, shells out with `escapeshellarg`-protected args but no path containment). Either finish wiring them safely or delete them — don't let a future change assume they already work.
+**All findings from that review have since been fixed:**
+1. **Session cookie HMAC now covers the IV** (`SessionService::encrypt`/`decrypt`) — `hash_hmac('sha256', $iv . $encrypted, $key, true)`, proper encrypt-then-MAC. **Breaking change**: this changed the cookie wire format, so any session cookie issued before this fix fails HMAC verification and is treated as logged out (fails safe — `decrypt()` returns `null` → `get()` returns `[]`). No action needed beyond logging in again once after deploying.
+2. **Content-Security-Policy added** in two places: `Application.php`'s security-header middleware sets `default-src 'none'; frame-ancestors 'none'` on all `/api` JSON/binary responses (they never render HTML, so this is maximally strict); `backend/public/.htaccess` sets a separate SPA policy (`script-src 'self'`, Google Fonts allowed for `style-src`/`font-src`, `img-src`/`media-src` allow `data:`/`blob:` for the scanner's canvas output and camera stream, `object-src 'none'`, `base-uri 'none'`). If you add a new third-party script/font/API host, update `.htaccess`'s CSP or it will be silently blocked in production (dev via `ng serve` doesn't go through Apache, so `.htaccess` CSP won't apply locally — test CSP changes against a real deploy or `php -S`).
+3. **OpenCV.js CDN fallbacks removed** (`opencv-loader.ts`) — self-hosted (`assets/opencv/opencv.js`) is now the *only* source; a compromised third-party CDN is no longer a code-execution vector. If you ever need a remote fallback again, add SRI (`integrity`+`crossorigin`) and widen `script-src`/`connect-src` in `.htaccess` for that exact host at the same time — don't add a bare CDN `<script>` src again.
+4. **`REGISTRATION_TOKEN` brute-force now rate-limited** (`AuthRoutes.php`) — failed `X-Registration-Token` attempts are tracked in `backend/registration_attempts.json` (gitignored, atomic tmp+rename writes like `passkeys.json`); 5 failures within a 15-minute window returns 429 until the window rolls off. Note the token is already structurally inert once the first passkey exists (`register/options` returns 403 "log in first" before the token branch is ever reached), so this closes the pre-enrollment brute-force window specifically.
+5. **Dead code deleted**: `KDriveProvider.php` (unwired OAuth2 provider, `league/oauth2-client` was never installed) and `ThumbnailService.php` (unused `exec()`-based thumbnailer) are both removed. If you need OAuth or server-side thumbnailing later, write it fresh rather than reviving these — they were never finished or exercised.
 
-Nothing in the review rose to critical/immediately-exploitable. Full finding-by-finding writeup with file:line references was produced during this review — see chat history for the complete text if needed.
+Nothing in the original review rose to critical/immediately-exploitable; these were hardening fixes, not incident response.

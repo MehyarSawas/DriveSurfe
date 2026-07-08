@@ -94,7 +94,8 @@ final class Application
                 ->withHeader('X-Frame-Options', 'DENY')
                 ->withHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
                 ->withHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
-                ->withHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+                ->withHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+                ->withHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
         });
     }
 

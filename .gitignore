@@ -13,6 +13,8 @@ frontend/dist/
 
 # PHP
 backend/passkeys.json
+backend/sessions.json
+backend/registration_attempts.json
 backend/public/uploads/
 backend/cache/
 # composer.phar can optionally live in backend/ on the server — not committed

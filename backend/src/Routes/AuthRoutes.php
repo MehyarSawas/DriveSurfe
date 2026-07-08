@@ -13,6 +13,9 @@ use Slim\Routing\RouteCollectorProxy;
 final class AuthRoutes
 {
     private const PASSKEYS_FILE = __DIR__ . '/../../passkeys.json';
+    private const REG_ATTEMPTS_FILE = __DIR__ . '/../../registration_attempts.json';
+    private const REG_MAX_ATTEMPTS = 5;
+    private const REG_LOCKOUT_WINDOW = 900; // 15 minutes
 
     private SessionService $session;
 
@@ -60,12 +63,18 @@ final class AuthRoutes
             }
 
             if (empty($passkeys) && !$authenticated) {
-                // No passkeys yet — require the one-time registration token
+                // No passkeys yet — require the registration token, rate-limited
+                // against brute force since the token itself never expires.
+                if (self::isRegistrationLockedOut()) {
+                    return self::jsonError($res, 'Too many attempts. Try again later.', 429);
+                }
                 $token    = $_ENV['REGISTRATION_TOKEN'] ?? null;
                 $provided = $req->getHeaderLine('X-Registration-Token') ?: null;
                 if (empty($token) || !hash_equals($token, (string) $provided)) {
+                    self::recordRegistrationFailure();
                     return self::jsonError($res, 'Registration token required', 403);
                 }
+                self::clearRegistrationFailures();
             }
 
             $webAuthn = self::makeWebAuthn();
@@ -262,6 +271,44 @@ final class AuthRoutes
             ?? parse_url($_ENV['APP_URL'] ?? 'https://drive.msawas.com', PHP_URL_HOST)
             ?? 'drive.msawas.com';
         return new WebAuthn('DriveSurfe', $rpId);
+    }
+
+    /** @return int[] Unix timestamps of recent failed registration-token attempts, pruned to the lockout window. */
+    private static function loadRegistrationFailures(): array
+    {
+        if (!file_exists(self::REG_ATTEMPTS_FILE)) {
+            return [];
+        }
+        $attempts = json_decode(file_get_contents(self::REG_ATTEMPTS_FILE), true, 512, JSON_THROW_ON_ERROR) ?? [];
+        $cutoff = time() - self::REG_LOCKOUT_WINDOW;
+        return array_values(array_filter($attempts, static fn($t) => $t > $cutoff));
+    }
+
+    private static function saveRegistrationFailures(array $attempts): void
+    {
+        $json = json_encode($attempts, JSON_THROW_ON_ERROR);
+        $tmp  = self::REG_ATTEMPTS_FILE . '.tmp.' . bin2hex(random_bytes(4));
+        file_put_contents($tmp, $json, LOCK_EX);
+        rename($tmp, self::REG_ATTEMPTS_FILE);
+    }
+
+    private static function isRegistrationLockedOut(): bool
+    {
+        return count(self::loadRegistrationFailures()) >= self::REG_MAX_ATTEMPTS;
+    }
+
+    private static function recordRegistrationFailure(): void
+    {
+        $attempts   = self::loadRegistrationFailures();
+        $attempts[] = time();
+        self::saveRegistrationFailures($attempts);
+    }
+
+    private static function clearRegistrationFailures(): void
+    {
+        if (file_exists(self::REG_ATTEMPTS_FILE)) {
+            @unlink(self::REG_ATTEMPTS_FILE);
+        }
     }
 
     private static function loadPasskeys(): array

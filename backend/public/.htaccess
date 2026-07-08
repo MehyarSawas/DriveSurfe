@@ -20,3 +20,9 @@ AddType text/javascript .mjs
   Header set Cache-Control "no-cache, no-store, must-revalidate"
   Header set Pragma "no-cache"
 </FilesMatch>
+
+# Content-Security-Policy for the SPA. OpenCV.js is self-hosted only
+# (assets/opencv/opencv.js, no remote CDN fallback — see opencv-loader.ts),
+# so script-src/connect-src need no third-party script host. Google Fonts CSS
+# is still loaded remotely (index.html), hence style-src/font-src allowances.
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"

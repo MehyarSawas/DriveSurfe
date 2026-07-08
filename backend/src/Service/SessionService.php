@@ -76,7 +76,7 @@ final class SessionService
         $iv = random_bytes(16);
         $key = hash('sha256', $this->key, true);
         $encrypted = openssl_encrypt($data, 'AES-256-CBC', $key, 0, $iv);
-        $hmac = hash_hmac('sha256', $encrypted, $key, true);
+        $hmac = hash_hmac('sha256', $iv . $encrypted, $key, true);
         return base64_encode($iv . $hmac . $encrypted);
     }
 
@@ -92,7 +92,7 @@ final class SessionService
         $hmac = substr($decoded, 16, 32);
         $encrypted = substr($decoded, 48);
 
-        $expectedHmac = hash_hmac('sha256', $encrypted, $key, true);
+        $expectedHmac = hash_hmac('sha256', $iv . $encrypted, $key, true);
         if (!hash_equals($expectedHmac, $hmac)) {
             return null;
         }

@@ -4,14 +4,16 @@
 //   1. MODULARIZE factory   — window.cv is a function returning a Promise (5.0+)
 //   2. Emscripten thenable  — window.cv is a Promise (self-hosted UMD build)
 //   3. Classic global       — window.cv object, ready via onRuntimeInitialized
-// with polling + per-URL timeout so a stalled init moves on instead of hanging.
-
+// with polling + a timeout so a stalled init fails cleanly instead of hanging.
+//
+// Self-hosted only — deliberately no remote CDN fallback. A CDN script loaded
+// without SRI would run with full same-origin privilege (session cookie is
+// HttpOnly so it can't be read directly, but injected JS could still call the
+// API as the logged-in user). The CSP's script-src is locked to 'self' to
+// match; if you ever need a remote fallback, add SRI (integrity+crossorigin)
+// and widen the CSP script-src for that exact host at the same time.
 const OPENCV_URLS = [
-  // Self-hosted (same origin) — no CDN dependency, cached by the service worker
   'assets/opencv/opencv.js',
-  // Remote fallbacks in case the local asset is missing
-  'https://docs.opencv.org/5.0/opencv.js',
-  'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.11.0-release.1/dist/opencv.js',
 ];
 
 const PER_URL_TIMEOUT = 40000; // allow slow 11 MB download + WASM init
