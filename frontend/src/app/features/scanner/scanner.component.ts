@@ -15,15 +15,45 @@ type Phase = 'camera' | 'review' | 'format' | 'uploading';
 type Enhance = 'color' | 'grayscale' | 'bw';
 
 function applyPixelEnhance(data: Uint8ClampedArray, brightness: number, contrast: number, enhance: Enhance): void {
-  // b=1 and c=1 at defaults (100/100) → pixel unchanged
+  // Google-Drive-style auto enhancement: find the luminance black/white points
+  // from the histogram and stretch so the paper background reads as true white
+  // (the paper is the brightest large region — map its level to 255).
+  const hist = new Uint32Array(256);
+  const totalPx = data.length / 4;
+  for (let i = 0; i < data.length; i += 4) {
+    hist[(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) | 0]++;
+  }
+  let cum = 0, black = 0, white = 255;
+  for (let v = 0; v < 256; v++) { cum += hist[v]; if (cum >= totalPx * 0.02) { black = v; break; } }
+  cum = 0;
+  for (let v = 255; v >= 0; v--) { cum += hist[v]; if (cum >= totalPx * 0.10) { white = v; break; } }
+  // Guard: near-flat images (all one tone) must not get blown out
+  if (white - black < 40) { black = 0; white = 255; }
+  const stretch = 255 / (white - black);
+
+  // b=1 and c=1 at defaults (100/100) → sliders are identity on top of auto
   const b = brightness / 100;
   const c = (enhance === 'bw' ? Math.max(contrast, 150) : contrast) / 100;
+  // Mild saturation lift in color mode so document colors stay vivid after whitening
+  const sat = enhance === 'color' ? 1.18 : 0;
+
   for (let i = 0; i < data.length; i += 4) {
     let r = data[i], g = data[i + 1], bl = data[i + 2];
+
+    // Auto white/black point stretch (per channel, shared points)
+    r  = (r  - black) * stretch;
+    g  = (g  - black) * stretch;
+    bl = (bl - black) * stretch;
+
+    const luma = 0.299 * r + 0.587 * g + 0.114 * bl;
     if (enhance === 'grayscale' || enhance === 'bw') {
-      const luma = 0.299 * r + 0.587 * g + 0.114 * bl;
       r = g = bl = luma;
+    } else {
+      r  = luma + (r  - luma) * sat;
+      g  = luma + (g  - luma) * sat;
+      bl = luma + (bl - luma) * sat;
     }
+
     // brightness multiplies, then contrast pivots around 128 — matches CSS filter order
     r  = (r  * b - 128) * c + 128;
     g  = (g  * b - 128) * c + 128;
@@ -87,9 +117,12 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
   readonly reviewFilter = computed(() => {
     const b = this.brightness(), c = this.contrast(), e = this.enhance();
-    const sat = e === 'grayscale' ? 0 : e === 'bw' ? 0 : 1;
-    const con = e === 'bw' ? Math.max(c, 150) : c;
-    return `brightness(${b}%) contrast(${con}%) saturate(${sat * 100}%)`;
+    // CSS approximation of applyPixelEnhance's auto white-point stretch +
+    // saturation lift — the baked page uses the exact pixel version.
+    const sat = e === 'grayscale' || e === 'bw' ? 0 : 118;
+    const con = e === 'bw' ? Math.max(c, 150) : Math.round(c * 1.08);
+    const bri = Math.round(b * 1.04);
+    return `brightness(${bri}%) contrast(${con}%) saturate(${sat}%)`;
   });
 
   readonly svgPoints = computed(() => {
@@ -245,6 +278,31 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     }
     const imgData = snap.getContext('2d')!.getImageData(0, 0, snap.width, snap.height);
     this.corners.set(this.detect(imgData));
+  }
+
+  /** Rotate the captured frame 90° clockwise, remapping the corner quad. */
+  rotate(): void {
+    if (!this.frozenCanvas) return;
+    const src = this.frozenCanvas;
+    const out = document.createElement('canvas');
+    out.width = src.height;
+    out.height = src.width;
+    const ctx = out.getContext('2d')!;
+    ctx.translate(out.width, 0);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(src, 0, 0);
+
+    this.frozenCanvas = out;
+    this.frozenDataUrl.set(out.toDataURL('image/jpeg', 0.85));
+    this.frozenSize.set({ w: out.width, h: out.height });
+
+    // (x, y) → (oldH - y, x); old BL becomes new TL etc., so shift the
+    // corner order to keep [TL, TR, BR, BL] semantics.
+    const oldH = src.height;
+    const [tl, tr, br, bl] = this.corners();
+    const rot = (p: Point): Point => ({ x: oldH - p.y, y: p.x });
+    this.corners.set([rot(bl), rot(tl), rot(tr), rot(br)]);
+    this.loupe.update(v => ({ ...v, visible: false }));
   }
 
   retake(): void {
