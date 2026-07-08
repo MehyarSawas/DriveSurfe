@@ -69,17 +69,6 @@
   object-fit: cover;
 }
 
-.overlay-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  // Must crop exactly like the video underneath, or the drawn quad is
-  // stretched and lands outside the visible frame.
-  object-fit: cover;
-}
-
 .detect-status {
   position: absolute;
   top: 12px;

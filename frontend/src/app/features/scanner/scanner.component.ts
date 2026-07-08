@@ -6,7 +6,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
 import { DriveFile } from '../../core/models/drive-file.model';
-import { Point, Quad, detectDocument, defaultQuad, lastDetectError, quadsSimilar } from './quad-detector';
+import { Point, Quad, detectDocument, defaultQuad, lastDetectError } from './quad-detector';
 import { perspectiveWarp, perspectiveWarpCv } from './perspective-warp';
 import { loadOpenCv, onOpenCvStatus } from './opencv-loader';
 import { PDFDocument } from 'pdf-lib';
@@ -82,7 +82,6 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   readonly uploaded = output<DriveFile[]>();
 
   @ViewChild('videoEl') videoEl!: ElementRef<HTMLVideoElement>;
-  @ViewChild('overlayEl') overlayEl!: ElementRef<HTMLCanvasElement>;
 
   readonly phase = signal<Phase>('camera');
   readonly pages = signal<ScannedPage[]>([]);
@@ -107,13 +106,8 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   readonly cvFound = signal(false);
 
   private stream: MediaStream | null = null;
-  private frameTimer: ReturnType<typeof setInterval> | null = null;
   private frozenCanvas: HTMLCanvasElement | null = null;
   private cv: any = null;
-  // Temporal stability: the live green frame only appears when detection
-  // agrees with itself across consecutive frames.
-  private lastLiveQuad: Quad | null = null;
-  private stableFrames = 0;
 
   readonly reviewFilter = computed(() => {
     const b = this.brightness(), c = this.contrast(), e = this.enhance();
@@ -180,75 +174,9 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
       const video = this.videoEl.nativeElement;
       video.srcObject = this.stream;
       await video.play();
-      this.startFrameLoop();
     } catch {
       // camera denied
     }
-  }
-
-  private startFrameLoop(): void {
-    this.frameTimer = setInterval(() => this.drawOverlay(), 250);
-  }
-
-  private drawOverlay(): void {
-    const video = this.videoEl?.nativeElement;
-    const canvas = this.overlayEl?.nativeElement;
-    if (!video || !canvas || video.readyState < 2) return;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d')!;
-
-    const offscreen = document.createElement('canvas');
-    offscreen.width = video.videoWidth;
-    offscreen.height = video.videoHeight;
-    offscreen.getContext('2d')!.drawImage(video, 0, 0);
-    const imgData = offscreen.getContext('2d')!.getImageData(0, 0, offscreen.width, offscreen.height);
-
-    // Temporal stability: only trust a detection that repeats. A one-frame
-    // quad on furniture/texture never shows; a real document held in view
-    // stabilizes within ~2 frames (500 ms).
-    const det = this.cv ? detectDocument(this.cv, imgData) : null;
-    if (det) {
-      this.stableFrames = this.lastLiveQuad && quadsSimilar(det.quad, this.lastLiveQuad, imgData.width, imgData.height)
-        ? this.stableFrames + 1 : 1;
-      this.lastLiveQuad = det.quad;
-    } else {
-      this.stableFrames = 0;
-      this.lastLiveQuad = null;
-    }
-    const found = det !== null && this.stableFrames >= 2;
-    const quad = found ? det!.quad : defaultQuad(imgData.width, imgData.height);
-    this.zone.run(() => { this.cvFound.set(found); this.corners.set(quad); });
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const [tl, tr, br, bl] = quad;
-    const quadPath = () => {
-      ctx.beginPath();
-      ctx.moveTo(tl.x, tl.y);
-      ctx.lineTo(tr.x, tr.y);
-      ctx.lineTo(br.x, br.y);
-      ctx.lineTo(bl.x, bl.y);
-      ctx.closePath();
-    };
-
-    // Darken everything outside the locked frame.
-    if (found) {
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.globalCompositeOperation = 'destination-out';
-      quadPath();
-      ctx.fill();
-      ctx.globalCompositeOperation = 'source-over';
-    }
-
-    // Green solid = stable document lock. Gray dashed = searching.
-    ctx.strokeStyle = found ? '#00e676' : 'rgba(255,255,255,0.45)';
-    ctx.setLineDash(found ? [] : [12, 10]);
-    ctx.lineWidth = Math.max(2, canvas.width / 300);
-    quadPath();
-    ctx.stroke();
   }
 
   async capture(): Promise<void> {
@@ -262,13 +190,12 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     this.frozenDataUrl.set(snap.toDataURL('image/jpeg', 0.85));
     this.frozenSize.set({ w: snap.width, h: snap.height });
 
-    if (this.frameTimer) clearInterval(this.frameTimer);
     this.stopCamera();
     this.phase.set('review');
 
-    // Ensure the accurate OpenCV detector runs on the captured frame even if
-    // the library hadn't finished loading during the live preview. Cap the wait
-    // so a slow/blocked CDN can't hang the capture.
+    // Detection runs ONCE here, on the captured frame — never during the live
+    // camera preview. If OpenCV is still loading, wait briefly (capped) so the
+    // captured photo gets the accurate detector.
     if (!this.cv && this.cvStatus() === 'loading') {
       try {
         const timeout = new Promise<null>(r => setTimeout(() => r(null), 8000));
@@ -473,7 +400,6 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   }
 
   private stopCamera(): void {
-    if (this.frameTimer) { clearInterval(this.frameTimer); this.frameTimer = null; }
     if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
   }
 

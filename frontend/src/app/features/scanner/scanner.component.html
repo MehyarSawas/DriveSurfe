@@ -10,11 +10,9 @@
     </div>
     <div class="camera-wrap">
       <video #videoEl class="camera-video" playsinline autoplay muted></video>
-      <canvas #overlayEl class="overlay-canvas"></canvas>
-      <div class="detect-status" [class.failed]="cvStatus() === 'failed'" [class.ready]="cvStatus() === 'ready' && cvFound()">
+      <div class="detect-status" [class.failed]="cvStatus() === 'failed'" [class.ready]="cvStatus() === 'ready'">
         @if (cvStatus() === 'loading') { <span>⏳ {{ cvDetail() }}</span> }
-        @else if (cvStatus() === 'ready' && cvFound()) { <span>✓ Document found</span> }
-        @else if (cvStatus() === 'ready') { <span>🔍 Searching for document… {{ cvDetail().startsWith('CV error') ? cvDetail() : '' }}</span> }
+        @else if (cvStatus() === 'ready') { <span>✓ Smart detection ready</span> }
         @else { <span>⚠ Basic mode — {{ cvDetail() }}</span> }
       </div>
     </div>
