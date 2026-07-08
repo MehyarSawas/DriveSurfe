@@ -29,11 +29,8 @@ AddType text/javascript .mjs
   Header set Cache-Control "no-cache, must-revalidate"
 </FilesMatch>
 
-# NOTE: Do NOT set a Content-Security-Policy header here — this host mangles
-# it and breaks stylesheet/font loading (verified in production by bisection:
-# styles broke with the header present, recovered the moment it was removed).
-# The SPA's CSP is delivered via <meta http-equiv> in index.html instead.
-# frame-ancestors can't be expressed in a meta CSP, so block framing with the
-# short, host-safe X-Frame-Options header (same mechanism as the working
-# Cache-Control headers below).
-Header set X-Frame-Options "DENY"
+# NOTE: Do NOT add top-level Header directives here — every deploy that had
+# one (Content-Security-Policy, X-Frame-Options) broke stylesheet/icon loading
+# on this host; the only working configuration keeps Header directives inside
+# <FilesMatch> blocks. The SPA's CSP is delivered via <meta http-equiv> in
+# index.html instead.
