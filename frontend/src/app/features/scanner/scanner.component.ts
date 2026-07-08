@@ -6,8 +6,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
 import { DriveFile } from '../../core/models/drive-file.model';
-import { detectQuad, Point } from './edge-detect';
-import { detectQuadCv, lastCvError } from './edge-detect-cv';
+import { Point, Quad, detectDocument, defaultQuad, lastDetectError } from './quad-detector';
 import { perspectiveWarp, perspectiveWarpCv } from './perspective-warp';
 import { loadOpenCv, onOpenCvStatus } from './opencv-loader';
 import { PDFDocument } from 'pdf-lib';
@@ -109,15 +108,18 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     this.startCamera();
   }
 
-  /** Best available quad detector: OpenCV when loaded, pure-JS fallback otherwise. */
-  private detect(imgData: ImageData): [Point, Point, Point, Point] {
+  /**
+   * Run the document detector. Returns the detected quad, or a centered
+   * default quad (for manual adjustment) when no document is found.
+   */
+  private detect(imgData: ImageData): Quad {
     if (this.cv) {
-      const q = detectQuadCv(this.cv, imgData);
-      if (lastCvError()) this.cvDetail.set('CV error: ' + lastCvError());
-      if (q) { this.cvFound.set(true); return q; }
-      this.cvFound.set(false);
+      const det = detectDocument(this.cv, imgData);
+      if (lastDetectError()) this.cvDetail.set('CV error: ' + lastDetectError());
+      if (det) { this.cvFound.set(true); return det.quad; }
     }
-    return detectQuad(imgData);
+    this.cvFound.set(false);
+    return defaultQuad(imgData.width, imgData.height);
   }
 
   ngOnDestroy(): void {

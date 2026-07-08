@@ -1,4 +1,4 @@
-import { Point } from './edge-detect';
+import { Point } from './quad-detector';
 
 // OpenCV-based perspective warp. Uses getPerspectiveTransform + warpPerspective,
 // the same primitives every professional scanner relies on. `cv` is the
