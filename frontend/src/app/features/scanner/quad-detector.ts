@@ -128,11 +128,31 @@ function scoreContour(
     if (dist > d[idx]) { d[idx] = dist; q[idx] = p; }
   }
   if (q.some(p => !p)) return null;
+  const quad = q as Point[];
 
-  // Reject anything that isn't clearly rectangle-like: furniture edges, rug
-  // texture and edge spaghetti are spidery (low solidity) or skewed (low
-  // rectangularity); real documents score ~0.9+ on both.
-  if (solidity < 0.8 || rectangularity < 0.72) return null;
+  // Validate the QUAD's own shape, not just the contour's. Junk regions can
+  // have decent contour stats but yield a quad far from rectangle form.
+  const quadArea = polyArea(quad);
+  if (hullArea > 0 && quadArea / hullArea < 0.7) return null; // quad must represent the hull
+
+  for (let i = 0; i < 4; i++) {
+    const p = quad[i], a = quad[(i + 3) % 4], b = quad[(i + 1) % 4];
+    const v1x = a.x - p.x, v1y = a.y - p.y, v2x = b.x - p.x, v2y = b.y - p.y;
+    const mag = Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y);
+    if (mag === 0) return null;
+    const ang = Math.acos(Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / mag))) * 180 / Math.PI;
+    if (ang < 55 || ang > 125) return null; // corners must be near-right angles
+  }
+
+  const side = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+  const s0 = side(quad[0], quad[1]), s1 = side(quad[1], quad[2]);
+  const s2 = side(quad[2], quad[3]), s3 = side(quad[3], quad[0]);
+  if (Math.max(s0, s2) / Math.max(1, Math.min(s0, s2)) > 2.2) return null;
+  if (Math.max(s1, s3) / Math.max(1, Math.min(s1, s3)) > 2.2) return null;
+
+  // Real documents measure ~0.95+ on solidity and rectangularity; room-scale
+  // blobs (carpet, walls) measured ~0.84/0.78 on the failing office photo.
+  if (solidity < 0.9 || rectangularity < 0.82) return null;
 
   // Reject implausible document proportions (e.g. a table edge strip).
   const [rw, rh] = [rect.size.width, rect.size.height];
@@ -150,6 +170,15 @@ function scoreContour(
   return { quad: q as Point[], score };
 }
 
+function polyArea(q: Point[]): number {
+  let a = 0;
+  for (let i = 0; i < q.length; i++) {
+    const b = q[(i + 1) % q.length];
+    a += q[i].x * b.y - b.x * q[i].y;
+  }
+  return Math.abs(a) / 2;
+}
+
 function orderQuad(q: Point[]): Quad {
   const s = [...q].sort((a, b) => (a.x + a.y) - (b.x + b.y));
   const tl = s[0], br = s[3];
@@ -159,9 +188,10 @@ function orderQuad(q: Point[]): Quad {
   return [tl, tr, br, bl];
 }
 
-/** Clamp all corners into the frame with a 3% margin so they remain visible/reachable. */
+/** Clamp all corners into the frame with a 5% margin so the handle circles
+ *  always render fully inside the view container. Matches the drag pad. */
 export function clampQuad(q: Quad, w: number, h: number): Quad {
-  const mx = Math.round(w * 0.03), my = Math.round(h * 0.03);
+  const mx = Math.round(w * 0.05), my = Math.round(h * 0.05);
   return q.map(p => ({
     x: Math.max(mx, Math.min(w - mx, Math.round(p.x))),
     y: Math.max(my, Math.min(h - my, Math.round(p.y))),
