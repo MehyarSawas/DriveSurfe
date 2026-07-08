@@ -16,9 +16,17 @@ AddType application/javascript .js
 AddType text/javascript .mjs
 
 # Service worker must be served without cache
-<FilesMatch "ngsw\.json|ngsw-worker\.js|safety-worker\.js">
+<FilesMatch "ngsw\.json|ngsw-worker\.js|safety-worker\.js|preview-sw\.js">
   Header set Cache-Control "no-cache, no-store, must-revalidate"
   Header set Pragma "no-cache"
+</FilesMatch>
+
+# index.html must always revalidate: it carries the CSP header and references
+# the hashed bundle filenames — a cached copy replays stale headers and stale
+# bundle URLs (this caused styles/icons to stay broken after a CSP fix was
+# already deployed). Hashed assets (*-HASH.js/css) are immutable and cache fine.
+<FilesMatch "^index\.html$">
+  Header set Cache-Control "no-cache, must-revalidate"
 </FilesMatch>
 
 # Content-Security-Policy for the SPA — deliberately minimal. It locks the
