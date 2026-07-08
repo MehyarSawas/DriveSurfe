@@ -80,9 +80,11 @@ export function detectDocument(cv: any, imageData: ImageData): Detection | null 
 
     _lastError = null;
     if (!best) return null;
-    const quad = orderQuad(best.quad).map(
+    const upscaled = orderQuad(best.quad).map(
       p => ({ x: p.x / scale, y: p.y / scale })
     ) as Quad;
+    // Corners must always stay inside the visible frame so handles are reachable.
+    const quad = clampQuad(upscaled, width, height);
     return { quad, score: best.score, source: best.source };
   } catch (e) {
     _lastError = e instanceof Error ? e.message : String(e);
@@ -127,8 +129,15 @@ function scoreContour(
   }
   if (q.some(p => !p)) return null;
 
-  // Reject spidery / non-rectangular shapes (rug texture, edge spaghetti).
-  if (solidity < 0.75 || rectangularity < 0.65) return null;
+  // Reject anything that isn't clearly rectangle-like: furniture edges, rug
+  // texture and edge spaghetti are spidery (low solidity) or skewed (low
+  // rectangularity); real documents score ~0.9+ on both.
+  if (solidity < 0.8 || rectangularity < 0.72) return null;
+
+  // Reject implausible document proportions (e.g. a table edge strip).
+  const [rw, rh] = [rect.size.width, rect.size.height];
+  const aspect = Math.max(rw, rh) / Math.max(1, Math.min(rw, rh));
+  if (aspect > 4.5) return null;
 
   // Reject frame-hugging quads (vignette / lighting border).
   const m = Math.min(dw, dh) * 0.02;
@@ -148,6 +157,25 @@ function orderQuad(q: Point[]): Quad {
   const tr = m1.x > m2.x ? m1 : m2;
   const bl = m1.x > m2.x ? m2 : m1;
   return [tl, tr, br, bl];
+}
+
+/** Clamp all corners into the frame with a 3% margin so they remain visible/reachable. */
+export function clampQuad(q: Quad, w: number, h: number): Quad {
+  const mx = Math.round(w * 0.03), my = Math.round(h * 0.03);
+  return q.map(p => ({
+    x: Math.max(mx, Math.min(w - mx, Math.round(p.x))),
+    y: Math.max(my, Math.min(h - my, Math.round(p.y))),
+  })) as Quad;
+}
+
+/**
+ * True when two quads are approximately the same (each corner within
+ * `tolFrac` of the frame diagonal). Used for temporal stability in the
+ * live preview.
+ */
+export function quadsSimilar(a: Quad, b: Quad, w: number, h: number, tolFrac = 0.05): boolean {
+  const tol = Math.hypot(w, h) * tolFrac;
+  return a.every((p, i) => Math.hypot(p.x - b[i].x, p.y - b[i].y) <= tol);
 }
 
 /** Centered default quad (12% inset) for manual adjustment when nothing is detected. */

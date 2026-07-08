@@ -256,9 +256,13 @@
   flex-direction: column;
   gap: 16px;
 
-  // Pin the Upload button to the bottom of the screen instead of letting it
-  // float directly under the inputs.
-  .btn-primary.full { margin-top: auto; }
+  // Pin the Upload button to the bottom of the screen. flex: 0 0 auto is
+  // essential: .btn-primary has flex: 1 (for row layouts), which in this
+  // flex COLUMN makes the button grow to fill all remaining height.
+  .btn-primary.full {
+    flex: 0 0 auto;
+    margin-top: auto;
+  }
 }
 
 .pages-preview {

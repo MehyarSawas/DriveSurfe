@@ -6,7 +6,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileService } from '../../core/services/file.service';
 import { DriveFile } from '../../core/models/drive-file.model';
-import { Point, Quad, detectDocument, defaultQuad, lastDetectError } from './quad-detector';
+import { Point, Quad, detectDocument, defaultQuad, lastDetectError, quadsSimilar } from './quad-detector';
 import { perspectiveWarp, perspectiveWarpCv } from './perspective-warp';
 import { loadOpenCv, onOpenCvStatus } from './opencv-loader';
 import { PDFDocument } from 'pdf-lib';
@@ -78,6 +78,10 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   private frameTimer: ReturnType<typeof setInterval> | null = null;
   private frozenCanvas: HTMLCanvasElement | null = null;
   private cv: any = null;
+  // Temporal stability: the live green frame only appears when detection
+  // agrees with itself across consecutive frames.
+  private lastLiveQuad: Quad | null = null;
+  private stableFrames = 0;
 
   readonly reviewFilter = computed(() => {
     const b = this.brightness(), c = this.contrast(), e = this.enhance();
@@ -159,14 +163,25 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     offscreen.getContext('2d')!.drawImage(video, 0, 0);
     const imgData = offscreen.getContext('2d')!.getImageData(0, 0, offscreen.width, offscreen.height);
 
-    const quad = this.detect(imgData);
-    this.zone.run(() => this.corners.set(quad));
+    // Temporal stability: only trust a detection that repeats. A one-frame
+    // quad on furniture/texture never shows; a real document held in view
+    // stabilizes within ~2 frames (500 ms).
+    const det = this.cv ? detectDocument(this.cv, imgData) : null;
+    if (det) {
+      this.stableFrames = this.lastLiveQuad && quadsSimilar(det.quad, this.lastLiveQuad, imgData.width, imgData.height)
+        ? this.stableFrames + 1 : 1;
+      this.lastLiveQuad = det.quad;
+    } else {
+      this.stableFrames = 0;
+      this.lastLiveQuad = null;
+    }
+    const found = det !== null && this.stableFrames >= 2;
+    const quad = found ? det!.quad : defaultQuad(imgData.width, imgData.height);
+    this.zone.run(() => { this.cvFound.set(found); this.corners.set(quad); });
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Green solid = CV detector locked onto a document.
-    // Gray dashed = no document found (frame-default fallback quad).
-    const found = this.cv !== null && this.cvFound();
+    // Green solid = stable document lock. Gray dashed = searching.
     ctx.strokeStyle = found ? '#00e676' : 'rgba(255,255,255,0.45)';
     ctx.setLineDash(found ? [] : [12, 10]);
     ctx.lineWidth = Math.max(2, canvas.width / 300);
