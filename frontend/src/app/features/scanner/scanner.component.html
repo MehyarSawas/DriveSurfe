@@ -36,11 +36,13 @@
     <div class="review-wrap">
       <div class="review-image-wrap"
            [style.aspect-ratio]="frozenSize().w + ' / ' + frozenSize().h"
+           (pointerdown)="onWrapPointerDown($event)"
            (pointermove)="onSvgPointerMove($event)"
            (pointerup)="onSvgPointerUp()"
            (pointercancel)="onSvgPointerUp()">
         <img class="review-img" [src]="frozenDataUrl()" [style.filter]="reviewFilter()" />
         <svg class="review-svg" viewBox="0 0 1 1" preserveAspectRatio="none">
+          <path class="mask-dark" [attr.d]="maskPath()" fill-rule="evenodd" />
           <polygon [attr.points]="svgPoints()" class="quad-poly" />
         </svg>
         @for (c of corners(); track $index) {
@@ -48,6 +50,16 @@
                [style.left.%]="c.x / frozenSize().w * 100"
                [style.top.%]="c.y / frozenSize().h * 100"
                (pointerdown)="onHandlePointerDown($event, $index)"></div>
+        }
+        @if (loupe().visible) {
+          <div class="loupe"
+               [style.left.px]="loupe().x"
+               [style.top.px]="loupe().y"
+               [style.background-image]="'url(' + frozenDataUrl() + ')'"
+               [style.background-size]="loupe().bgW + 'px ' + loupe().bgH + 'px'"
+               [style.background-position]="loupe().bgX + 'px ' + loupe().bgY + 'px'">
+            <div class="loupe-cross"></div>
+          </div>
         }
       </div>
     </div>

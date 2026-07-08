@@ -166,8 +166,13 @@
   pointer-events: none;
 }
 
+// Darkens everything outside the quad (even-odd fill with the quad cut out).
+.mask-dark {
+  fill: rgba(0, 0, 0, 0.55);
+}
+
 .quad-poly {
-  fill: rgba(0,230,118,0.15);
+  fill: none;
   stroke: #00e676;
   stroke-width: 2px;
   vector-effect: non-scaling-stroke;
@@ -175,19 +180,48 @@
 
 // HTML handles (not SVG circles): the stretched 0-1 viewBox turned circles
 // into ellipses. A fixed-size div stays perfectly round at any image aspect.
+// Outline-only so the document edge stays visible through the ring.
 .quad-handle {
   position: absolute;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background: #00e676;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  background: transparent;
+  border: 3px solid #00e676;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5), inset 0 1px 4px rgba(0, 0, 0, 0.35);
   transform: translate(-50%, -50%);
   cursor: grab;
   touch-action: none;
 
   &:active { cursor: grabbing; }
+}
+
+// Magnifier shown while dragging a corner.
+.loupe {
+  position: absolute;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background-color: #000;
+  background-repeat: no-repeat;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.loupe-cross {
+  position: absolute;
+  inset: 0;
+
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    background: rgba(0, 230, 118, 0.9);
+  }
+  &::before { left: 50%; top: 20%; bottom: 20%; width: 1.5px; transform: translateX(-50%); }
+  &::after  { top: 50%; left: 20%; right: 20%; height: 1.5px; transform: translateY(-50%); }
 }
 
 .review-controls {

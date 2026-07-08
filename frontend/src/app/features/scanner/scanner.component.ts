@@ -69,6 +69,8 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
   readonly frozenDataUrl = signal('');
   readonly frozenSize = signal<{ w: number; h: number }>({ w: 1, h: 1 });
+  /** Magnifier shown while dragging a corner (all values in wrap pixels). */
+  readonly loupe = signal({ visible: false, x: 0, y: 0, bgX: 0, bgY: 0, bgW: 0, bgH: 0 });
   readonly cvStatus = signal<'loading' | 'ready' | 'failed'>('loading');
   readonly cvDetail = signal('starting…');
   /** True when the CV detector found a document in the last processed frame. */
@@ -93,6 +95,13 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   readonly svgPoints = computed(() => {
     const { w, h } = this.frozenSize();
     return this.corners().map(c => `${c.x / w},${c.y / h}`).join(' ');
+  });
+
+  /** Even-odd path covering the whole image with the quad cut out — used to darken outside the frame. */
+  readonly maskPath = computed(() => {
+    const { w, h } = this.frozenSize();
+    const pts = this.corners().map(c => `${c.x / w} ${c.y / h}`);
+    return `M0 0H1V1H0Z M${pts.join(' L')}Z`;
   });
 
   readonly defaultFileName = computed(() => {
@@ -181,22 +190,32 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    const [tl, tr, br, bl] = quad;
+    const quadPath = () => {
+      ctx.beginPath();
+      ctx.moveTo(tl.x, tl.y);
+      ctx.lineTo(tr.x, tr.y);
+      ctx.lineTo(br.x, br.y);
+      ctx.lineTo(bl.x, bl.y);
+      ctx.closePath();
+    };
+
+    // Darken everything outside the locked frame.
+    if (found) {
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = 'destination-out';
+      quadPath();
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
     // Green solid = stable document lock. Gray dashed = searching.
     ctx.strokeStyle = found ? '#00e676' : 'rgba(255,255,255,0.45)';
     ctx.setLineDash(found ? [] : [12, 10]);
     ctx.lineWidth = Math.max(2, canvas.width / 300);
-    ctx.beginPath();
-    const [tl, tr, br, bl] = quad;
-    ctx.moveTo(tl.x, tl.y);
-    ctx.lineTo(tr.x, tr.y);
-    ctx.lineTo(br.x, br.y);
-    ctx.lineTo(bl.x, bl.y);
-    ctx.closePath();
+    quadPath();
     ctx.stroke();
-    if (found) {
-      ctx.fillStyle = 'rgba(0,230,118,0.1)';
-      ctx.fill();
-    }
   }
 
   async capture(): Promise<void> {
@@ -309,15 +328,49 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  // --- SVG corner dragging ---
+  // --- Corner dragging ---
+
+  /** Offset between the grabbed corner and the pointer, in normalized coords —
+   *  keeps the corner from jumping under the finger and lets the whole
+   *  background act as a drag surface. */
+  private dragOffset = { dx: 0, dy: 0 };
 
   onHandlePointerDown(e: PointerEvent, idx: number): void {
     e.preventDefault();
     e.stopPropagation();
     // Capture on the wrap — pointermove/pointerup handlers live there.
-    const wrap = (e.target as HTMLElement).parentElement;
-    wrap?.setPointerCapture(e.pointerId);
+    const wrap = (e.target as HTMLElement).parentElement as HTMLElement;
+    wrap.setPointerCapture(e.pointerId);
+    this.startDrag(idx, e, wrap.getBoundingClientRect());
+  }
+
+  /** Anywhere on the image starts dragging the corner of that quadrant, so
+   *  the finger never needs to hit the small circle exactly. */
+  onWrapPointerDown(e: PointerEvent): void {
+    if (this.draggingCorner() !== null) return;
+    const wrap = e.currentTarget as HTMLElement;
+    const rect = wrap.getBoundingClientRect();
+    const rx = (e.clientX - rect.left) / rect.width;
+    const ry = (e.clientY - rect.top) / rect.height;
+    const { w, h } = this.frozenSize();
+    const cs = this.corners();
+    const cx = cs.reduce((s, c) => s + c.x, 0) / 4 / w;
+    const cy = cs.reduce((s, c) => s + c.y, 0) / 4 / h;
+    const idx = rx < cx ? (ry < cy ? 0 : 3) : (ry < cy ? 1 : 2);
+    e.preventDefault();
+    wrap.setPointerCapture(e.pointerId);
+    this.startDrag(idx, e, rect);
+  }
+
+  private startDrag(idx: number, e: PointerEvent, rect: DOMRect): void {
+    const { w, h } = this.frozenSize();
+    const c = this.corners()[idx];
+    this.dragOffset = {
+      dx: c.x / w - (e.clientX - rect.left) / rect.width,
+      dy: c.y / h - (e.clientY - rect.top) / rect.height,
+    };
     this.draggingCorner.set(idx);
+    this.updateLoupe(rect);
   }
 
   onSvgPointerMove(e: PointerEvent): void {
@@ -326,18 +379,39 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     // Keep handle centres at least 5% from each edge so circles stay visible
     const pad = 0.05;
-    const rx = Math.max(pad, Math.min(1 - pad, (e.clientX - rect.left) / rect.width));
-    const ry = Math.max(pad, Math.min(1 - pad, (e.clientY - rect.top) / rect.height));
+    const rx = Math.max(pad, Math.min(1 - pad, (e.clientX - rect.left) / rect.width + this.dragOffset.dx));
+    const ry = Math.max(pad, Math.min(1 - pad, (e.clientY - rect.top) / rect.height + this.dragOffset.dy));
     const { w, h } = this.frozenSize();
     this.corners.update(c => {
       const next = [...c] as [Point, Point, Point, Point];
       next[idx] = { x: rx * w, y: ry * h };
       return next;
     });
+    this.updateLoupe(rect);
+  }
+
+  /** Magnified view of the dragged corner, positioned clear of the finger. */
+  private updateLoupe(rect: DOMRect): void {
+    const idx = this.draggingCorner();
+    if (idx === null) return;
+    const L = 110, Z = 2.5;
+    const { w, h } = this.frozenSize();
+    const c = this.corners()[idx];
+    const px = (c.x / w) * rect.width;
+    const py = (c.y / h) * rect.height;
+    const x = Math.max(0, Math.min(rect.width - L, px - L / 2));
+    let y = py - L - 32;
+    if (y < 0) y = Math.min(rect.height - L, py + 32);
+    this.loupe.set({
+      visible: true, x, y,
+      bgW: rect.width * Z, bgH: rect.height * Z,
+      bgX: -(px * Z - L / 2), bgY: -(py * Z - L / 2),
+    });
   }
 
   onSvgPointerUp(): void {
     this.draggingCorner.set(null);
+    this.loupe.update(v => ({ ...v, visible: false }));
   }
 
   private stopCamera(): void {
