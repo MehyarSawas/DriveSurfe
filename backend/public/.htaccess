@@ -29,8 +29,11 @@ AddType text/javascript .mjs
   Header set Cache-Control "no-cache, must-revalidate"
 </FilesMatch>
 
-# NOTE: Do NOT add top-level Header directives here — every deploy that had
-# one (Content-Security-Policy, X-Frame-Options) broke stylesheet/icon loading
-# on this host; the only working configuration keeps Header directives inside
-# <FilesMatch> blocks. The SPA's CSP is delivered via <meta http-equiv> in
-# index.html instead.
+# The SPA's CSP is delivered via <meta http-equiv> in index.html (with
+# optimization.styles.inlineCritical=false in angular.json — the critical-CSS
+# inliner emits an inline onload= handler that any script-src 'self' policy
+# blocks, which unstyled the whole app until diagnosed). Framing protection
+# for HTML comes from the header below.
+<FilesMatch "^index\.html$">
+  Header set X-Frame-Options "DENY"
+</FilesMatch>

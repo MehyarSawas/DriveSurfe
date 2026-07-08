@@ -4,10 +4,11 @@
   <meta charset="utf-8">
   <title>DriveSurfe</title>
   <base href="/">
-  <!-- CSP via meta tag, NOT a server header: the production host mangles the
-       Content-Security-Policy response header (broke styles/fonts). Note
-       frame-ancestors is not valid in meta CSP; framing is blocked by the
-       X-Frame-Options header in .htaccess instead. -->
+  <!-- CSP for the SPA. Requires optimization.styles.inlineCritical=false in
+       angular.json: with critical-CSS inlining on, the build rewrites the
+       stylesheet link to media="print" onload="this.media='all'" — an inline
+       event handler that script-src 'self' blocks, leaving the app unstyled.
+       frame-ancestors is not valid in a meta CSP. -->
   <meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#1a73e8">
