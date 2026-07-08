@@ -48,16 +48,77 @@
     </div>
   }
 
-  <!-- Review phase -->
-  @if (phase() === 'review') {
+  <!-- Review phase: auto-cropped result with filters + page navigation -->
+  @if (phase() === 'review' && page(); as p) {
     <div class="scanner-header">
-      <button class="icon-btn light" (click)="retake()" title="Retake">
+      <button class="icon-btn light" (click)="close()" title="Close">
         <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
       </button>
-      <span class="scanner-title">Adjust</span>
+      <span class="scanner-title">Page {{ current() + 1 }} / {{ pages().length }}</span>
+      <button class="icon-btn light" (click)="openCrop()" title="Adjust crop">
+        <svg viewBox="0 0 24 24"><path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/></svg>
+      </button>
       <button class="icon-btn light" (click)="rotate()" title="Rotate">
         <svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.73-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42l1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z"/></svg>
       </button>
+    </div>
+    <div class="review-wrap">
+      <div class="warped-wrap">
+        <img class="warped-img" [src]="p.warpedDataUrl" [style.filter]="pageFilter()" />
+        @if (pages().length > 1) {
+          @if (current() > 0) {
+            <button class="page-nav prev" (click)="prevPage()" title="Previous page">
+              <svg viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            </button>
+          }
+          @if (current() < pages().length - 1) {
+            <button class="page-nav next" (click)="nextPage()" title="Next page">
+              <svg viewBox="0 0 24 24"><path d="M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+            </button>
+          }
+        }
+      </div>
+    </div>
+
+    @if (pages().length > 1) {
+      <div class="page-strip">
+        @for (pg of pages(); track $index) {
+          <img class="page-strip-thumb" [class.active]="$index === current()"
+               [src]="pg.warpedDataUrl" [style.filter]="cssFilterFor(pg)"
+               (click)="selectPage($index)" />
+        }
+      </div>
+    }
+
+    <div class="review-controls">
+      <div class="enhance-row">
+        <button class="enhance-btn" [class.active]="p.enhance === 'color'" (click)="patchPage({enhance: 'color'})">Color</button>
+        <button class="enhance-btn" [class.active]="p.enhance === 'grayscale'" (click)="patchPage({enhance: 'grayscale'})">Grayscale</button>
+        <button class="enhance-btn" [class.active]="p.enhance === 'bw'" (click)="patchPage({enhance: 'bw'})">B&amp;W</button>
+      </div>
+      <div class="slider-row">
+        <label>Brightness
+          <input type="range" min="50" max="200" [ngModel]="p.brightness" (ngModelChange)="patchPage({brightness: $event})" />
+        </label>
+        <label>Contrast
+          <input type="range" min="50" max="300" [ngModel]="p.contrast" (ngModelChange)="patchPage({contrast: $event})" />
+        </label>
+      </div>
+      <div class="review-actions">
+        <button class="btn-secondary" (click)="retake()">Retake</button>
+        <button class="btn-secondary" (click)="addPage()">Add page</button>
+        <button class="btn-primary" (click)="done()">Done</button>
+      </div>
+    </div>
+  }
+
+  <!-- Crop phase: adjust corners on the original photo -->
+  @if (phase() === 'crop') {
+    <div class="scanner-header">
+      <button class="icon-btn light" (click)="cancelCrop()" title="Cancel">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+      <span class="scanner-title">Adjust crop</span>
     </div>
     <div class="review-wrap">
       <div class="review-image-wrap"
@@ -66,7 +127,7 @@
            (pointermove)="onSvgPointerMove($event)"
            (pointerup)="onSvgPointerUp()"
            (pointercancel)="onSvgPointerUp()">
-        <img class="review-img" [src]="frozenDataUrl()" [style.filter]="reviewFilter()" />
+        <img class="review-img" [src]="frozenDataUrl()" />
         <svg class="review-svg" viewBox="0 0 1 1" preserveAspectRatio="none">
           <path class="mask-dark" [attr.d]="maskPath()" fill-rule="evenodd" />
           <polygon [attr.points]="svgPoints()" class="quad-poly" />
@@ -89,25 +150,10 @@
         }
       </div>
     </div>
-
     <div class="review-controls">
-      <div class="enhance-row">
-        <button class="enhance-btn" [class.active]="enhance() === 'color'" (click)="enhance.set('color')">Color</button>
-        <button class="enhance-btn" [class.active]="enhance() === 'grayscale'" (click)="enhance.set('grayscale')">Grayscale</button>
-        <button class="enhance-btn" [class.active]="enhance() === 'bw'" (click)="enhance.set('bw')">B&amp;W</button>
-      </div>
-      <div class="slider-row">
-        <label>Brightness
-          <input type="range" min="50" max="200" [ngModel]="brightness()" (ngModelChange)="brightness.set($event)" />
-        </label>
-        <label>Contrast
-          <input type="range" min="50" max="300" [ngModel]="contrast()" (ngModelChange)="contrast.set($event)" />
-        </label>
-      </div>
       <div class="review-actions">
-        <button class="btn-secondary" (click)="retake()">Retake</button>
-        <button class="btn-secondary" (click)="addPage()">Add page</button>
-        <button class="btn-primary" (click)="done()">Done</button>
+        <button class="btn-secondary" (click)="cancelCrop()">Cancel</button>
+        <button class="btn-primary" (click)="applyCrop()">Apply</button>
       </div>
     </div>
   }
@@ -123,7 +169,7 @@
     <div class="format-wrap">
       <div class="pages-preview">
         @for (p of pages(); track $index) {
-          <img class="page-thumb" [src]="p.thumbUrl" />
+          <img class="page-thumb" [src]="p.warpedDataUrl" [style.filter]="cssFilterFor(p)" />
         }
       </div>
       <div class="format-row">

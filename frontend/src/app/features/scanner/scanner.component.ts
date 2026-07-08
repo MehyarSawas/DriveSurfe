@@ -11,7 +11,7 @@ import { perspectiveWarp, perspectiveWarpCv } from './perspective-warp';
 import { loadOpenCv, onOpenCvStatus } from './opencv-loader';
 import { PDFDocument } from 'pdf-lib';
 
-type Phase = 'camera' | 'review' | 'format' | 'uploading';
+type Phase = 'camera' | 'review' | 'crop' | 'format' | 'uploading';
 type Enhance = 'color' | 'grayscale' | 'bw';
 
 function applyPixelEnhance(data: Uint8ClampedArray, brightness: number, contrast: number, enhance: Enhance): void {
@@ -64,9 +64,39 @@ function applyPixelEnhance(data: Uint8ClampedArray, brightness: number, contrast
   }
 }
 
-interface ScannedPage {
-  blob: Blob;
-  thumbUrl: string;
+/**
+ * A captured page keeps its ORIGINAL photo, crop corners, and filter settings
+ * so everything stays editable until upload — pixels are only baked in
+ * upload(). warpedDataUrl is the auto-cropped (perspective-corrected) image
+ * shown in review; filters are previewed on it via CSS and applied for real
+ * at bake time.
+ */
+interface ScanPage {
+  srcDataUrl: string;
+  srcW: number;
+  srcH: number;
+  corners: Quad;
+  warpedDataUrl: string;
+  enhance: Enhance;
+  brightness: number;
+  contrast: number;
+}
+
+function loadImage(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+function canvasFromImage(img: HTMLImageElement): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  c.getContext('2d')!.drawImage(img, 0, 0);
+  return c;
 }
 
 @Component({
@@ -84,13 +114,13 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   @ViewChild('videoEl') videoEl!: ElementRef<HTMLVideoElement>;
 
   readonly phase = signal<Phase>('camera');
-  readonly pages = signal<ScannedPage[]>([]);
+  readonly pages = signal<ScanPage[]>([]);
+  /** Index of the page currently shown/edited in review. */
+  readonly current = signal(0);
+  readonly page = computed<ScanPage | null>(() => this.pages()[this.current()] ?? null);
   readonly corners = signal<[Point, Point, Point, Point]>([
     { x: 10, y: 10 }, { x: 310, y: 10 }, { x: 310, y: 410 }, { x: 10, y: 410 },
   ]);
-  readonly enhance = signal<Enhance>('color');
-  readonly brightness = signal(100);
-  readonly contrast = signal(100);
   readonly format = signal<'pdf' | 'jpeg'>('pdf');
   readonly fileName = signal('');
   readonly uploadError = signal('');
@@ -115,18 +145,26 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   private facing: 'environment' | 'user' = 'environment';
   private videoTrack: MediaStreamTrack | null = null;
   private stream: MediaStream | null = null;
-  private frozenCanvas: HTMLCanvasElement | null = null;
   private cv: any = null;
 
-  readonly reviewFilter = computed(() => {
-    const b = this.brightness(), c = this.contrast(), e = this.enhance();
-    // CSS approximation of applyPixelEnhance's auto white-point stretch +
-    // saturation lift — the baked page uses the exact pixel version.
-    const sat = e === 'grayscale' || e === 'bw' ? 0 : 118;
-    const con = e === 'bw' ? Math.max(c, 150) : Math.round(c * 1.08);
-    const bri = Math.round(b * 1.04);
+  /** CSS approximation of applyPixelEnhance for a page — the baked pixels use the exact version. */
+  cssFilterFor(p: ScanPage | null): string {
+    if (!p) return 'none';
+    const sat = p.enhance === 'grayscale' || p.enhance === 'bw' ? 0 : 118;
+    const con = p.enhance === 'bw' ? Math.max(p.contrast, 150) : Math.round(p.contrast * 1.08);
+    const bri = Math.round(p.brightness * 1.04);
     return `brightness(${bri}%) contrast(${con}%) saturate(${sat}%)`;
-  });
+  }
+
+  readonly pageFilter = computed(() => this.cssFilterFor(this.page()));
+
+  /** Merge a partial update into the current page (filters, corners, …). */
+  patchPage(patch: Partial<ScanPage>): void {
+    const idx = this.current();
+    this.pages.update(pages =>
+      pages.map((p, i) => (i === idx ? { ...p, ...patch } : p))
+    );
+  }
 
   readonly svgPoints = computed(() => {
     const { w, h } = this.frozenSize();
@@ -235,23 +273,26 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     await this.startCamera();
   }
 
+  /** Perspective-warp a source canvas by the given corners → JPEG data URL. */
+  private warpToDataUrl(src: HTMLCanvasElement, corners: Quad): string {
+    const warped = this.cv
+      ? perspectiveWarpCv(this.cv, src, corners)
+      : perspectiveWarp(src, corners);
+    return warped.toDataURL('image/jpeg', 0.92);
+  }
+
   async capture(): Promise<void> {
     const video = this.videoEl.nativeElement;
     const snap = document.createElement('canvas');
     snap.width = video.videoWidth;
     snap.height = video.videoHeight;
     snap.getContext('2d')!.drawImage(video, 0, 0);
-    this.frozenCanvas = snap;
-
-    this.frozenDataUrl.set(snap.toDataURL('image/jpeg', 0.85));
-    this.frozenSize.set({ w: snap.width, h: snap.height });
 
     this.stopCamera();
     this.phase.set('review');
 
-    // Detection runs ONCE here, on the captured frame — never during the live
-    // camera preview. If OpenCV is still loading, wait briefly (capped) so the
-    // captured photo gets the accurate detector.
+    // Detection runs ONCE, on the captured frame. If OpenCV is still loading,
+    // wait briefly (capped) so the photo gets the accurate detector.
     if (!this.cv && this.cvStatus() === 'loading') {
       try {
         const timeout = new Promise<null>(r => setTimeout(() => r(null), 8000));
@@ -260,13 +301,81 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
       } catch { /* keep fallback */ }
     }
     const imgData = snap.getContext('2d')!.getImageData(0, 0, snap.width, snap.height);
-    this.corners.set(this.detect(imgData));
+    const corners = this.detect(imgData);
+
+    // Auto-crop immediately: review shows the warped document, not the raw photo.
+    const page: ScanPage = {
+      srcDataUrl: snap.toDataURL('image/jpeg', 0.92),
+      srcW: snap.width,
+      srcH: snap.height,
+      corners,
+      warpedDataUrl: this.warpToDataUrl(snap, corners),
+      enhance: 'color',
+      brightness: 100,
+      contrast: 100,
+    };
+    this.pages.update(pages => [...pages, page]);
+    this.current.set(this.pages().length - 1);
   }
 
-  /** Rotate the captured frame 90° clockwise, remapping the corner quad. */
-  rotate(): void {
-    if (!this.frozenCanvas) return;
-    const src = this.frozenCanvas;
+  // --- Page navigation (review phase) ---
+
+  selectPage(i: number): void {
+    if (i >= 0 && i < this.pages().length) this.current.set(i);
+  }
+  prevPage(): void { this.selectPage(this.current() - 1); }
+  nextPage(): void { this.selectPage(this.current() + 1); }
+
+  /** Delete the current page and re-open the camera to shoot a replacement. */
+  retake(): void {
+    const idx = this.current();
+    this.pages.update(pages => pages.filter((_, i) => i !== idx));
+    this.current.set(Math.max(0, Math.min(idx, this.pages().length - 1)));
+    if (this.pages().length === 0) {
+      this.phase.set('camera');
+      setTimeout(() => this.startCamera(), 50);
+    }
+  }
+
+  addPage(): void {
+    this.phase.set('camera');
+    setTimeout(() => this.startCamera(), 50);
+  }
+
+  done(): void {
+    this.fileName.set(this.defaultFileName());
+    this.phase.set('format');
+  }
+
+  // --- Crop mode: re-adjust the corner quad on the original photo ---
+
+  openCrop(): void {
+    const p = this.page();
+    if (!p) return;
+    this.frozenDataUrl.set(p.srcDataUrl);
+    this.frozenSize.set({ w: p.srcW, h: p.srcH });
+    this.corners.set(p.corners);
+    this.phase.set('crop');
+  }
+
+  async applyCrop(): Promise<void> {
+    const p = this.page();
+    if (!p) return;
+    const src = canvasFromImage(await loadImage(p.srcDataUrl));
+    const corners = this.corners();
+    this.patchPage({ corners, warpedDataUrl: this.warpToDataUrl(src, corners) });
+    this.phase.set('review');
+  }
+
+  cancelCrop(): void {
+    this.phase.set('review');
+  }
+
+  /** Rotate the current page 90° clockwise: source, corners, and crop result. */
+  async rotate(): Promise<void> {
+    const p = this.page();
+    if (!p) return;
+    const src = canvasFromImage(await loadImage(p.srcDataUrl));
     const out = document.createElement('canvas');
     out.width = src.height;
     out.height = src.width;
@@ -275,62 +384,34 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     ctx.rotate(Math.PI / 2);
     ctx.drawImage(src, 0, 0);
 
-    this.frozenCanvas = out;
-    this.frozenDataUrl.set(out.toDataURL('image/jpeg', 0.85));
-    this.frozenSize.set({ w: out.width, h: out.height });
-
     // (x, y) → (oldH - y, x); old BL becomes new TL etc., so shift the
     // corner order to keep [TL, TR, BR, BL] semantics.
     const oldH = src.height;
-    const [tl, tr, br, bl] = this.corners();
-    const rot = (p: Point): Point => ({ x: oldH - p.y, y: p.x });
-    this.corners.set([rot(bl), rot(tl), rot(tr), rot(br)]);
-    this.loupe.update(v => ({ ...v, visible: false }));
+    const [tl, tr, br, bl] = p.corners;
+    const rot = (pt: Point): Point => ({ x: oldH - pt.y, y: pt.x });
+    const corners: Quad = [rot(bl), rot(tl), rot(tr), rot(br)];
+
+    this.patchPage({
+      srcDataUrl: out.toDataURL('image/jpeg', 0.92),
+      srcW: out.width,
+      srcH: out.height,
+      corners,
+      warpedDataUrl: this.warpToDataUrl(out, corners),
+    });
   }
 
-  retake(): void {
-    this.frozenCanvas = null;
-    this.frozenDataUrl.set('');
-    this.phase.set('camera');
-    setTimeout(() => this.startCamera(), 50);
-  }
-
-  async addPage(): Promise<void> {
-    await this.bakeCurrentPage();
-    this.frozenCanvas = null;
-    this.frozenDataUrl.set('');
-    this.phase.set('camera');
-    setTimeout(() => this.startCamera(), 50);
-  }
-
-  async done(): Promise<void> {
-    await this.bakeCurrentPage();
-    this.fileName.set(this.defaultFileName());
-    this.phase.set('format');
-  }
-
-  private async bakeCurrentPage(): Promise<void> {
-    if (!this.frozenCanvas) return;
-    const warped = this.cv
-      ? perspectiveWarpCv(this.cv, this.frozenCanvas, this.corners())
-      : perspectiveWarp(this.frozenCanvas, this.corners());
-
-    const offscreen = document.createElement('canvas');
-    offscreen.width = warped.width;
-    offscreen.height = warped.height;
-    const ctx = offscreen.getContext('2d')!;
-    ctx.drawImage(warped, 0, 0);
-
-    // Apply brightness/contrast/enhance via pixel manipulation (ctx.filter unsupported on iOS Safari)
-    const imgData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
-    applyPixelEnhance(imgData.data, this.brightness(), this.contrast(), this.enhance());
+  /** Bake a page for upload: warped pixels + exact pixel-level enhancement. */
+  private async bakePage(p: ScanPage): Promise<Blob> {
+    const img = await loadImage(p.warpedDataUrl);
+    const canvas = canvasFromImage(img);
+    const ctx = canvas.getContext('2d')!;
+    // Pixel manipulation, not ctx.filter — unsupported on iOS Safari.
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    applyPixelEnhance(imgData.data, p.brightness, p.contrast, p.enhance);
     ctx.putImageData(imgData, 0, 0);
-
-    const blob = await new Promise<Blob>(resolve =>
-      offscreen.toBlob(b => resolve(b!), 'image/jpeg', 0.9)
+    return new Promise<Blob>(resolve =>
+      canvas.toBlob(b => resolve(b!), 'image/jpeg', 0.9)
     );
-    const thumbUrl = offscreen.toDataURL('image/jpeg', 0.4);
-    this.pages.update(pages => [...pages, { blob, thumbUrl }]);
   }
 
   async upload(): Promise<void> {
@@ -341,10 +422,13 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const pages = this.pages();
 
     try {
+      const blobs: Blob[] = [];
+      for (const p of pages) blobs.push(await this.bakePage(p));
+
       if (this.format() === 'pdf') {
         const pdf = await PDFDocument.create();
-        for (const page of pages) {
-          const buf = await page.blob.arrayBuffer();
+        for (const blob of blobs) {
+          const buf = await blob.arrayBuffer();
           const img = await pdf.embedJpg(buf);
           const pg = pdf.addPage([img.width, img.height]);
           pg.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
@@ -355,9 +439,9 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
         this.uploaded.emit([file]);
       } else {
         const results: DriveFile[] = [];
-        for (let i = 0; i < pages.length; i++) {
-          const fname = pages.length === 1 ? name + '.jpg' : `${name}_${i + 1}.jpg`;
-          const file = await this.fileService.uploadFile(folderId, fname, 'image/jpeg', pages[i].blob);
+        for (let i = 0; i < blobs.length; i++) {
+          const fname = blobs.length === 1 ? name + '.jpg' : `${name}_${i + 1}.jpg`;
+          const file = await this.fileService.uploadFile(folderId, fname, 'image/jpeg', blobs[i]);
           results.push(file);
         }
         this.uploaded.emit(results);
