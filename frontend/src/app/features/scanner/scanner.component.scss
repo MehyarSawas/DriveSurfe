@@ -86,13 +86,51 @@
   &.failed { background: rgba(200, 120, 0, 0.85); }
 }
 
+.zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 24px;
+  background: rgba(0,0,0,0.6);
+  flex-shrink: 0;
+
+  svg { width: 18px; height: 18px; fill: rgba(255,255,255,0.7); flex-shrink: 0; }
+  input[type=range] { flex: 1; accent-color: #fff; height: 20px; }
+}
+
 .camera-bar {
   display: flex;
-  justify-content: center;
-  padding: 24px 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
   padding-bottom: max(24px, env(safe-area-inset-bottom));
   background: rgba(0,0,0,0.6);
   flex-shrink: 0;
+}
+
+.camera-side {
+  width: 48px;
+  display: flex;
+  justify-content: center;
+}
+
+.cam-ctrl-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  svg { width: 24px; height: 24px; fill: #fff; }
+
+  &.active {
+    background: #fff;
+    svg { fill: #000; }
+  }
 }
 
 .capture-btn {

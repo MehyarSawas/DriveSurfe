@@ -16,10 +16,35 @@
         @else { <span>⚠ Basic mode — {{ cvDetail() }}</span> }
       </div>
     </div>
+    @if (zoomCaps(); as zc) {
+      <div class="zoom-bar">
+        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7 14 5 12 5 9.5S7 5 9.5 5 14 7 14 9.5 12 14 9.5 14z"/></svg>
+        <input type="range" [min]="zc.min" [max]="zc.max" [step]="zc.step"
+               [ngModel]="zoomLevel()" (ngModelChange)="setZoom(+$event)" />
+      </div>
+    }
     <div class="camera-bar">
+      <span class="camera-side">
+        @if (torchSupported()) {
+          <button class="cam-ctrl-btn" [class.active]="torchOn()" (click)="toggleTorch()" title="Flash">
+            @if (torchOn()) {
+              <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+            } @else {
+              <svg viewBox="0 0 24 24"><path d="M3.27 3 2 4.27l5 5V13h3v9l3.58-6.14L17.73 20 19 18.73 3.27 3zM17 10h-4l4-8H7v2.18l8.46 8.46L17 10z"/></svg>
+            }
+          </button>
+        }
+      </span>
       <button class="capture-btn" (click)="capture()">
         <span class="capture-inner"></span>
       </button>
+      <span class="camera-side">
+        @if (canFlip()) {
+          <button class="cam-ctrl-btn" (click)="flipCamera()" title="Switch camera">
+            <svg viewBox="0 0 24 24"><path d="M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-5 11.5V15H9v1.5L6.5 14 9 11.5V13h6v-1.5l2.5 2.5-2.5 2.5z"/></svg>
+          </button>
+        }
+      </span>
     </div>
   }
 

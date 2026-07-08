@@ -105,6 +105,15 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   /** True when the CV detector found a document in the last processed frame. */
   readonly cvFound = signal(false);
 
+  // Camera controls — capability-gated (buttons only shown when supported)
+  readonly torchOn = signal(false);
+  readonly torchSupported = signal(false);
+  readonly zoomCaps = signal<{ min: number; max: number; step: number } | null>(null);
+  readonly zoomLevel = signal(1);
+  readonly canFlip = signal(false);
+
+  private facing: 'environment' | 'user' = 'environment';
+  private videoTrack: MediaStreamTrack | null = null;
   private stream: MediaStream | null = null;
   private frozenCanvas: HTMLCanvasElement | null = null;
   private cv: any = null;
@@ -169,14 +178,61 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   async startCamera(): Promise<void> {
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 } }
+        video: { facingMode: this.facing, width: { ideal: 1920 } }
       });
       const video = this.videoEl.nativeElement;
       video.srcObject = this.stream;
       await video.play();
+      this.videoTrack = this.stream.getVideoTracks()[0] ?? null;
+      this.readCameraCapabilities();
     } catch {
       // camera denied
     }
+  }
+
+  /** Detect torch/zoom support and whether a second camera exists. */
+  private async readCameraCapabilities(): Promise<void> {
+    const caps: any = this.videoTrack?.getCapabilities?.() ?? {};
+    this.torchSupported.set(!!caps.torch);
+    this.torchOn.set(false);
+    if (caps.zoom && typeof caps.zoom.min === 'number') {
+      this.zoomCaps.set({ min: caps.zoom.min, max: caps.zoom.max, step: caps.zoom.step || 0.1 });
+      const settings: any = this.videoTrack?.getSettings?.() ?? {};
+      this.zoomLevel.set(settings.zoom ?? caps.zoom.min);
+    } else {
+      this.zoomCaps.set(null);
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      this.canFlip.set(devices.filter(d => d.kind === 'videoinput').length > 1);
+    } catch {
+      this.canFlip.set(false);
+    }
+  }
+
+  async toggleTorch(): Promise<void> {
+    if (!this.videoTrack) return;
+    const next = !this.torchOn();
+    try {
+      await this.videoTrack.applyConstraints({ advanced: [{ torch: next } as any] });
+      this.torchOn.set(next);
+    } catch {
+      this.torchSupported.set(false);
+    }
+  }
+
+  async setZoom(value: number): Promise<void> {
+    if (!this.videoTrack) return;
+    try {
+      await this.videoTrack.applyConstraints({ advanced: [{ zoom: value } as any] });
+      this.zoomLevel.set(value);
+    } catch { /* unsupported mid-stream */ }
+  }
+
+  async flipCamera(): Promise<void> {
+    this.facing = this.facing === 'environment' ? 'user' : 'environment';
+    this.stopCamera();
+    await this.startCamera();
   }
 
   async capture(): Promise<void> {
@@ -401,6 +457,8 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
   private stopCamera(): void {
     if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
+    this.videoTrack = null;
+    this.torchOn.set(false);
   }
 
   close(): void {
