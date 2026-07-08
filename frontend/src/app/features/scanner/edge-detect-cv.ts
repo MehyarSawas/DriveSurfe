@@ -35,14 +35,16 @@ export function detectQuadCv(cv: any, imageData: ImageData): [Point, Point, Poin
     hierarchy = new cv.Mat();
     cv.findContours(dilated, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
-    const minArea = dw * dh * 0.15;
+    const frameArea = dw * dh;
+    const minArea = frameArea * 0.04;  // document may be small in frame
+    const maxArea = frameArea * 0.92;  // reject the frame/vignette border itself
     let best: Point[] | null = null;
     let bestArea = 0;
 
     for (let i = 0; i < contours.size(); i++) {
       const cnt = contours.get(i);
       const area = cv.contourArea(cnt);
-      if (area < minArea || area <= bestArea) { cnt.delete(); continue; }
+      if (area < minArea || area > maxArea || area <= bestArea) { cnt.delete(); continue; }
 
       const peri = cv.arcLength(cnt, true);
       const approx = new cv.Mat();
@@ -53,8 +55,16 @@ export function detectQuadCv(cv: any, imageData: ImageData): [Point, Point, Poin
         for (let r = 0; r < 4; r++) {
           pts.push({ x: approx.data32S[r * 2], y: approx.data32S[r * 2 + 1] });
         }
-        best = pts;
-        bestArea = area;
+        // Skip quads that hug all four image borders (whole-frame detections).
+        const margin = Math.min(dw, dh) * 0.02;
+        const touchesAllBorders =
+          pts.some(p => p.x <= margin) && pts.some(p => p.x >= dw - margin) &&
+          pts.some(p => p.y <= margin) && pts.some(p => p.y >= dh - margin) &&
+          area > frameArea * 0.6;
+        if (!touchesAllBorders) {
+          best = pts;
+          bestArea = area;
+        }
       }
       approx.delete();
       cnt.delete();

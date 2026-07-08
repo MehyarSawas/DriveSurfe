@@ -166,7 +166,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     ctx.fill();
   }
 
-  capture(): void {
+  async capture(): Promise<void> {
     const video = this.videoEl.nativeElement;
     const snap = document.createElement('canvas');
     snap.width = video.videoWidth;
@@ -179,10 +179,15 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
     if (this.frameTimer) clearInterval(this.frameTimer);
     this.stopCamera();
+    this.phase.set('review');
 
+    // Ensure the accurate OpenCV detector runs on the captured frame even if
+    // the library hadn't finished loading during the live preview.
+    if (!this.cv) {
+      try { this.cv = await loadOpenCv(); } catch { this.cv = null; }
+    }
     const imgData = snap.getContext('2d')!.getImageData(0, 0, snap.width, snap.height);
     this.corners.set(this.detect(imgData));
-    this.phase.set('review');
   }
 
   retake(): void {
