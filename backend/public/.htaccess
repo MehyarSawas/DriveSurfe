@@ -29,11 +29,7 @@ AddType text/javascript .mjs
   Header set Cache-Control "no-cache, must-revalidate"
 </FilesMatch>
 
-# Content-Security-Policy for the SPA — deliberately minimal. It locks the
-# actual attack vector (script execution: only same-origin scripts run, no
-# CDN/injected/inline scripts, no plugins, no <base> hijack, no framing) and
-# leaves rendering resources (styles, fonts, images, media, workers)
-# unrestricted, since a stricter resource policy broke styles/fonts in
-# production on this host. OpenCV.js is self-hosted (assets/opencv/), which
-# is what makes script-src 'self' sufficient.
-Header always set Content-Security-Policy "script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+# Content-Security-Policy — TEMPORARILY DISABLED to bisect a production
+# styles/icons breakage: if styles return with this off, the host mishandles
+# the header; if they stay broken, CSP was never the cause. Re-enable as:
+# Header always set Content-Security-Policy "script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
