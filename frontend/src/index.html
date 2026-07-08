@@ -9,10 +9,13 @@
        stylesheet link to media="print" onload="this.media='all'" — an inline
        event handler that script-src 'self' blocks, leaving the app unstyled.
        frame-ancestors is not valid in a meta CSP. -->
-  <!-- 'wasm-unsafe-eval' is required for OpenCV.js (WebAssembly): without it,
-       WASM compilation is blocked and the scanner falls back to basic mode
-       with "all sources failed". It permits ONLY WebAssembly, not JS eval. -->
-  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'self'">
+  <!-- 'unsafe-eval' is required by OpenCV.js: it's an embind build whose
+       JS/C++ glue is generated at runtime via new Function() — verified by
+       loading the vendored file under this exact CSP in headless Chromium
+       ('wasm-unsafe-eval' alone → "Refused to evaluate a string"; with
+       'unsafe-eval' → initializes). The core protection (script-src 'self':
+       no CDN/injected/inline scripts) is unaffected. -->
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#1a73e8">
   <meta name="description" content="Surf your cloud drives — preview and clean up media with swipe gestures">
