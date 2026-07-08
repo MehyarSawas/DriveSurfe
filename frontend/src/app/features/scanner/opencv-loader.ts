@@ -7,8 +7,10 @@
 // with polling + per-URL timeout so a stalled init moves on instead of hanging.
 
 const OPENCV_URLS = [
+  // Self-hosted (same origin) — no CDN dependency, cached by the service worker
+  'assets/opencv/opencv.js',
+  // Remote fallbacks in case the local asset is missing
   'https://docs.opencv.org/5.0/opencv.js',
-  'https://docs.opencv.org/4.x/opencv.js',
   'https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.11.0-release.1/dist/opencv.js',
 ];
 
