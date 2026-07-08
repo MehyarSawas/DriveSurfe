@@ -297,15 +297,16 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   onHandlePointerDown(e: PointerEvent, idx: number): void {
     e.preventDefault();
     e.stopPropagation();
-    (e.target as SVGElement).setPointerCapture(e.pointerId);
+    // Capture on the wrap — pointermove/pointerup handlers live there.
+    const wrap = (e.target as HTMLElement).parentElement;
+    wrap?.setPointerCapture(e.pointerId);
     this.draggingCorner.set(idx);
   }
 
   onSvgPointerMove(e: PointerEvent): void {
     const idx = this.draggingCorner();
     if (idx === null) return;
-    const svg = e.currentTarget as SVGSVGElement;
-    const rect = svg.getBoundingClientRect();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     // Keep handle centres at least 5% from each edge so circles stay visible
     const pad = 0.05;
     const rx = Math.max(pad, Math.min(1 - pad, (e.clientX - rect.left) / rect.width));

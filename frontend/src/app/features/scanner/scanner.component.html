@@ -34,19 +34,20 @@
       <span class="scanner-title">Adjust</span>
     </div>
     <div class="review-wrap">
-      <div class="review-image-wrap">
+      <div class="review-image-wrap"
+           (pointermove)="onSvgPointerMove($event)"
+           (pointerup)="onSvgPointerUp()"
+           (pointercancel)="onSvgPointerUp()">
         <img class="review-img" [src]="frozenDataUrl()" [style.filter]="reviewFilter()" />
-        <svg class="review-svg" viewBox="0 0 1 1" preserveAspectRatio="none"
-             (pointermove)="onSvgPointerMove($event)"
-             (pointerup)="onSvgPointerUp()"
-             (pointercancel)="onSvgPointerUp()">
+        <svg class="review-svg" viewBox="0 0 1 1" preserveAspectRatio="none">
           <polygon [attr.points]="svgPoints()" class="quad-poly" />
-          @for (c of corners(); track $index) {
-            <circle [attr.cx]="c.x / frozenSize().w" [attr.cy]="c.y / frozenSize().h"
-                    r="0.04" class="quad-handle"
-                    (pointerdown)="onHandlePointerDown($event, $index)" />
-          }
         </svg>
+        @for (c of corners(); track $index) {
+          <div class="quad-handle"
+               [style.left.%]="c.x / frozenSize().w * 100"
+               [style.top.%]="c.y / frozenSize().h * 100"
+               (pointerdown)="onHandlePointerDown($event, $index)"></div>
+        }
       </div>
     </div>
 
