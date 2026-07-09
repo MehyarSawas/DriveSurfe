@@ -32,6 +32,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly loadingMore = input(false);
   readonly currentIndex = input(0);
   readonly sessionLoading = input(false);
+  readonly isShared = input(false);
 
   readonly stencilBlocks = computed(() => this.loadingMore() ? new Array(30) : []);
 
@@ -51,6 +52,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly moveFilePath = output<string>();
   readonly rename = output<DriveFile>();
   readonly copy = output<DriveFile>();
+  readonly share = output<DriveFile>();
   readonly stripScrolled = output<{from: number, to: number}>();
   readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
 

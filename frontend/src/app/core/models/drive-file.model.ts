@@ -12,6 +12,43 @@ export interface DriveFile {
   thumbnail_url: string | null;
   preview_url: string | null;
   extension: string;
+  /** Only populated on the /api/shares listing — not fetched per-file elsewhere. */
+  share_link?: ShareLink | null;
+}
+
+export type ShareRight = 'inherit' | 'password' | 'public';
+
+export interface ShareLink {
+  url: string | null;
+  file_id: string | null;
+  right: ShareRight;
+  valid_until: number | null;
+  created_at: number | null;
+  updated_at: number | null;
+  access_blocked: boolean;
+  views?: number | null;
+  /** Sub-fields aren't fully documented by kDrive; read whichever can_* keys exist. */
+  capabilities?: {
+    can_comment?: boolean;
+    can_download?: boolean;
+    can_edit?: boolean;
+    can_request_access?: boolean;
+    can_see_info?: boolean;
+    can_see_stats?: boolean;
+    [key: string]: unknown;
+  };
+}
+
+export interface ShareLinkOptions {
+  right: ShareRight;
+  can_comment?: boolean;
+  can_download?: boolean;
+  can_edit?: boolean;
+  can_request_access?: boolean;
+  can_see_info?: boolean;
+  can_see_stats?: boolean;
+  password?: string;
+  valid_until?: number | null;
 }
 
 export type SortBy = 'name' | 'last_modified_at' | 'size';

@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, Subject, takeUntil } from 'rxjs';
-import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID, PreviewSession } from '../models/drive-file.model';
+import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID, PreviewSession, ShareLink, ShareLinkOptions } from '../models/drive-file.model';
 import { FolderTreeNode, DriveUsage } from '../models/drive.model';
 
 interface ApiResponse<T> {
@@ -41,6 +41,10 @@ export class FileService {
   readonly previewOpen = signal(false);
   readonly sessions = signal<PreviewSession[]>([]);
   readonly searchCapped = signal(false);
+  /** IDs of every file/folder with an active share link — populated by loadShares(),
+   *  used app-wide to decide "Share" vs "Edit share" in menus and preview. */
+  readonly sharedFileIds = signal<Set<string>>(new Set());
+  readonly sharedFiles = signal<DriveFile[]>([]);
 
   private loadGeneration = 0;
 
@@ -195,6 +199,43 @@ export class FileService {
     } finally {
       if (gen === this.searchGen) this.searchLoading.set(false);
     }
+  }
+
+  async loadShares(): Promise<void> {
+    try {
+      const res = await firstValueFrom(
+        this.http.get<ApiResponse<DriveFile[]>>('/api/shares')
+      );
+      this.sharedFiles.set(res.data);
+      this.sharedFileIds.set(new Set(res.data.map(f => f.id)));
+    } catch (err) {
+      console.error('loadShares error:', err);
+    }
+  }
+
+  async getShareLink(fileId: string): Promise<ShareLink | null> {
+    const res = await firstValueFrom(
+      this.http.get<ApiResponse<ShareLink | null>>(`/api/files/${fileId}/share`)
+    );
+    return res.data;
+  }
+
+  async createShareLink(fileId: string, options: ShareLinkOptions): Promise<ShareLink> {
+    const res = await firstValueFrom(
+      this.http.post<ApiResponse<ShareLink>>(`/api/files/${fileId}/share`, options)
+    );
+    this.sharedFileIds.update(s => new Set([...s, fileId]));
+    return res.data;
+  }
+
+  async updateShareLink(fileId: string, options: Partial<ShareLinkOptions>): Promise<void> {
+    await firstValueFrom(this.http.put(`/api/files/${fileId}/share`, options));
+  }
+
+  async deleteShareLink(fileId: string): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/files/${fileId}/share`));
+    this.sharedFileIds.update(s => { const n = new Set(s); n.delete(fileId); return n; });
+    this.sharedFiles.update(files => files.filter(f => f.id !== fileId));
   }
 
   async getUsage(): Promise<DriveUsage> {

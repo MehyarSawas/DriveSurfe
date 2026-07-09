@@ -15,6 +15,7 @@ import { BreadcrumbComponent } from './components/breadcrumb/breadcrumb.componen
 import { SearchBarComponent } from './components/search-bar/search-bar.component';
 import { PreviewComponent } from '../preview/preview.component';
 import { FolderPickerComponent } from '../../shared/components/folder-picker/folder-picker.component';
+import { ShareDialogComponent } from '../../shared/components/share-dialog/share-dialog.component';
 import { ScannerComponent } from '../scanner/scanner.component';
 
 @Component({
@@ -31,6 +32,7 @@ import { ScannerComponent } from '../scanner/scanner.component';
     SearchBarComponent,
     PreviewComponent,
     FolderPickerComponent,
+    ShareDialogComponent,
     ScannerComponent,
   ],
   templateUrl: './file-browser.component.html',
@@ -77,13 +79,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return crumbs[crumbs.length - 1]?.name ?? 'My Drive';
   });
 
-  /** Upload destination for the scanner: the current folder if it's a real,
-   *  uploadable kDrive folder, else My Drive — trash/starred/search are
-   *  virtual views with no valid destination to upload into. */
-  readonly scanTargetFolderId = computed(() =>
+  /** Upload/create destination (scanner, file upload, new folder): the
+   *  current folder if it's a real, uploadable kDrive folder, else My Drive
+   *  — trash/starred/shares/search are virtual views with no valid
+   *  destination to upload or create into. */
+  readonly uploadTargetFolderId = computed(() =>
     this.isVirtualFolder() ? HOME_FOLDER_ID : this.fileService.currentFolderId()
   );
-  readonly scanTargetFolderName = computed(() =>
+  readonly uploadTargetFolderName = computed(() =>
     this.isVirtualFolder() ? 'My Drive' : this.currentFolderName()
   );
 
@@ -233,6 +236,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   uploadDone = signal(0);
   uploadErrors = signal(0);
   scanOpen = signal(false);
+  sharingFile = signal<DriveFile | null>(null);
 
   readonly recentMoveFolder = signal<{id: string; name: string; path: string} | null>(
     (() => { try { const s = localStorage.getItem('recentMoveFolder'); return s ? JSON.parse(s) : null; } catch { return null; } })()
@@ -251,6 +255,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     this.fileService.loadSessions();
+    this.fileService.loadShares();
     this.fileService.loading.set(true);
 
     // Warm up OpenCV.js in the background so the scanner's smart detection is
@@ -268,6 +273,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       await this.showTrash();
     } else if (folderId === '__starred__') {
       await this.showStarred();
+    } else if (folderId === '__shares__') {
+      await this.showShares();
     } else if (folderId !== HOME_FOLDER_ID) {
       this.fileService.currentFolderId.set(folderId);
       this.resolveBreadcrumb(folderId).then(crumbs => this.fileService.breadcrumb.set(crumbs));
@@ -567,6 +574,19 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.router.navigate(['/folder', '__starred__'], { replaceUrl: true });
   }
 
+  async showShares(): Promise<void> {
+    this.closeSidebarOnMobile();
+    await this.fileService.loadShares();
+    this.fileService.searchResults.set(this.fileService.sharedFiles());
+    this.fileService.breadcrumb.set([{ id: '__shares__', name: 'My Shares' }]);
+    this.fileService.currentFolderId.set('__shares__');
+    this.router.navigate(['/folder', '__shares__'], { replaceUrl: true });
+  }
+
+  openShare(file: DriveFile): void {
+    this.sharingFile.set(file);
+  }
+
   closeSidebarOnMobile(): void {
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
   }
@@ -714,7 +734,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   async submitCreateFolder(): Promise<void> {
     const name = this.newFolderName().trim();
     if (!name) return;
-    await this.fileService.createFolder(this.fileService.currentFolderId(), name);
+    await this.fileService.createFolder(this.uploadTargetFolderId(), name);
     this.showCreateFolder.set(false);
     this.newFolderName.set('');
   }
@@ -760,7 +780,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   private async uploadFiles(files: File[]): Promise<void> {
-    const folderId = this.fileService.currentFolderId();
+    const folderId = this.uploadTargetFolderId();
     this.uploadTotal.set(files.length);
     this.uploadDone.set(0);
     this.uploadErrors.set(0);

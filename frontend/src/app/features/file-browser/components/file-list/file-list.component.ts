@@ -14,6 +14,7 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   readonly files = input.required<DriveFile[]>();
   readonly selectedIds = input<Set<string>>(new Set());
   readonly trash = input(false);
+  readonly sharedIds = input<Set<string>>(new Set());
 
   readonly fileClick = output<DriveFile>();
   readonly fileDblClick = output<DriveFile>();
@@ -25,6 +26,11 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();
+  readonly share = output<DriveFile>();
+
+  isShared(id: string): boolean {
+    return this.sharedIds().has(id);
+  }
 
   readonly failedThumbs = new Set<string>();
   openMenuId: string | null = null;

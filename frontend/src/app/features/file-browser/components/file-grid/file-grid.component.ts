@@ -15,6 +15,7 @@ export class FileGridComponent implements AfterViewInit, OnDestroy {
   readonly selectedIds = input<Set<string>>(new Set());
   readonly large = input(false);
   readonly trash = input(false);
+  readonly sharedIds = input<Set<string>>(new Set());
 
   readonly fileClick = output<DriveFile>();
   readonly selectToggle = output<DriveFile>();
@@ -25,6 +26,11 @@ export class FileGridComponent implements AfterViewInit, OnDestroy {
   readonly favorite = output<DriveFile>();
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();
+  readonly share = output<DriveFile>();
+
+  isShared(id: string): boolean {
+    return this.sharedIds().has(id);
+  }
 
   readonly failedThumbs = new Set<string>();
   openMenuId: string | null = null;

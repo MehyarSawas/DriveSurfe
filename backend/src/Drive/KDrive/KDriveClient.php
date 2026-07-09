@@ -220,6 +220,64 @@ final class KDriveClient implements DriveInterface
         return isset($data['data']) ? $this->normalizeFile($data['data']) : [];
     }
 
+    public function createShareLink(string $fileId, array $options): array
+    {
+        $driveId = $this->getDriveId();
+        $body = array_filter($options, fn($v) => $v !== null);
+        $data = $this->post("{$driveId}/files/{$fileId}/link", $body);
+        return $this->normalizeShareLink($data['data'] ?? []);
+    }
+
+    public function updateShareLink(string $fileId, array $options): bool
+    {
+        $driveId = $this->getDriveId();
+        $body = array_filter($options, fn($v) => $v !== null);
+        $data = $this->put("{$driveId}/files/{$fileId}/link", $body);
+        return (bool) ($data['data'] ?? false);
+    }
+
+    public function deleteShareLink(string $fileId): bool
+    {
+        $driveId = $this->getDriveId();
+        $data = $this->deleteReq("{$driveId}/files/{$fileId}/link");
+        return (bool) ($data['data'] ?? false);
+    }
+
+    /**
+     * Returns null both when the file genuinely has no share link and when
+     * the lookup fails for any other reason (kDrive returns an error result
+     * rather than a clean "no link" signal) — acceptable here since this is
+     * only ever used to answer "does this file currently have a share link".
+     */
+    public function getShareLink(string $fileId): ?array
+    {
+        $driveId = $this->getDriveId();
+        try {
+            $data = $this->get("{$driveId}/files/{$fileId}/link");
+            return isset($data['data']) ? $this->normalizeShareLink($data['data']) : null;
+        } catch (RuntimeException) {
+            return null;
+        }
+    }
+
+    /** Paginated list of every file/folder that currently has an active share link. */
+    public function listShareLinks(): array
+    {
+        $driveId = $this->getDriveId();
+        $all     = [];
+        $cursor  = null;
+
+        do {
+            $params = ['with' => 'sharelink', 'limit' => 200];
+            if ($cursor) $params['cursor'] = $cursor;
+            $data   = $this->get("{$driveId}/files/links", $params, self::API_V3);
+            $all    = array_merge($all, $data['data'] ?? []);
+            $cursor = ($data['has_more'] ?? false) ? ($data['cursor'] ?? null) : null;
+        } while ($cursor);
+
+        return $this->normalizeFiles($all);
+    }
+
     public function listFavorites(): array
     {
         $driveId = $this->getDriveId();
@@ -430,6 +488,24 @@ final class KDriveClient implements DriveInterface
         }
     }
 
+    private function put(string $path, array $body = [], ?string $baseUrl = null): array
+    {
+        $token = $this->getToken();
+        try {
+            $response = $this->http->put(($baseUrl ?? self::API_BASE) . "/{$path}", [
+                'headers' => ['Authorization' => "Bearer {$token}", 'Content-Type' => 'application/json'],
+                'json' => $body ?: (object) [],
+            ]);
+            $data = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            if (($data['result'] ?? '') === 'error') {
+                throw new RuntimeException('kDrive: ' . json_encode($data['error'] ?? 'unknown'));
+            }
+            return $data;
+        } catch (GuzzleException $e) {
+            throw new RuntimeException("kDrive API error: " . $e->getMessage(), 0, $e);
+        }
+    }
+
     private function patch(string $path, array $body = [], ?string $baseUrl = null): array
     {
         $token = $this->getToken();
@@ -481,6 +557,24 @@ final class KDriveClient implements DriveInterface
             'thumbnail_url' => $id ? "/api/files/{$id}/thumbnail{$ctx}" : null,
             'preview_url'   => $id ? "/api/files/{$id}/preview{$ctx}" : null,
             'extension' => strtolower(pathinfo($f['name'] ?? '', PATHINFO_EXTENSION)),
+            'share_link' => !empty($f['sharelink']) ? $this->normalizeShareLink($f['sharelink'] + ['file_id' => $id]) : null,
+        ];
+    }
+
+    private function normalizeShareLink(array $sl): array
+    {
+        return [
+            'url'            => $sl['url'] ?? null,
+            'file_id'        => isset($sl['file_id']) ? (string) $sl['file_id'] : null,
+            'right'          => $sl['right'] ?? 'inherit',
+            'valid_until'    => $sl['valid_until'] ?? null,
+            'created_at'     => $sl['created_at'] ?? null,
+            'updated_at'     => $sl['updated_at'] ?? null,
+            'access_blocked' => $sl['access_blocked'] ?? false,
+            'views'          => $sl['views'] ?? null,
+            // Passed through as-is: the exact sub-fields aren't fully
+            // documented, so the frontend reads whichever can_* keys exist.
+            'capabilities'   => $sl['capabilities'] ?? [],
         ];
     }
 

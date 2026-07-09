@@ -140,6 +140,11 @@ All under `/api`. "Auth" = requires a valid `ds_session` cookie via `AuthMiddlew
 | POST | `/folders/{id}/upload` | Yes | headers `X-File-Name`(rawurlencoded), `Content-Type`; raw binary body | `{data: file}` |
 | POST | `/files/{id}/rename` | Yes | `{name}` (1–255 chars) | `{data: file}` |
 | GET/POST/DELETE | `/sessions[/{id}]` | Yes | preview-position bookmarks | see SessionRoutes |
+| GET | `/shares` | Yes | — | `{data: file[]}` — every file/folder with an active share link, each `share_link` populated |
+| GET | `/files/{id}/share` | Yes | — | `{data: ShareLink \| null}` |
+| POST | `/files/{id}/share` | Yes | `{right:'inherit'\|'password'\|'public', can_download?, can_edit?, can_see_info?, can_see_stats?, can_comment?, can_request_access?, password?, valid_until?}` | `{data: ShareLink}` |
+| PUT | `/files/{id}/share` | Yes | same body, all fields optional | `{data: true}` |
+| DELETE | `/files/{id}/share` | Yes | — | `{data: true}` |
 
 Global error shape: `{error: message}`, plus `trace`+`class` only for authenticated/dev callers. Proxy routes (`thumbnail`/`preview`/`download`) emit bare 404/502 with no JSON body on failure.
 
@@ -209,12 +214,15 @@ Special sentinel folder IDs used app-wide: `'__trash__'`, `'__starred__'`, `'__s
 
 **`PreviewCacheService`** — bridges to the custom service worker via `postMessage` on `navigator.serviceWorker.controller`: `cacheSession(sessionId, files)` (promotes already-cached `preview-general` entries into a per-session cache, no extra network fetches) and `deleteSession(sessionId)`.
 
+**Sharing** — `FileService` owns `sharedFileIds: Set<string>` and `sharedFiles: DriveFile[]`, populated by `loadShares()` (called once in `FileBrowserComponent.ngOnInit`, and again after any create/update/delete of a share link). `sharedFileIds` is passed down to `FileGridComponent`/`FileListComponent` (`[sharedIds]`) and `PreviewComponent` (`[isShared]`) purely to decide "Share" vs "Edit share" in menus — it is **not** refetched per-file per-render, so it can go briefly stale until the next `loadShares()` call after a share action. `createShareLink`/`updateShareLink`/`deleteShareLink`/`getShareLink` map directly to the `/api/files/{id}/share` routes. "My Shares" in the sidebar reuses the same virtual-folder pattern as Starred/Trash (`currentFolderId` set to the sentinel `'__shares__'`, results pushed into `searchResults`) — see `FileBrowserComponent.showShares()`.
+
 ### Custom service worker (`public/preview-sw.js`)
 Intercepts **only** `GET /api/files/{id}/thumbnail` and `GET /api/files/{id}/preview` requests. Cache names: `preview-general` (overflow, populated on every cache miss) and `preview-{sessionId}` (per saved session, populated by *promoting* already-cached entries — never a fresh fetch). Lookup order on a request: all `preview-{sessionId}` caches (newest session first) → `preview-general` → network (cached into `preview-general` if `response.ok`). Message protocol: `{type:'CACHE_SESSION', sessionId, urls}` and `{type:'DELETE_SESSION', sessionId}`.
 
 ### Shared components
 - **`ds-folder-picker`** — modal folder browser + new-folder creation, used for move/copy targets. Inputs: `startFolderId`, `startFolderName`, `startBreadcrumb`, `recentFolder`, `title`. Outputs: `folderSelected(DriveFile)`, `folderPath(string)`, `closed()`.
 - **`ds-pdf-viewer`** — renders a PDF via `pdfjs-dist` (worker at `/assets/pdf.worker.min.mjs`) onto per-page canvases scaled to container width × devicePixelRatio. Input `fileId` (required), `zoom`.
+- **`ds-share-dialog`** — create/edit/delete a kDrive share link for one file. Input `file` (required); on init it calls `getShareLink(file.id)` itself to decide create-vs-edit mode and pre-fill the form (no separate "is this shared" input needed — it always asks kDrive directly). Outputs `closed()`, `changed()` (emitted after any successful create/update/delete so the parent can re-run `loadShares()`). Right options map to kDrive's `right` enum: `public` (anyone with the link), `password` (anyone with the link + password), `inherit` (drive members only).
 
 ---
 

@@ -10,6 +10,7 @@ use DriveSurfe\Routes\ActionRoutes;
 use DriveSurfe\Routes\AuthRoutes;
 use DriveSurfe\Routes\FileRoutes;
 use DriveSurfe\Routes\SessionRoutes;
+use DriveSurfe\Routes\ShareRoutes;
 use DriveSurfe\Service\SessionService;
 use GuzzleHttp\Client;
 use Slim\Factory\AppFactory;
@@ -88,7 +89,7 @@ final class Application
             return $response
                 ->withHeader('Access-Control-Allow-Origin', $origin)
                 ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Registration-Token, X-File-Name')
-                ->withHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+                ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
                 ->withHeader('Access-Control-Allow-Credentials', 'true')
                 ->withHeader('X-Content-Type-Options', 'nosniff')
                 ->withHeader('X-Frame-Options', 'DENY')
@@ -105,12 +106,14 @@ final class Application
         $fileRoutes    = new FileRoutes($container);
         $actionRoutes  = new ActionRoutes($container);
         $sessionRoutes = new SessionRoutes($container);
+        $shareRoutes   = new ShareRoutes($container);
 
-        $this->slim->group('/api', function ($group) use ($authRoutes, $fileRoutes, $actionRoutes, $sessionRoutes) {
+        $this->slim->group('/api', function ($group) use ($authRoutes, $fileRoutes, $actionRoutes, $sessionRoutes, $shareRoutes) {
             $authRoutes->register($group);
             $fileRoutes->register($group);
             $actionRoutes->register($group);
             $sessionRoutes->register($group);
+            $shareRoutes->register($group);
         });
     }
 }

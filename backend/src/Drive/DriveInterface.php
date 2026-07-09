@@ -33,4 +33,14 @@ interface DriveInterface
     public function getFolderSize(string $folderId): int;
 
     public function uploadFile(string $parentId, string $filename, string $mimeType, string $binary): array;
+
+    public function createShareLink(string $fileId, array $options): array;
+
+    public function updateShareLink(string $fileId, array $options): bool;
+
+    public function deleteShareLink(string $fileId): bool;
+
+    public function getShareLink(string $fileId): ?array;
+
+    public function listShareLinks(): array;
 }
