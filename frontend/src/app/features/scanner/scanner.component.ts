@@ -68,44 +68,35 @@ function enhanceImageData(img: ImageData, brightness: number, contrast: number, 
     return;
   }
 
-  const lum = new Float32Array(n);
+  // LOCAL per-channel illumination maps: each channel is flattened by its own
+  // blurred background, which white-balances locally — the paper becomes
+  // neutral white even when the cast varies across the page or the crop
+  // includes non-paper margins (a global white-point estimate fails there).
+  // The cast ratio is clamped so genuinely colored documents (ID cards,
+  // colored paper) are not washed out to white.
+  const chR = new Float32Array(n), chG = new Float32Array(n), chB = new Float32Array(n);
   for (let i = 0, p = 0; i < n; i++, p += 4) {
-    lum[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+    chR[i] = data[p]; chG[i] = data[p + 1]; chB[i] = data[p + 2];
   }
   const radius = Math.max(8, Math.round(Math.max(w, h) / 16));
-  const bg = boxBlur2(lum, w, h, radius);
-
-  // White balance: warm indoor light leaves a yellow cast that equal-channel
-  // flattening preserves. Estimate the paper color (90th percentile per
-  // channel) and derive neutralizing gains so the paper becomes TRUE white,
-  // like native OS scanners produce.
-  const histR = new Uint32Array(256), histG = new Uint32Array(256), histB = new Uint32Array(256);
-  for (let p = 0; p < data.length; p += 4) {
-    histR[data[p]]++; histG[data[p + 1]]++; histB[data[p + 2]]++;
-  }
-  const pct90 = (hist: Uint32Array): number => {
-    const target = n * 0.9;
-    let cum = 0;
-    for (let v = 0; v < 256; v++) { cum += hist[v]; if (cum >= target) return v; }
-    return 255;
-  };
-  const whiteR = pct90(histR), whiteG = pct90(histG), whiteB = pct90(histB);
-  const lumaWhite = 0.299 * whiteR + 0.587 * whiteG + 0.114 * whiteB;
-  // Luma-normalized gains (paper maps to neutral, overall brightness unchanged);
-  // skip on very dark/degenerate images.
-  const wbOk = whiteR > 50 && whiteG > 50 && whiteB > 50;
-  const wbR = wbOk ? lumaWhite / whiteR : 1;
-  const wbG = wbOk ? lumaWhite / whiteG : 1;
-  const wbB = wbOk ? lumaWhite / whiteB : 1;
+  const bgR = boxBlur2(chR, w, h, radius);
+  const bgG = boxBlur2(chG, w, h, radius);
+  const bgB = boxBlur2(chB, w, h, radius);
 
   const b = brightness / 100;
   const c = (enhance === 'bw' ? Math.max(contrast, 160) : contrast) / 100;
   const sat = enhance === 'color' ? 1.15 : 0;
+  const CAST_MAX = 1.4, CAST_MIN = 1 / 1.4;
 
   for (let i = 0, p = 0; i < n; i++, p += 4) {
-    // Divide out the illumination: paper (≈ background level) maps to ~245.
-    const scale = 245 / Math.max(bg[i], 40);
-    let r = data[p] * scale * wbR, g = data[p + 1] * scale * wbG, bl = data[p + 2] * scale * wbB;
+    // Local illumination per channel; paper maps to ~245 neutral.
+    const bgLuma = Math.max(40, 0.299 * bgR[i] + 0.587 * bgG[i] + 0.114 * bgB[i]);
+    const castR = Math.min(CAST_MAX, Math.max(CAST_MIN, bgR[i] / bgLuma));
+    const castG = Math.min(CAST_MAX, Math.max(CAST_MIN, bgG[i] / bgLuma));
+    const castB = Math.min(CAST_MAX, Math.max(CAST_MIN, bgB[i] / bgLuma));
+    let r  = (data[p]     * 245) / (bgLuma * castR);
+    let g  = (data[p + 1] * 245) / (bgLuma * castG);
+    let bl = (data[p + 2] * 245) / (bgLuma * castB);
 
     const luma = 0.299 * r + 0.587 * g + 0.114 * bl;
     if (enhance === 'grayscale' || enhance === 'bw') {
