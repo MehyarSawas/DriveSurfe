@@ -139,6 +139,30 @@ function canvasFromImage(img: HTMLImageElement): HTMLCanvasElement {
   return c;
 }
 
+/** Sharpness score (variance of Laplacian on a downscaled grayscale) — higher = sharper. */
+function sharpnessScore(src: HTMLCanvasElement): number {
+  const w = 300, h = Math.max(1, Math.round((src.height * 300) / src.width));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d')!;
+  ctx.drawImage(src, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const g = new Float32Array(w * h);
+  for (let i = 0, p = 0; i < w * h; i++, p += 4) {
+    g[i] = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+  }
+  let sum = 0, sum2 = 0, n = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const lap = -4 * g[i] + g[i - 1] + g[i + 1] + g[i - w] + g[i + w];
+      sum += lap; sum2 += lap * lap; n++;
+    }
+  }
+  const mean = sum / n;
+  return sum2 / n - mean * mean;
+}
+
 @Component({
   selector: 'ds-scanner',
   standalone: true,
@@ -366,12 +390,47 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     return warped.toDataURL('image/jpeg', 0.92);
   }
 
+  /**
+   * Grab a still image. Prefers the camera's PHOTO pipeline via
+   * ImageCapture.takePhoto() (fast shutter + full sensor resolution — this is
+   * what makes native scanners sharp); falls back to a short burst of video
+   * frames keeping the sharpest one, which rescues shaky-hand captures.
+   */
+  private async grabStill(video: HTMLVideoElement): Promise<HTMLCanvasElement> {
+    const track = this.videoTrack;
+    if (track && typeof (window as any).ImageCapture === 'function') {
+      try {
+        const ic = new (window as any).ImageCapture(track);
+        const blob: Blob = await Promise.race([
+          ic.takePhoto(),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('takePhoto timeout')), 3000)),
+        ]);
+        const url = URL.createObjectURL(blob);
+        try {
+          return canvasFromImage(await loadImage(url));
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      } catch { /* fall through to burst capture */ }
+    }
+
+    let best: HTMLCanvasElement | null = null;
+    let bestScore = -1;
+    for (let i = 0; i < 5; i++) {
+      const c = document.createElement('canvas');
+      c.width = video.videoWidth;
+      c.height = video.videoHeight;
+      c.getContext('2d')!.drawImage(video, 0, 0);
+      const s = sharpnessScore(c);
+      if (s > bestScore) { bestScore = s; best = c; }
+      if (i < 4) await new Promise(r => setTimeout(r, 90));
+    }
+    return best!;
+  }
+
   async capture(): Promise<void> {
     const video = this.videoEl.nativeElement;
-    const snap = document.createElement('canvas');
-    snap.width = video.videoWidth;
-    snap.height = video.videoHeight;
-    snap.getContext('2d')!.drawImage(video, 0, 0);
+    const snap = await this.grabStill(video);
 
     this.stopCamera();
     this.phase.set('review');
