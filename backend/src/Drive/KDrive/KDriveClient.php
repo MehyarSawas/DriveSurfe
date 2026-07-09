@@ -457,6 +457,13 @@ final class KDriveClient implements DriveInterface
         }
     }
 
+    private static function toIso(mixed $ts): ?string
+    {
+        if ($ts === null || $ts === '') return null;
+        if (is_numeric($ts)) return date('c', (int) $ts);
+        return (string) $ts;
+    }
+
     private static function safeMimeType(string $mime): string
     {
         $allowed = [
@@ -588,8 +595,11 @@ final class KDriveClient implements DriveInterface
             'type' => $f['type'] ?? 'file',
             'mime_type' => $f['mime_type'] ?? '',
             'size' => $f['size'] ?? 0,
-            'modified_at' => $f['last_modified_at'] ?? $f['created_at'] ?? null,
-            'created_at' => $f['created_at'] ?? null,
+            // kDrive sends unix seconds — normalize to ISO 8601 so JS Date /
+            // Angular's date pipe parse them correctly (raw seconds get read
+            // as milliseconds and land in January 1970).
+            'modified_at' => self::toIso($f['last_modified_at'] ?? $f['created_at'] ?? null),
+            'created_at' => self::toIso($f['created_at'] ?? null),
             'is_dir' => ($f['type'] ?? '') === 'dir',
             'is_favorite' => $f['is_favorite'] ?? false,
             'parent_id' => (string) ($f['parent_id'] ?? '1'),

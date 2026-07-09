@@ -584,6 +584,16 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private timelineCursor: string | null = null;
   private timelineGen = 0;
 
+  /** kDrive timestamps are unix SECONDS (numbers or numeric strings); treating
+   *  them as Date-parseable strings/milliseconds lands everything in Jan 1970. */
+  private parseFileDate(raw: string | null): Date | null {
+    if (raw == null || raw === '') return null;
+    const n = Number(raw);
+    if (!isNaN(n) && n > 0) return new Date(n < 1e12 ? n * 1000 : n);
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
   /** Consecutive month/year groups from the (already date-desc) flat list. */
   readonly timelineGroups = computed(() => {
     if (!this.isTimeline()) return [];
@@ -591,14 +601,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const groups: { key: string; label: string; files: DriveFile[] }[] = [];
     let current: { key: string; label: string; files: DriveFile[] } | null = null;
     for (const f of files) {
-      const d = f.modified_at ? new Date(f.modified_at) : null;
-      const key = d && !isNaN(d.getTime())
+      const d = this.parseFileDate(f.modified_at);
+      const key = d
         ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
         : 'unknown';
       if (!current || current.key !== key) {
-        const label: string = key === 'unknown'
-          ? 'Unknown date'
-          : d!.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+        const label: string = d
+          ? d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+          : 'Unknown date';
         current = { key, label, files: [] };
         groups.push(current);
       }
@@ -617,39 +627,30 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.timelineCursor = null;
     this.timelineDone.set(false);
     ++this.timelineGen;
-    await this.loadMoreTimeline();
+    this.loadAllTimeline(); // fire-and-forget — pages stream in as they load
   }
 
-  async loadMoreTimeline(): Promise<void> {
-    if (this.timelineLoadingMore() || this.timelineDone() || !this.isTimeline()) return;
+  /** Loads ALL media pages continuously in the background (same pattern as
+   *  loadFiles' cursor loop) — no scroll trigger needed; each page appends
+   *  to the visible list as it arrives. Generation-guarded so leaving and
+   *  re-entering the view can't double-append. */
+  private async loadAllTimeline(): Promise<void> {
     const gen = this.timelineGen;
     this.timelineLoadingMore.set(true);
     try {
-      // Keep fetching until at least one media item arrives (pages can be
-      // media-empty while has_more is true) or the listing is exhausted.
-      let appended = 0;
       do {
         const page = await this.fileService.loadMediaPage(this.timelineCursor);
         if (gen !== this.timelineGen || !this.isTimeline()) return;
         this.timelineCursor = page.cursor;
         if (!page.has_more || !page.cursor) this.timelineDone.set(true);
         if (page.data.length > 0) {
-          appended = page.data.length;
           this.fileService.searchResults.update(r => [...(r ?? []), ...page.data]);
         }
-      } while (appended === 0 && !this.timelineDone());
+      } while (!this.timelineDone());
     } catch (err) {
       console.error('timeline load error:', err);
     } finally {
       if (gen === this.timelineGen) this.timelineLoadingMore.set(false);
-    }
-  }
-
-  onContentScroll(e: Event): void {
-    if (!this.isTimeline()) return;
-    const el = e.target as HTMLElement;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 800) {
-      this.loadMoreTimeline();
     }
   }
 

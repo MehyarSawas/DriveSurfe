@@ -508,16 +508,21 @@ ds-search-bar {
 }
 
 /* Timeline: media grouped by month with sticky headers that swap while
-   scrolling (native position: sticky inside the scrolling .file-content). */
+   scrolling (native position: sticky inside the scrolling .file-content).
+   .timeline cancels .file-content's padding so headers can pin at top: 0 —
+   a negative sticky offset does NOT pin correctly against a padded scroller. */
+.timeline {
+  margin: -16px;
+}
+
 .timeline-group {
   margin-bottom: 8px;
 }
 
 .timeline-month {
   position: sticky;
-  top: -16px; // cancel .file-content's top padding so it pins to the very top
+  top: 0;
   z-index: 5;
-  margin: 0 -16px; // full-width bar across the padded container
   padding: 10px 16px 8px;
   font-size: 15px;
   font-weight: 600;
@@ -528,7 +533,7 @@ ds-search-bar {
 
 .timeline-group ds-file-grid {
   display: block;
-  padding-top: 10px;
+  padding: 10px 16px 0;
 }
 
 .timeline-loading {
