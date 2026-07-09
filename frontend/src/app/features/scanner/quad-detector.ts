@@ -94,10 +94,9 @@ export function detectDocument(cv: any, imageData: ImageData): Detection | null 
     const upscaled = orderQuad(best.quad).map(
       p => ({ x: p.x / scale, y: p.y / scale })
     ) as Quad;
-    // Small outward margin so the frame sits just outside the document edge,
-    // then clamp so corners always stay inside the visible frame.
-    const padded = expandQuad(upscaled, Math.max(width, height) * 0.012);
-    const quad = clampQuad(padded, width, height);
+    // No margin — the quad matches the detected document edges exactly;
+    // clamp only keeps corners inside the visible frame.
+    const quad = clampQuad(upscaled, width, height);
     return { quad, score: best.score, source: best.source };
   } catch (e) {
     _lastError = e instanceof Error ? e.message : String(e);
@@ -200,17 +199,6 @@ function orderQuad(q: Point[]): Quad {
   const tr = m1.x > m2.x ? m1 : m2;
   const bl = m1.x > m2.x ? m2 : m1;
   return [tl, tr, br, bl];
-}
-
-/** Push each corner outward from the centroid by `pad` pixels. */
-function expandQuad(q: Quad, pad: number): Quad {
-  const cx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4;
-  const cy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
-  return q.map(p => {
-    const dx = p.x - cx, dy = p.y - cy;
-    const len = Math.hypot(dx, dy) || 1;
-    return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
-  }) as Quad;
 }
 
 /** Clamp all corners into the frame with a 5% margin so the handle circles

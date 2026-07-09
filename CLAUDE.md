@@ -267,7 +267,7 @@ This algorithm was iterated extensively against real failure photos (furniture, 
    - Aspect ratio ≤ 4.5:1 (rejects long thin strips like table edges).
    - **Border-touch rule**: a candidate quad touching 2 or more image borders is rejected as scenery (a table/wall/floor clipped by the camera frame), not a document. This was necessary because a tabletop can otherwise look like a perfectly clean bright rectangle.
 4. Winning candidate is chosen by `score = rectangularity × solidity × √areaFraction`.
-5. The winning quad is expanded ~1.2% outward from its centroid (small margin around the document, matching what a human would draw) then clamped 5% inside the frame so drag handles are never unreachable off-screen.
+5. The winning quad matches the detected document edges exactly (an earlier ~1.2% outward margin was removed on user request), clamped 5% inside the frame so drag handles are never unreachable off-screen.
 
 `defaultQuad()` (centered, 12% inset) is returned by the caller when detection finds nothing — used for manual adjustment, never silently presented as a "detection".
 
