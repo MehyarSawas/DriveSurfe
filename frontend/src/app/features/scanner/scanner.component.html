@@ -23,11 +23,11 @@
     </div>
     <div class="camera-wrap">
       <video #videoEl class="camera-video" playsinline autoplay muted></video>
-      <div class="detect-status" [class.failed]="cvStatus() === 'failed'" [class.ready]="cvStatus() === 'ready'">
-        @if (cvStatus() === 'loading') { <span>⏳ {{ cvDetail() }}</span> }
-        @else if (cvStatus() === 'ready') { <span>✓ Smart detection ready</span> }
-        @else { <span>⚠ Basic mode — {{ cvDetail() }}</span> }
-      </div>
+      @if (cvStatus() === 'failed') {
+        <div class="detect-status failed">
+          <span>⚠ Basic mode — {{ cvDetail() }}</span>
+        </div>
+      }
     </div>
     @if (zoomCaps(); as zc) {
       <div class="zoom-bar">
@@ -39,7 +39,7 @@
     <div class="camera-bar">
       <span class="camera-side left">
         @if (pages().length > 0) {
-          <img class="last-page-thumb" [src]="pages()[pages().length - 1].warpedDataUrl"
+          <img class="last-page-thumb" [src]="pages()[pages().length - 1].previewUrl"
                (click)="openLastPage()" title="Review pages" />
         }
       </span>
@@ -65,7 +65,7 @@
          (touchstart)="onPageTouchStart($event)"
          (touchend)="onPageTouchEnd($event)">
       <div class="warped-wrap">
-        <img class="warped-img" [src]="p.warpedDataUrl" [style.filter]="pageFilter()" />
+        <img class="warped-img" [src]="p.previewUrl" />
         @if (pages().length > 1) {
           @if (current() > 0) {
             <button class="page-nav prev" (click)="prevPage()" title="Previous page">
@@ -184,7 +184,7 @@
     <div class="format-wrap">
       <div class="pages-preview">
         @for (p of pages(); track $index) {
-          <img class="page-thumb" [src]="p.warpedDataUrl" [style.filter]="cssFilterFor(p)" />
+          <img class="page-thumb" [src]="p.previewUrl" />
         }
       </div>
       <div class="format-row">

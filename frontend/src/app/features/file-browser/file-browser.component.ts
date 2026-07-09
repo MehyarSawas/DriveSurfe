@@ -241,6 +241,13 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.loadSessions();
     this.fileService.loading.set(true);
 
+    // Warm up OpenCV.js in the background so the scanner's smart detection is
+    // already initialized by the time the user opens it (dynamic import keeps
+    // it out of the initial bundle; loadOpenCv caches the result).
+    setTimeout(() => {
+      import('../scanner/opencv-loader').then(m => m.loadOpenCv()).catch(() => { /* scanner will retry */ });
+    }, 2500);
+
     const params = this.route.snapshot.params;
     const folderId: string = params['folderId'] ?? HOME_FOLDER_ID;
     const fileId: string | null = params['fileId'] ?? null;

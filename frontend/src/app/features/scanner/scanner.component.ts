@@ -14,36 +14,61 @@ import { PDFDocument } from 'pdf-lib';
 type Phase = 'camera' | 'review' | 'crop' | 'format' | 'uploading';
 type Enhance = 'color' | 'grayscale' | 'bw';
 
-function applyPixelEnhance(data: Uint8ClampedArray, brightness: number, contrast: number, enhance: Enhance): void {
-  // Google-Drive-style auto enhancement: find the luminance black/white points
-  // from the histogram and stretch so the paper background reads as true white
-  // (the paper is the brightest large region — map its level to 255).
-  const hist = new Uint32Array(256);
-  const totalPx = data.length / 4;
-  for (let i = 0; i < data.length; i += 4) {
-    hist[(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) | 0]++;
+/** Separable box blur (2 passes ≈ Gaussian), used to estimate the illumination map. */
+function boxBlur2(src: Float32Array, w: number, h: number, r: number): Float32Array {
+  let a = src.slice();
+  const tmp = new Float32Array(a.length);
+  const win = 2 * r + 1;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      let sum = 0;
+      for (let x = -r; x <= r; x++) sum += a[row + Math.min(w - 1, Math.max(0, x))];
+      for (let x = 0; x < w; x++) {
+        tmp[row + x] = sum / win;
+        sum += a[row + Math.min(w - 1, x + r + 1)] - a[row + Math.max(0, x - r)];
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      for (let y = -r; y <= r; y++) sum += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+      for (let y = 0; y < h; y++) {
+        a[y * w + x] = sum / win;
+        sum += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+      }
+    }
   }
-  let cum = 0, black = 0, white = 255;
-  for (let v = 0; v < 256; v++) { cum += hist[v]; if (cum >= totalPx * 0.02) { black = v; break; } }
-  cum = 0;
-  for (let v = 255; v >= 0; v--) { cum += hist[v]; if (cum >= totalPx * 0.10) { white = v; break; } }
-  // Guard: near-flat images (all one tone) must not get blown out
-  if (white - black < 40) { black = 0; white = 255; }
-  const stretch = 255 / (white - black);
+  return a;
+}
 
-  // b=1 and c=1 at defaults (100/100) → sliders are identity on top of auto
+/**
+ * Google-Drive-style document enhancement via ILLUMINATION FLATTENING:
+ * estimate the lighting map (heavy blur of luminance) and divide it out, so
+ * shadows/gradients disappear and the paper reads as uniform white while ink
+ * and colors survive (all channels of a pixel are scaled equally → hue and
+ * saturation are preserved; a simple global histogram stretch cannot do this
+ * under uneven lighting). User brightness/contrast apply on top (identity at
+ * 100/100). Used for BOTH the review preview (downscaled) and the final bake.
+ */
+function enhanceImageData(img: ImageData, brightness: number, contrast: number, enhance: Enhance): void {
+  const { data, width: w, height: h } = img;
+  const n = w * h;
+
+  const lum = new Float32Array(n);
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    lum[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+  }
+  const radius = Math.max(8, Math.round(Math.max(w, h) / 16));
+  const bg = boxBlur2(lum, w, h, radius);
+
   const b = brightness / 100;
-  const c = (enhance === 'bw' ? Math.max(contrast, 150) : contrast) / 100;
-  // Mild saturation lift in color mode so document colors stay vivid after whitening
-  const sat = enhance === 'color' ? 1.18 : 0;
+  const c = (enhance === 'bw' ? Math.max(contrast, 160) : contrast) / 100;
+  const sat = enhance === 'color' ? 1.15 : 0;
 
-  for (let i = 0; i < data.length; i += 4) {
-    let r = data[i], g = data[i + 1], bl = data[i + 2];
-
-    // Auto white/black point stretch (per channel, shared points)
-    r  = (r  - black) * stretch;
-    g  = (g  - black) * stretch;
-    bl = (bl - black) * stretch;
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    // Divide out the illumination: paper (≈ background level) maps to ~245.
+    const scale = 245 / Math.max(bg[i], 40);
+    let r = data[p] * scale, g = data[p + 1] * scale, bl = data[p + 2] * scale;
 
     const luma = 0.299 * r + 0.587 * g + 0.114 * bl;
     if (enhance === 'grayscale' || enhance === 'bw') {
@@ -54,13 +79,12 @@ function applyPixelEnhance(data: Uint8ClampedArray, brightness: number, contrast
       bl = luma + (bl - luma) * sat;
     }
 
-    // brightness multiplies, then contrast pivots around 128 — matches CSS filter order
     r  = (r  * b - 128) * c + 128;
     g  = (g  * b - 128) * c + 128;
     bl = (bl * b - 128) * c + 128;
-    data[i]     = Math.max(0, Math.min(255, r));
-    data[i + 1] = Math.max(0, Math.min(255, g));
-    data[i + 2] = Math.max(0, Math.min(255, bl));
+    data[p]     = r  < 0 ? 0 : r  > 255 ? 255 : r;
+    data[p + 1] = g  < 0 ? 0 : g  > 255 ? 255 : g;
+    data[p + 2] = bl < 0 ? 0 : bl > 255 ? 255 : bl;
   }
 }
 
@@ -77,6 +101,8 @@ interface ScanPage {
   srcH: number;
   corners: Quad;
   warpedDataUrl: string;
+  /** Downscaled warped image with the REAL pixel enhancement applied — what review shows. */
+  previewUrl: string;
   enhance: Enhance;
   brightness: number;
   contrast: number;
@@ -147,23 +173,46 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   private stream: MediaStream | null = null;
   private cv: any = null;
 
-  /** CSS approximation of applyPixelEnhance for a page — the baked pixels use the exact version. */
-  cssFilterFor(p: ScanPage | null): string {
-    if (!p) return 'none';
-    const sat = p.enhance === 'grayscale' || p.enhance === 'bw' ? 0 : 118;
-    const con = p.enhance === 'bw' ? Math.max(p.contrast, 150) : Math.round(p.contrast * 1.08);
-    const bri = Math.round(p.brightness * 1.04);
-    return `brightness(${bri}%) contrast(${con}%) saturate(${sat}%)`;
+  private previewTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Render the review preview for a page: downscaled warped image with the
+   * exact pixel enhancement (same function as the final bake), so the review
+   * shows precisely what will be uploaded.
+   */
+  private async renderPreview(idx: number): Promise<void> {
+    const p = this.pages()[idx];
+    if (!p) return;
+    const img = await loadImage(p.warpedDataUrl);
+    const scale = Math.min(1, 700 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = c.getContext('2d')!;
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    const d = ctx.getImageData(0, 0, c.width, c.height);
+    const latest = this.pages()[idx];
+    if (!latest) return;
+    enhanceImageData(d, latest.brightness, latest.contrast, latest.enhance);
+    ctx.putImageData(d, 0, 0);
+    const url = c.toDataURL('image/jpeg', 0.85);
+    this.pages.update(pages => pages.map((pg, i) => (i === idx ? { ...pg, previewUrl: url } : pg)));
   }
 
-  readonly pageFilter = computed(() => this.cssFilterFor(this.page()));
+  private schedulePreview(idx: number): void {
+    if (this.previewTimer) clearTimeout(this.previewTimer);
+    this.previewTimer = setTimeout(() => this.renderPreview(idx), 150);
+  }
 
-  /** Merge a partial update into the current page (filters, corners, …). */
+  /** Merge a partial update into the current page; filter changes re-render the preview. */
   patchPage(patch: Partial<ScanPage>): void {
     const idx = this.current();
     this.pages.update(pages =>
       pages.map((p, i) => (i === idx ? { ...p, ...patch } : p))
     );
+    if ('enhance' in patch || 'brightness' in patch || 'contrast' in patch) {
+      this.schedulePreview(idx);
+    }
   }
 
   readonly svgPoints = computed(() => {
@@ -304,18 +353,21 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const corners = this.detect(imgData);
 
     // Auto-crop immediately: review shows the warped document, not the raw photo.
+    const warpedDataUrl = this.warpToDataUrl(snap, corners);
     const page: ScanPage = {
       srcDataUrl: snap.toDataURL('image/jpeg', 0.92),
       srcW: snap.width,
       srcH: snap.height,
       corners,
-      warpedDataUrl: this.warpToDataUrl(snap, corners),
+      warpedDataUrl,
+      previewUrl: warpedDataUrl, // replaced by the enhanced render just below
       enhance: 'color',
       brightness: 100,
       contrast: 100,
     };
     this.pages.update(pages => [...pages, page]);
     this.current.set(this.pages().length - 1);
+    this.renderPreview(this.current());
   }
 
   // --- Page navigation (review phase) ---
@@ -401,7 +453,9 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     if (!p) return;
     const src = canvasFromImage(await loadImage(p.srcDataUrl));
     const corners = this.corners();
-    this.patchPage({ corners, warpedDataUrl: this.warpToDataUrl(src, corners) });
+    const warpedDataUrl = this.warpToDataUrl(src, corners);
+    this.patchPage({ corners, warpedDataUrl, previewUrl: warpedDataUrl });
+    this.renderPreview(this.current());
     this.phase.set('review');
   }
 
@@ -429,13 +483,16 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const rot = (pt: Point): Point => ({ x: oldH - pt.y, y: pt.x });
     const corners: Quad = [rot(bl), rot(tl), rot(tr), rot(br)];
 
+    const warpedDataUrl = this.warpToDataUrl(out, corners);
     this.patchPage({
       srcDataUrl: out.toDataURL('image/jpeg', 0.92),
       srcW: out.width,
       srcH: out.height,
       corners,
-      warpedDataUrl: this.warpToDataUrl(out, corners),
+      warpedDataUrl,
+      previewUrl: warpedDataUrl,
     });
+    this.renderPreview(this.current());
   }
 
   /** Bake a page for upload: warped pixels + exact pixel-level enhancement. */
@@ -445,7 +502,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const ctx = canvas.getContext('2d')!;
     // Pixel manipulation, not ctx.filter — unsupported on iOS Safari.
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    applyPixelEnhance(imgData.data, p.brightness, p.contrast, p.enhance);
+    enhanceImageData(imgData, p.brightness, p.contrast, p.enhance);
     ctx.putImageData(imgData, 0, 0);
     return new Promise<Blob>(resolve =>
       canvas.toBlob(b => resolve(b!), 'image/jpeg', 0.9)
