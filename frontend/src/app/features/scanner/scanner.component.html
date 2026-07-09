@@ -208,12 +208,16 @@
       </div>
       <label class="quality-select">
         Quality
-        <select [ngModel]="saveQuality()" (ngModelChange)="saveQuality.set($event)">
+        <select [ngModel]="saveQuality()" (ngModelChange)="onQualityChange($event)">
           <option value="original">Original (100%, largest file)</option>
           <option value="high">High (80%)</option>
           <option value="medium">Medium (60%)</option>
           <option value="low">Low (45%, smallest file)</option>
         </select>
+        <span class="quality-size">
+          @if (estimatingSize()) { Calculating… }
+          @else if (estimatedSize() !== null) { ~{{ formatBytes(estimatedSize()!) }} }
+        </span>
       </label>
       <input class="filename-input" type="text" placeholder="File name"
              [ngModel]="fileName()" (ngModelChange)="fileName.set($event)" />

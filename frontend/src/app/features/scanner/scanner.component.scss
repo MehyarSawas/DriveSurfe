@@ -601,7 +601,6 @@
 .quality-select {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid rgba(255,255,255,0.2);
@@ -612,7 +611,7 @@
 
   select {
     flex: 1;
-    max-width: 220px;
+    min-width: 0;
     padding: 6px 8px;
     border: none;
     border-radius: 8px;
@@ -622,6 +621,15 @@
 
     option { background: #1a1a1a; color: #fff; }
   }
+}
+
+.quality-size {
+  flex: 0 0 auto;
+  min-width: 78px;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255,255,255,0.6);
 }
 
 .upload-error {

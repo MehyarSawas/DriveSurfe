@@ -655,6 +655,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     this.stopCamera();
     this.fileName.set(this.defaultFileName());
     this.phase.set('format');
+    this.recomputeEstimatedSize();
   }
 
   // --- Crop mode: re-adjust the corner quad on the original photo ---
@@ -729,6 +730,38 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     low:      { maxDim: 1200, jpeg: 0.45 },
   } as const;
   readonly saveQuality = signal<keyof typeof ScannerComponent.QUALITY_TIERS>('high');
+  /** Estimated total output size for the current pages + quality tier, in bytes. */
+  readonly estimatedSize = signal<number | null>(null);
+  readonly estimatingSize = signal(false);
+  private sizeEstimateGen = 0;
+
+  /** Bakes every page at the current tier (the real encode, not a guess) and
+   *  sums the byte sizes — accurate for JPEG output; PDF adds only a small
+   *  fixed wrapper overhead per page on top of the embedded JPEG bytes. */
+  async recomputeEstimatedSize(): Promise<void> {
+    const gen = ++this.sizeEstimateGen;
+    this.estimatingSize.set(true);
+    const pages = this.pages();
+    let total = 0;
+    for (const p of pages) {
+      const blob = await this.bakePage(p);
+      if (gen !== this.sizeEstimateGen) return; // superseded by a newer quality change
+      total += blob.size;
+    }
+    this.estimatedSize.set(total);
+    this.estimatingSize.set(false);
+  }
+
+  onQualityChange(q: keyof typeof ScannerComponent.QUALITY_TIERS): void {
+    this.saveQuality.set(q);
+    this.recomputeEstimatedSize();
+  }
+
+  formatBytes(n: number): string {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  }
 
   /** Bake a page for upload: warped pixels + exact pixel-level enhancement,
    *  downscaled/compressed per the selected save-quality tier. */
