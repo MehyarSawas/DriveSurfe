@@ -215,23 +215,6 @@
   svg { width: 16px; height: 16px; fill: white; }
 }
 
-.share-badge {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  background: var(--color-primary, #1a73e8);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-
-  svg { width: 14px; height: 14px; fill: white; }
-}
-
 .file-info {
   display: flex;
   flex-direction: column;
@@ -248,6 +231,16 @@
 }
 
 .file-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   color: var(--color-text-secondary);
+}
+
+.shared-icon {
+  width: 13px;
+  height: 13px;
+  fill: var(--color-primary, #1a73e8);
+  flex-shrink: 0;
 }
