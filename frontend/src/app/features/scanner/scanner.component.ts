@@ -310,7 +310,8 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
   readonly defaultFileName = computed(() => {
     const d = new Date();
-    return `Scan ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `Scan ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}`;
   });
 
   constructor(private zone: NgZone, private fileService: FileService) {}
