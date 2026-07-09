@@ -584,6 +584,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private timelineCursor: string | null = null;
   private timelineGen = 0;
 
+  /** DOM render window: data loads fully in the background, but only this many
+   *  items are RENDERED — thousands of file cards at once freeze the app.
+   *  Grows as the user scrolls near the bottom. */
+  readonly timelineRenderLimit = signal(200);
+  readonly timelineHasMoreToRender = computed(() =>
+    this.isTimeline() && this.timelineRenderLimit() < (this.fileService.searchResults()?.length ?? 0)
+  );
+
   /** kDrive timestamps are unix SECONDS (numbers or numeric strings); treating
    *  them as Date-parseable strings/milliseconds lands everything in Jan 1970. */
   private parseFileDate(raw: string | null): Date | null {
@@ -594,10 +602,12 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return isNaN(d.getTime()) ? null : d;
   }
 
-  /** Consecutive month/year groups from the (already date-desc) flat list. */
+  /** Consecutive month/year groups from the (already date-desc) flat list —
+   *  capped at the render window; the full list stays in searchResults so
+   *  preview navigation spans everything loaded. */
   readonly timelineGroups = computed(() => {
     if (!this.isTimeline()) return [];
-    const files = this.fileService.searchResults() ?? [];
+    const files = (this.fileService.searchResults() ?? []).slice(0, this.timelineRenderLimit());
     const groups: { key: string; label: string; files: DriveFile[] }[] = [];
     let current: { key: string; label: string; files: DriveFile[] } | null = null;
     for (const f of files) {
@@ -626,8 +636,21 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.router.navigate(['/folder', '__timeline__'], { replaceUrl: true });
     this.timelineCursor = null;
     this.timelineDone.set(false);
+    this.timelineRenderLimit.set(200);
     ++this.timelineGen;
     this.loadAllTimeline(); // fire-and-forget — pages stream in as they load
+  }
+
+  /** Grow the DOM render window as the user approaches the bottom. */
+  onContentScroll(e: Event): void {
+    if (!this.isTimeline()) return;
+    const el = e.target as HTMLElement;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1200) {
+      const total = this.fileService.searchResults()?.length ?? 0;
+      if (this.timelineRenderLimit() < total) {
+        this.timelineRenderLimit.update(n => Math.min(n + 300, total));
+      }
+    }
   }
 
   /** Loads ALL media pages continuously in the background (same pattern as

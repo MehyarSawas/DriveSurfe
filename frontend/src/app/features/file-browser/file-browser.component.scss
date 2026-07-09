@@ -509,10 +509,11 @@ ds-search-bar {
 
 /* Timeline: media grouped by month with sticky headers that swap while
    scrolling (native position: sticky inside the scrolling .file-content).
-   .timeline cancels .file-content's padding so headers can pin at top: 0 —
-   a negative sticky offset does NOT pin correctly against a padded scroller. */
-.timeline {
-  margin: -16px;
+   In timeline mode the container drops its own padding entirely so headers
+   pin flush at top: 0 — negative margins against a padded sticky scroller
+   left a visible gap (notably on iOS Safari). */
+.file-content.timeline-mode {
+  padding: 0;
 }
 
 .timeline-group {

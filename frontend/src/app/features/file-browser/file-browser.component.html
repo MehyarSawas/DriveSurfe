@@ -323,7 +323,9 @@
     }
 
     <!-- File content -->
-    <div class="file-content" [style.display]="previewFile() ? 'none' : null">
+    <div class="file-content" [style.display]="previewFile() ? 'none' : null"
+         [class.timeline-mode]="isTimeline()"
+         (scroll)="onContentScroll($event)">
       @if (isTimeline()) {
         <div class="timeline">
           @for (g of timelineGroups(); track g.key) {
@@ -345,7 +347,7 @@
               />
             </div>
           }
-          @if (timelineLoadingMore()) {
+          @if (timelineLoadingMore() || timelineHasMoreToRender()) {
             <div class="loading timeline-loading"><div class="spinner"></div></div>
           } @else if (timelineGroups().length === 0) {
             <div class="empty">
