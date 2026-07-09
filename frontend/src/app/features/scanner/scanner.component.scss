@@ -289,11 +289,14 @@
   }
 }
 
-// Review phase: the auto-cropped page
+// Review phase: the auto-cropped page.
+// The wrap must take the FULL flex slot (definite width/height) so the image's
+// max-height can resolve — otherwise the img renders at natural size and gets
+// clipped/covered by the header and toolbar.
 .warped-wrap {
   position: relative;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -304,7 +307,7 @@
   max-height: 100%;
   object-fit: contain;
   display: block;
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
 }
 
 .page-nav {
