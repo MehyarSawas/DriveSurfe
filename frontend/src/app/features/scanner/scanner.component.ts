@@ -75,6 +75,29 @@ function enhanceImageData(img: ImageData, brightness: number, contrast: number, 
   const radius = Math.max(8, Math.round(Math.max(w, h) / 16));
   const bg = boxBlur2(lum, w, h, radius);
 
+  // White balance: warm indoor light leaves a yellow cast that equal-channel
+  // flattening preserves. Estimate the paper color (90th percentile per
+  // channel) and derive neutralizing gains so the paper becomes TRUE white,
+  // like native OS scanners produce.
+  const histR = new Uint32Array(256), histG = new Uint32Array(256), histB = new Uint32Array(256);
+  for (let p = 0; p < data.length; p += 4) {
+    histR[data[p]]++; histG[data[p + 1]]++; histB[data[p + 2]]++;
+  }
+  const pct90 = (hist: Uint32Array): number => {
+    const target = n * 0.9;
+    let cum = 0;
+    for (let v = 0; v < 256; v++) { cum += hist[v]; if (cum >= target) return v; }
+    return 255;
+  };
+  const whiteR = pct90(histR), whiteG = pct90(histG), whiteB = pct90(histB);
+  const lumaWhite = 0.299 * whiteR + 0.587 * whiteG + 0.114 * whiteB;
+  // Luma-normalized gains (paper maps to neutral, overall brightness unchanged);
+  // skip on very dark/degenerate images.
+  const wbOk = whiteR > 50 && whiteG > 50 && whiteB > 50;
+  const wbR = wbOk ? lumaWhite / whiteR : 1;
+  const wbG = wbOk ? lumaWhite / whiteG : 1;
+  const wbB = wbOk ? lumaWhite / whiteB : 1;
+
   const b = brightness / 100;
   const c = (enhance === 'bw' ? Math.max(contrast, 160) : contrast) / 100;
   const sat = enhance === 'color' ? 1.15 : 0;
@@ -82,7 +105,7 @@ function enhanceImageData(img: ImageData, brightness: number, contrast: number, 
   for (let i = 0, p = 0; i < n; i++, p += 4) {
     // Divide out the illumination: paper (≈ background level) maps to ~245.
     const scale = 245 / Math.max(bg[i], 40);
-    let r = data[p] * scale, g = data[p + 1] * scale, bl = data[p + 2] * scale;
+    let r = data[p] * scale * wbR, g = data[p + 1] * scale * wbG, bl = data[p + 2] * scale * wbB;
 
     const luma = 0.299 * r + 0.587 * g + 0.114 * bl;
     if (enhance === 'grayscale' || enhance === 'bw') {
