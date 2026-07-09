@@ -214,15 +214,15 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   readonly cvFound = signal(false);
 
   /** Capture quality → requested camera resolution (the browser falls back
-   *  to the closest the device supports). Persisted across sessions. */
-  readonly quality = signal<'sd' | 'hd' | '4k'>(
-    (localStorage.getItem('scanQuality') as 'sd' | 'hd' | '4k') || '4k'
+   *  to the closest the device supports). Persisted across sessions; a stored
+   *  legacy 'sd' value falls back to the 4K default. */
+  readonly quality = signal<'hd' | '4k'>(
+    localStorage.getItem('scanQuality') === 'hd' ? 'hd' : '4k'
   );
-  private static readonly QUALITY_WIDTH = { sd: 1280, hd: 1920, '4k': 3840 } as const;
+  private static readonly QUALITY_WIDTH = { hd: 1920, '4k': 3840 } as const;
 
   cycleQuality(): void {
-    const order: Array<'sd' | 'hd' | '4k'> = ['sd', 'hd', '4k'];
-    const next = order[(order.indexOf(this.quality()) + 1) % order.length];
+    const next = this.quality() === '4k' ? 'hd' : '4k';
     this.quality.set(next);
     localStorage.setItem('scanQuality', next);
     // Restart the stream so the new resolution takes effect immediately.
