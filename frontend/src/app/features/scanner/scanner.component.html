@@ -206,6 +206,15 @@
         <button class="format-btn" [class.active]="format() === 'pdf'" (click)="format.set('pdf')">PDF</button>
         <button class="format-btn" [class.active]="format() === 'jpeg'" (click)="format.set('jpeg')">JPEG</button>
       </div>
+      <label class="quality-select">
+        Quality
+        <select [ngModel]="saveQuality()" (ngModelChange)="saveQuality.set($event)">
+          <option value="original">Original (100%, largest file)</option>
+          <option value="high">High (80%)</option>
+          <option value="medium">Medium (60%)</option>
+          <option value="low">Low (45%, smallest file)</option>
+        </select>
+      </label>
       <input class="filename-input" type="text" placeholder="File name"
              [ngModel]="fileName()" (ngModelChange)="fileName.set($event)" />
       @if (uploadError()) {

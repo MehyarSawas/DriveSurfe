@@ -717,21 +717,25 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     this.resetReviewZoom();
   }
 
-  /** Longest side of a saved page: ~170 DPI on A4's long (297mm) edge — well
-   *  past what's needed for on-screen reading or OCR (typically 150-200 DPI);
-   *  2400px (the previous cap) was ~205 DPI, still high enough that dense
-   *  documents barely compressed. */
-  private static readonly SAVE_MAX_DIM = 2000;
-  /** JPEG quality for saved pages. The flattened near-white background
-   *  compresses well; 0.72 is still visually clean on document text — the
-   *  downscale above is what protects sharpness, not a high quality factor. */
-  private static readonly SAVE_JPEG_QUALITY = 0.72;
+  /** Save-quality tiers: resolution cap (longest side, px) + JPEG quality.
+   *  Original skips downscaling entirely (maxDim=Infinity) and saves at
+   *  quality 1.0 — the full captured/warped resolution, uncompressed-visually.
+   *  Sizes measured on a dense table-heavy A4 receipt (931KB source):
+   *  high ~350KB, medium ~180KB, low ~100KB, original ~1.5MB. */
+  private static readonly QUALITY_TIERS = {
+    original: { maxDim: Infinity, jpeg: 1.0 },
+    high:     { maxDim: 2000, jpeg: 0.8 },
+    medium:   { maxDim: 1600, jpeg: 0.6 },
+    low:      { maxDim: 1200, jpeg: 0.45 },
+  } as const;
+  readonly saveQuality = signal<keyof typeof ScannerComponent.QUALITY_TIERS>('high');
 
   /** Bake a page for upload: warped pixels + exact pixel-level enhancement,
-   *  downscaled to document resolution and compressed for small PDFs. */
+   *  downscaled/compressed per the selected save-quality tier. */
   private async bakePage(p: ScanPage): Promise<Blob> {
+    const tier = ScannerComponent.QUALITY_TIERS[this.saveQuality()];
     const img = await loadImage(p.warpedDataUrl);
-    const scale = Math.min(1, ScannerComponent.SAVE_MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+    const scale = Math.min(1, tier.maxDim / Math.max(img.naturalWidth, img.naturalHeight));
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
     canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -742,7 +746,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     enhanceImageData(imgData, p.brightness, p.contrast, p.enhance);
     ctx.putImageData(imgData, 0, 0);
     return new Promise<Blob>(resolve =>
-      canvas.toBlob(b => resolve(b!), 'image/jpeg', ScannerComponent.SAVE_JPEG_QUALITY)
+      canvas.toBlob(b => resolve(b!), 'image/jpeg', tier.jpeg)
     );
   }
 
