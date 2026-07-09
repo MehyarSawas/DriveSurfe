@@ -451,7 +451,7 @@
   <ds-share-dialog
     [file]="sf"
     (closed)="sharingFile.set(null)"
-    (changed)="fileService.loadShares()"
+    (changed)="onShareChanged()"
   />
 }
 

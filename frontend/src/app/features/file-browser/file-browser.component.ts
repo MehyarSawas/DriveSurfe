@@ -587,6 +587,17 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.sharingFile.set(file);
   }
 
+  /** After a share is created/updated/deleted: refresh sharedFileIds (icons
+   *  everywhere), and if we're viewing "My Shares" itself, also re-sync its
+   *  file list — that view's contents come from a searchResults snapshot
+   *  that loadShares() alone does not touch. */
+  async onShareChanged(): Promise<void> {
+    await this.fileService.loadShares();
+    if (this.fileService.currentFolderId() === '__shares__') {
+      this.fileService.searchResults.set(this.fileService.sharedFiles());
+    }
+  }
+
   closeSidebarOnMobile(): void {
     if (window.innerWidth <= 768) this.sidebarOpen.set(false);
   }
