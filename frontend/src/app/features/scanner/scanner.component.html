@@ -209,10 +209,10 @@
       <label class="quality-select">
         Quality
         <select [ngModel]="saveQuality()" (ngModelChange)="onQualityChange($event)">
-          <option value="original">Original (100%, largest file)</option>
-          <option value="high">High (80%)</option>
-          <option value="medium">Medium (60%)</option>
-          <option value="low">Low (45%, smallest file)</option>
+          <option value="original">Original 100%</option>
+          <option value="high">High 90%</option>
+          <option value="medium">Medium 60%</option>
+          <option value="low">Low 45%</option>
         </select>
         <span class="quality-size">
           @if (estimatingSize()) { Calculating… }
