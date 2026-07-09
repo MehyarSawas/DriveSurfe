@@ -39,6 +39,9 @@ html, body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  // Disable browser double-tap/pinch page zoom; panning/scrolling stays native.
+  // In-app zoom features implement their own touch handling.
+  touch-action: pan-x pan-y;
 }
 
 button {

@@ -225,7 +225,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   /** Capture quality → requested camera resolution (the browser falls back
    *  to the closest the device supports). Persisted across sessions. */
   readonly quality = signal<'sd' | 'hd' | '4k'>(
-    (localStorage.getItem('scanQuality') as 'sd' | 'hd' | '4k') || 'hd'
+    (localStorage.getItem('scanQuality') as 'sd' | 'hd' | '4k') || '4k'
   );
   private static readonly QUALITY_WIDTH = { sd: 1280, hd: 1920, '4k': 3840 } as const;
 
@@ -413,49 +413,73 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     return warped.toDataURL('image/jpeg', 0.92);
   }
 
-  /**
-   * Grab a still image. Prefers the camera's PHOTO pipeline via
-   * ImageCapture.takePhoto() (fast shutter + full sensor resolution — this is
-   * what makes native scanners sharp); falls back to a short burst of video
-   * frames keeping the sharpest one, which rescues shaky-hand captures.
-   */
-  private async grabStill(video: HTMLVideoElement): Promise<HTMLCanvasElement> {
-    const track = this.videoTrack;
-    if (track && typeof (window as any).ImageCapture === 'function') {
-      try {
-        const ic = new (window as any).ImageCapture(track);
-        const blob: Blob = await Promise.race([
-          ic.takePhoto(),
-          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('takePhoto timeout')), 3000)),
-        ]);
-        const url = URL.createObjectURL(blob);
-        try {
-          return canvasFromImage(await loadImage(url));
-        } finally {
-          URL.revokeObjectURL(url);
-        }
-      } catch { /* fall through to burst capture */ }
-    }
+  /** True while the shutter is processing — the viewfinder shows the frozen tap-instant frame. */
+  readonly capturing = signal(false);
+  @ViewChild('freezeEl') freezeEl?: ElementRef<HTMLCanvasElement>;
 
-    let best: HTMLCanvasElement | null = null;
-    let bestScore = -1;
-    for (let i = 0; i < 5; i++) {
+  async capture(): Promise<void> {
+    if (this.capturing()) return;
+    const video = this.videoEl.nativeElement;
+    const grab = (): HTMLCanvasElement => {
       const c = document.createElement('canvas');
       c.width = video.videoWidth;
       c.height = video.videoHeight;
       c.getContext('2d')!.drawImage(video, 0, 0);
-      const s = sharpnessScore(c);
-      if (s > bestScore) { bestScore = s; best = c; }
-      if (i < 4) await new Promise(r => setTimeout(r, 90));
+      return c;
+    };
+
+    // The frame at the TAP INSTANT is the primary candidate — and the
+    // viewfinder freezes on it immediately, so moving the phone afterwards
+    // cannot change what was captured (this was the "captures late" bug).
+    const tapFrame = grab();
+    const freeze = this.freezeEl?.nativeElement;
+    if (freeze) {
+      freeze.width = tapFrame.width;
+      freeze.height = tapFrame.height;
+      freeze.getContext('2d')!.drawImage(tapFrame, 0, 0);
     }
-    return best!;
-  }
+    this.capturing.set(true);
 
-  async capture(): Promise<void> {
-    const video = this.videoEl.nativeElement;
-    const snap = await this.grabStill(video);
+    // Photo-pipeline attempt in parallel (sharp native stills where supported);
+    // short timeout so it can never delay the shutter noticeably.
+    let photoPromise: Promise<HTMLCanvasElement | null> = Promise.resolve(null);
+    const track = this.videoTrack;
+    if (track && typeof (window as any).ImageCapture === 'function') {
+      photoPromise = (async () => {
+        try {
+          const ic = new (window as any).ImageCapture(track);
+          const blob: Blob = await Promise.race([
+            ic.takePhoto(),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 1200)),
+          ]);
+          const url = URL.createObjectURL(blob);
+          try { return canvasFromImage(await loadImage(url)); }
+          finally { URL.revokeObjectURL(url); }
+        } catch { return null; }
+      })();
+    }
 
+    // Two extra frames right after the tap — rescues micro-shake AT the tap.
+    const extras: HTMLCanvasElement[] = [];
+    for (let i = 0; i < 2; i++) {
+      await new Promise(r => setTimeout(r, 80));
+      extras.push(grab());
+    }
+    const photo = await photoPromise;
     this.stopCamera();
+
+    // The tap frame wins unless a later candidate is CLEARLY sharper — later
+    // frames are down-weighted so post-tap movement can't hijack the shot.
+    let snap = tapFrame;
+    let best = sharpnessScore(tapFrame);
+    const weights = [0.95, 0.9];
+    extras.forEach((c, i) => {
+      const s = sharpnessScore(c) * weights[i];
+      if (s > best) { best = s; snap = c; }
+    });
+    if (photo && sharpnessScore(photo) > best * 1.25) snap = photo;
+
+    this.capturing.set(false);
     this.phase.set('review');
 
     // Detection runs ONCE, on the captured frame. If OpenCV is still loading,
@@ -492,28 +516,95 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
   /** Filters panel visibility (Google-Drive-style bottom toolbar). */
   readonly filtersOpen = signal(false);
-  private swipeX: number | null = null;
+
+  // Review zoom: pinch + buttons (same idea as the media preview)
+  readonly reviewZoom = signal(1);
+  readonly reviewPan = signal({ x: 0, y: 0 });
+  readonly reviewZoomPct = computed(() => Math.round(this.reviewZoom() * 100) + '%');
+  readonly reviewTransform = computed(() => {
+    const z = this.reviewZoom();
+    const p = this.reviewPan();
+    return z === 1 ? 'none' : `translate(${p.x}px, ${p.y}px) scale(${z})`;
+  });
+  private gesture = { mode: 'none' as 'none' | 'swipe' | 'pan' | 'pinch', x: 0, y: 0, dist: 0, zoom: 1, panX: 0, panY: 0 };
+
+  resetReviewZoom(): void {
+    this.reviewZoom.set(1);
+    this.reviewPan.set({ x: 0, y: 0 });
+  }
+
+  zoomReview(delta: number): void {
+    const z = Math.min(4, Math.max(1, this.reviewZoom() + delta));
+    this.reviewZoom.set(z);
+    if (z === 1) this.reviewPan.set({ x: 0, y: 0 });
+  }
 
   selectPage(i: number): void {
-    if (i >= 0 && i < this.pages().length) this.current.set(i);
+    if (i >= 0 && i < this.pages().length) {
+      this.current.set(i);
+      this.resetReviewZoom();
+    }
   }
   prevPage(): void { this.selectPage(this.current() - 1); }
   nextPage(): void { this.selectPage(this.current() + 1); }
 
-  /** Swipe left/right on the page to navigate, like Google Drive. */
+  /** One-finger swipe navigates (at 1×), drags to pan (zoomed); two fingers pinch-zoom. */
   onPageTouchStart(e: TouchEvent): void {
-    this.swipeX = e.touches[0]?.clientX ?? null;
+    if (e.touches.length === 2) {
+      const [t1, t2] = [e.touches[0], e.touches[1]];
+      this.gesture = {
+        mode: 'pinch',
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2,
+        dist: Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY),
+        zoom: this.reviewZoom(),
+        panX: this.reviewPan().x,
+        panY: this.reviewPan().y,
+      };
+    } else if (e.touches.length === 1) {
+      const t = e.touches[0];
+      const zoomed = this.reviewZoom() > 1;
+      this.gesture = {
+        mode: zoomed ? 'pan' : 'swipe',
+        x: t.clientX, y: t.clientY, dist: 0,
+        zoom: this.reviewZoom(),
+        panX: this.reviewPan().x, panY: this.reviewPan().y,
+      };
+    }
   }
+
+  onPageTouchMove(e: TouchEvent): void {
+    const g = this.gesture;
+    if (g.mode === 'pinch' && e.touches.length === 2) {
+      const [t1, t2] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      const z = Math.min(4, Math.max(1, g.zoom * (dist / Math.max(1, g.dist))));
+      const s = z / g.zoom;
+      this.reviewZoom.set(z);
+      this.reviewPan.set(z === 1
+        ? { x: 0, y: 0 }
+        : { x: midX - (g.x - g.panX) * s, y: midY - (g.y - g.panY) * s });
+    } else if (g.mode === 'pan' && e.touches.length === 1) {
+      const t = e.touches[0];
+      this.reviewPan.set({ x: g.panX + t.clientX - g.x, y: g.panY + t.clientY - g.y });
+    }
+  }
+
   onPageTouchEnd(e: TouchEvent): void {
-    if (this.swipeX === null) return;
-    const dx = (e.changedTouches[0]?.clientX ?? this.swipeX) - this.swipeX;
-    this.swipeX = null;
-    if (dx > 50) this.prevPage();
-    else if (dx < -50) this.nextPage();
+    const g = this.gesture;
+    if (g.mode === 'swipe' && e.changedTouches.length) {
+      const dx = e.changedTouches[0].clientX - g.x;
+      if (dx > 50) this.prevPage();
+      else if (dx < -50) this.nextPage();
+    }
+    if (e.touches.length === 0) this.gesture = { ...g, mode: 'none' };
   }
 
   /** Remove the current page; back to camera when none remain. */
   deletePage(): void {
+    this.resetReviewZoom();
     const idx = this.current();
     this.pages.update(pages => pages.filter((_, i) => i !== idx));
     this.current.set(Math.max(0, Math.min(idx, this.pages().length - 1)));
@@ -543,6 +634,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   /** Camera thumbnail tap: review the last captured page. */
   openLastPage(): void {
     if (!this.pages().length) return;
+    this.resetReviewZoom();
     this.stopCamera();
     this.current.set(this.pages().length - 1);
     this.phase.set('review');
@@ -574,6 +666,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const warpedDataUrl = this.warpToDataUrl(src, corners);
     this.patchPage({ corners, warpedDataUrl, previewUrl: warpedDataUrl });
     this.renderPreview(this.current());
+    this.resetReviewZoom();
     this.phase.set('review');
   }
 
@@ -611,6 +704,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
       previewUrl: warpedDataUrl,
     });
     this.renderPreview(this.current());
+    this.resetReviewZoom();
   }
 
   /** Bake a page for upload: warped pixels + exact pixel-level enhancement. */

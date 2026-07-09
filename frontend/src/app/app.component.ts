@@ -13,5 +13,12 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     this.auth.checkAuth();
+
+    // Block browser pinch-zoom app-wide (iOS Safari ignores user-scalable=no;
+    // these proprietary gesture events are its only reliable off-switch).
+    // In-app zoom (preview, scanner review) uses its own touch handlers and
+    // is unaffected.
+    document.addEventListener('gesturestart', e => e.preventDefault());
+    document.addEventListener('gesturechange', e => e.preventDefault());
   }
 }
