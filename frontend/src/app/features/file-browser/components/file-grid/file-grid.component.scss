@@ -221,6 +221,13 @@
   gap: 2px;
 }
 
+.file-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .file-name {
   font-size: 12px;
   font-weight: 500;
@@ -228,12 +235,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--color-text);
+  min-width: 0;
 }
 
 .file-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px;
   font-size: 11px;
   color: var(--color-text-secondary);
 }
