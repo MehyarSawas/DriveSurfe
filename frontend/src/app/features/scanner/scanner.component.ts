@@ -254,17 +254,21 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   private cv: any = null;
 
   private previewTimer: ReturnType<typeof setTimeout> | null = null;
+  private fullPreviewTimer: ReturnType<typeof setTimeout> | null = null;
+  private previewGen = 0;
 
   /**
-   * Render the review preview for a page: downscaled warped image with the
-   * exact pixel enhancement (same function as the final bake), so the review
-   * shows precisely what will be uploaded.
+   * Render the review preview for a page with the exact pixel enhancement
+   * (same function as the final bake). `maxDim` caps resolution for the fast
+   * interactive pass; the full pass (no cap) produces pixels IDENTICAL to the
+   * saved result, so zooming in shows true output quality.
    */
-  private async renderPreview(idx: number): Promise<void> {
+  private async renderPreview(idx: number, maxDim = Infinity): Promise<void> {
     const p = this.pages()[idx];
     if (!p) return;
+    const gen = this.previewGen;
     const img = await loadImage(p.warpedDataUrl);
-    const scale = Math.min(1, 700 / Math.max(img.naturalWidth, img.naturalHeight));
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(img.naturalWidth * scale));
     c.height = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -275,13 +279,19 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     if (!latest) return;
     enhanceImageData(d, latest.brightness, latest.contrast, latest.enhance);
     ctx.putImageData(d, 0, 0);
-    const url = c.toDataURL('image/jpeg', 0.85);
+    if (gen !== this.previewGen) return; // settings changed while rendering — discard
+    const url = c.toDataURL('image/jpeg', 0.92);
     this.pages.update(pages => pages.map((pg, i) => (i === idx ? { ...pg, previewUrl: url } : pg)));
   }
 
+  /** Fast pass while adjusting (1100px, 120ms debounce), then a full-resolution
+   *  pass once idle (650ms) so the preview matches the saved pixels exactly. */
   private schedulePreview(idx: number): void {
+    this.previewGen++;
     if (this.previewTimer) clearTimeout(this.previewTimer);
-    this.previewTimer = setTimeout(() => this.renderPreview(idx), 150);
+    if (this.fullPreviewTimer) clearTimeout(this.fullPreviewTimer);
+    this.previewTimer = setTimeout(() => this.renderPreview(idx, 1100), 120);
+    this.fullPreviewTimer = setTimeout(() => this.renderPreview(idx), 650);
   }
 
   /** Merge a partial update into the current page; filter changes re-render the preview. */
@@ -509,7 +519,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     };
     this.pages.update(pages => [...pages, page]);
     this.current.set(this.pages().length - 1);
-    this.renderPreview(this.current());
+    this.schedulePreview(this.current());
   }
 
   // --- Page navigation (review phase) ---
@@ -526,7 +536,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const p = this.reviewPan();
     return z === 1 ? 'none' : `translate(${p.x}px, ${p.y}px) scale(${z})`;
   });
-  private gesture = { mode: 'none' as 'none' | 'swipe' | 'pan' | 'pinch', x: 0, y: 0, dist: 0, zoom: 1, panX: 0, panY: 0 };
+  private gesture = { mode: 'none' as 'none' | 'swipe' | 'pan' | 'pinch', x: 0, y: 0, dist: 0, zoom: 1, panX: 0, panY: 0, cx: 0, cy: 0 };
 
   resetReviewZoom(): void {
     this.reviewZoom.set(1);
@@ -551,6 +561,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   /** One-finger swipe navigates (at 1×), drags to pan (zoomed); two fingers pinch-zoom. */
   onPageTouchStart(e: TouchEvent): void {
     if (e.touches.length === 2) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const [t1, t2] = [e.touches[0], e.touches[1]];
       this.gesture = {
         mode: 'pinch',
@@ -560,6 +571,8 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
         zoom: this.reviewZoom(),
         panX: this.reviewPan().x,
         panY: this.reviewPan().y,
+        cx: rect.left + rect.width / 2,
+        cy: rect.top + rect.height / 2,
       };
     } else if (e.touches.length === 1) {
       const t = e.touches[0];
@@ -569,6 +582,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
         x: t.clientX, y: t.clientY, dist: 0,
         zoom: this.reviewZoom(),
         panX: this.reviewPan().x, panY: this.reviewPan().y,
+        cx: 0, cy: 0,
       };
     }
   }
@@ -581,11 +595,15 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
       const midX = (t1.clientX + t2.clientX) / 2;
       const midY = (t1.clientY + t2.clientY) / 2;
       const z = Math.min(4, Math.max(1, g.zoom * (dist / Math.max(1, g.dist))));
-      const s = z / g.zoom;
+      // Same math as PreviewComponent: keep the image point under the pinch
+      // midpoint anchored (container-center origin), so moving both fingers
+      // pans while spreading them zooms.
+      const imageX = (g.x - g.cx - g.panX) / g.zoom;
+      const imageY = (g.y - g.cy - g.panY) / g.zoom;
       this.reviewZoom.set(z);
       this.reviewPan.set(z === 1
         ? { x: 0, y: 0 }
-        : { x: midX - (g.x - g.panX) * s, y: midY - (g.y - g.panY) * s });
+        : { x: midX - g.cx - imageX * z, y: midY - g.cy - imageY * z });
     } else if (g.mode === 'pan' && e.touches.length === 1) {
       const t = e.touches[0];
       this.reviewPan.set({ x: g.panX + t.clientX - g.x, y: g.panY + t.clientY - g.y });
@@ -665,7 +683,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     const corners = this.corners();
     const warpedDataUrl = this.warpToDataUrl(src, corners);
     this.patchPage({ corners, warpedDataUrl, previewUrl: warpedDataUrl });
-    this.renderPreview(this.current());
+    this.schedulePreview(this.current());
     this.resetReviewZoom();
     this.phase.set('review');
   }
@@ -703,7 +721,7 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
       warpedDataUrl,
       previewUrl: warpedDataUrl,
     });
-    this.renderPreview(this.current());
+    this.schedulePreview(this.current());
     this.resetReviewZoom();
   }
 
