@@ -716,12 +716,15 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     this.resetReviewZoom();
   }
 
-  /** Longest side of a saved page: ~290 DPI for A4 — text stays print-crisp
-   *  while the file is a fraction of the raw 4K bake. */
-  private static readonly SAVE_MAX_DIM = 2400;
+  /** Longest side of a saved page: ~170 DPI on A4's long (297mm) edge — well
+   *  past what's needed for on-screen reading or OCR (typically 150-200 DPI);
+   *  2400px (the previous cap) was ~205 DPI, still high enough that dense
+   *  documents barely compressed. */
+  private static readonly SAVE_MAX_DIM = 2000;
   /** JPEG quality for saved pages. The flattened near-white background
-   *  compresses extremely well, so 0.8 is visually lossless on documents. */
-  private static readonly SAVE_JPEG_QUALITY = 0.8;
+   *  compresses well; 0.72 is still visually clean on document text — the
+   *  downscale above is what protects sharpness, not a high quality factor. */
+  private static readonly SAVE_JPEG_QUALITY = 0.72;
 
   /** Bake a page for upload: warped pixels + exact pixel-level enhancement,
    *  downscaled to document resolution and compressed for small PDFs. */
