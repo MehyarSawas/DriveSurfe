@@ -320,14 +320,30 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
 
   // --- Page navigation (review phase) ---
 
+  /** Filters panel visibility (Google-Drive-style bottom toolbar). */
+  readonly filtersOpen = signal(false);
+  private swipeX: number | null = null;
+
   selectPage(i: number): void {
     if (i >= 0 && i < this.pages().length) this.current.set(i);
   }
   prevPage(): void { this.selectPage(this.current() - 1); }
   nextPage(): void { this.selectPage(this.current() + 1); }
 
-  /** Delete the current page and re-open the camera to shoot a replacement. */
-  retake(): void {
+  /** Swipe left/right on the page to navigate, like Google Drive. */
+  onPageTouchStart(e: TouchEvent): void {
+    this.swipeX = e.touches[0]?.clientX ?? null;
+  }
+  onPageTouchEnd(e: TouchEvent): void {
+    if (this.swipeX === null) return;
+    const dx = (e.changedTouches[0]?.clientX ?? this.swipeX) - this.swipeX;
+    this.swipeX = null;
+    if (dx > 50) this.prevPage();
+    else if (dx < -50) this.nextPage();
+  }
+
+  /** Remove the current page; back to camera when none remain. */
+  deletePage(): void {
     const idx = this.current();
     this.pages.update(pages => pages.filter((_, i) => i !== idx));
     this.current.set(Math.max(0, Math.min(idx, this.pages().length - 1)));
@@ -337,12 +353,34 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  addPage(): void {
+  /** Delete the current page and re-open the camera to shoot a replacement. */
+  retake(): void {
+    const idx = this.current();
+    this.pages.update(pages => pages.filter((_, i) => i !== idx));
+    this.current.set(Math.max(0, this.pages().length - 1));
+    this.filtersOpen.set(false);
     this.phase.set('camera');
     setTimeout(() => this.startCamera(), 50);
   }
 
+  /** Review "Done": back to the camera to add more pages (Drive flow). */
+  addPage(): void {
+    this.filtersOpen.set(false);
+    this.phase.set('camera');
+    setTimeout(() => this.startCamera(), 50);
+  }
+
+  /** Camera thumbnail tap: review the last captured page. */
+  openLastPage(): void {
+    if (!this.pages().length) return;
+    this.stopCamera();
+    this.current.set(this.pages().length - 1);
+    this.phase.set('review');
+  }
+
+  /** Camera "Save (n)": proceed to name/format/upload. */
   done(): void {
+    this.stopCamera();
     this.fileName.set(this.defaultFileName());
     this.phase.set('format');
   }

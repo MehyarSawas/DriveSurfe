@@ -1,12 +1,25 @@
 <div class="scanner-overlay">
-  <!-- Camera phase -->
+  <!-- Camera phase (Google Drive style: Cancel | flash/flip | thumbnail · shutter · Save(n)) -->
   @if (phase() === 'camera') {
-    <div class="scanner-header">
-      <button class="icon-btn light" (click)="close()" title="Close">
-        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-      </button>
-      <span class="scanner-title">Scan Document</span>
-      <span class="page-count">{{ pages().length > 0 ? pages().length + ' page' + (pages().length > 1 ? 's' : '') : '' }}</span>
+    <div class="cam-top-bar">
+      <button class="txt-btn" (click)="close()">Cancel</button>
+      <span class="cam-top-icons">
+        @if (torchSupported()) {
+          <button class="cam-icon-btn" [class.active]="torchOn()" (click)="toggleTorch()" title="Flash">
+            @if (torchOn()) {
+              <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+            } @else {
+              <svg viewBox="0 0 24 24"><path d="M3.27 3 2 4.27l5 5V13h3v9l3.58-6.14L17.73 20 19 18.73 3.27 3zM17 10h-4l4-8H7v2.18l8.46 8.46L17 10z"/></svg>
+            }
+          </button>
+        }
+        @if (canFlip()) {
+          <button class="cam-icon-btn" (click)="flipCamera()" title="Switch camera">
+            <svg viewBox="0 0 24 24"><path d="M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-5 11.5V15H9v1.5L6.5 14 9 11.5V13h6v-1.5l2.5 2.5-2.5 2.5z"/></svg>
+          </button>
+        }
+      </span>
+      <span class="cam-top-spacer"></span>
     </div>
     <div class="camera-wrap">
       <video #videoEl class="camera-video" playsinline autoplay muted></video>
@@ -24,45 +37,33 @@
       </div>
     }
     <div class="camera-bar">
-      <span class="camera-side">
-        @if (torchSupported()) {
-          <button class="cam-ctrl-btn" [class.active]="torchOn()" (click)="toggleTorch()" title="Flash">
-            @if (torchOn()) {
-              <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
-            } @else {
-              <svg viewBox="0 0 24 24"><path d="M3.27 3 2 4.27l5 5V13h3v9l3.58-6.14L17.73 20 19 18.73 3.27 3zM17 10h-4l4-8H7v2.18l8.46 8.46L17 10z"/></svg>
-            }
-          </button>
+      <span class="camera-side left">
+        @if (pages().length > 0) {
+          <img class="last-page-thumb" [src]="pages()[pages().length - 1].warpedDataUrl"
+               (click)="openLastPage()" title="Review pages" />
         }
       </span>
       <button class="capture-btn" (click)="capture()">
         <span class="capture-inner"></span>
       </button>
-      <span class="camera-side">
-        @if (canFlip()) {
-          <button class="cam-ctrl-btn" (click)="flipCamera()" title="Switch camera">
-            <svg viewBox="0 0 24 24"><path d="M20 5h-3.17L15 3H9L7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-5 11.5V15H9v1.5L6.5 14 9 11.5V13h6v-1.5l2.5 2.5-2.5 2.5z"/></svg>
-          </button>
+      <span class="camera-side right">
+        @if (pages().length > 0) {
+          <button class="save-pill" (click)="done()">Save ({{ pages().length }})</button>
         }
       </span>
     </div>
   }
 
-  <!-- Review phase: auto-cropped result with filters + page navigation -->
+  <!-- Review phase (Google Drive style: Done | n of m | Retake + bottom icon toolbar) -->
   @if (phase() === 'review' && page(); as p) {
-    <div class="scanner-header">
-      <button class="icon-btn light" (click)="close()" title="Close">
-        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-      </button>
-      <span class="scanner-title">Page {{ current() + 1 }} / {{ pages().length }}</span>
-      <button class="icon-btn light" (click)="openCrop()" title="Adjust crop">
-        <svg viewBox="0 0 24 24"><path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/></svg>
-      </button>
-      <button class="icon-btn light" (click)="rotate()" title="Rotate">
-        <svg viewBox="0 0 24 24"><path d="M15.55 5.55L11 1v3.07C7.06 4.56 4 7.92 4 12s3.05 7.44 7 7.93v-2.02c-2.84-.48-5-2.94-5-5.91s2.16-5.43 5-5.91V10l4.55-4.45zM19.93 11c-.17-1.39-.72-2.73-1.62-3.89l-1.42 1.42c.54.75.88 1.6 1.02 2.47h2.02zM13 17.9v2.02c1.39-.17 2.74-.71 3.9-1.61l-1.44-1.44c-.75.54-1.59.89-2.46 1.03zm3.89-2.42l1.42 1.41c.9-1.16 1.45-2.5 1.62-3.89h-2.02c-.14.87-.48 1.72-1.02 2.48z"/></svg>
-      </button>
+    <div class="review-header">
+      <button class="txt-btn blue" (click)="addPage()">Done</button>
+      <span class="review-counter">{{ current() + 1 }} of {{ pages().length }}</span>
+      <button class="txt-btn blue" (click)="retake()">Retake</button>
     </div>
-    <div class="review-wrap">
+    <div class="review-wrap light"
+         (touchstart)="onPageTouchStart($event)"
+         (touchend)="onPageTouchEnd($event)">
       <div class="warped-wrap">
         <img class="warped-img" [src]="p.warpedDataUrl" [style.filter]="pageFilter()" />
         @if (pages().length > 1) {
@@ -80,35 +81,49 @@
       </div>
     </div>
 
-    @if (pages().length > 1) {
-      <div class="page-strip">
-        @for (pg of pages(); track $index) {
-          <img class="page-strip-thumb" [class.active]="$index === current()"
-               [src]="pg.warpedDataUrl" [style.filter]="cssFilterFor(pg)"
-               (click)="selectPage($index)" />
-        }
+    @if (filtersOpen()) {
+      <div class="filters-panel">
+        <div class="enhance-row">
+          <button class="enhance-btn" [class.active]="p.enhance === 'color'" (click)="patchPage({enhance: 'color'})">Color</button>
+          <button class="enhance-btn" [class.active]="p.enhance === 'grayscale'" (click)="patchPage({enhance: 'grayscale'})">Grayscale</button>
+          <button class="enhance-btn" [class.active]="p.enhance === 'bw'" (click)="patchPage({enhance: 'bw'})">B&amp;W</button>
+        </div>
+        <div class="slider-row">
+          <label>Brightness
+            <input type="range" min="50" max="200" [ngModel]="p.brightness" (ngModelChange)="patchPage({brightness: $event})" />
+          </label>
+          <label>Contrast
+            <input type="range" min="50" max="300" [ngModel]="p.contrast" (ngModelChange)="patchPage({contrast: $event})" />
+          </label>
+        </div>
       </div>
     }
 
-    <div class="review-controls">
-      <div class="enhance-row">
-        <button class="enhance-btn" [class.active]="p.enhance === 'color'" (click)="patchPage({enhance: 'color'})">Color</button>
-        <button class="enhance-btn" [class.active]="p.enhance === 'grayscale'" (click)="patchPage({enhance: 'grayscale'})">Grayscale</button>
-        <button class="enhance-btn" [class.active]="p.enhance === 'bw'" (click)="patchPage({enhance: 'bw'})">B&amp;W</button>
-      </div>
-      <div class="slider-row">
-        <label>Brightness
-          <input type="range" min="50" max="200" [ngModel]="p.brightness" (ngModelChange)="patchPage({brightness: $event})" />
-        </label>
-        <label>Contrast
-          <input type="range" min="50" max="300" [ngModel]="p.contrast" (ngModelChange)="patchPage({contrast: $event})" />
-        </label>
-      </div>
-      <div class="review-actions">
-        <button class="btn-secondary" (click)="retake()">Retake</button>
-        <button class="btn-secondary" (click)="addPage()">Add page</button>
-        <button class="btn-primary" (click)="done()">Done</button>
-      </div>
+    <div class="review-toolbar">
+      <button class="tool-chip" (click)="openCrop()">
+        <span class="chip-box">
+          <svg viewBox="0 0 24 24"><path d="M5.5 5.5 18 4l1.5 12.5L8 20 5.5 5.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="5.5" cy="5.5" r="2.2"/><circle cx="18" cy="4" r="2.2"/><circle cx="19.5" cy="16.5" r="2.2"/><circle cx="8" cy="20" r="2.2"/></svg>
+        </span>
+        <span class="chip-label">Adjust</span>
+      </button>
+      <button class="tool-chip" [class.active]="filtersOpen()" (click)="filtersOpen.set(!filtersOpen())">
+        <span class="chip-box">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8.7" cy="14.7" r="5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="15.3" cy="14.7" r="5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+        </span>
+        <span class="chip-label">Filters</span>
+      </button>
+      <button class="tool-chip" (click)="rotate()">
+        <span class="chip-box">
+          <svg viewBox="0 0 24 24"><path d="M16.89 15.5 18.31 16.89C19.21 15.73 19.76 14.39 19.93 13H17.91C17.77 13.87 17.43 14.72 16.89 15.5M13 17.9V19.92C14.39 19.75 15.74 19.21 16.9 18.31L15.46 16.87C14.71 17.41 13.87 17.76 13 17.9M19.93 11C19.76 9.61 19.21 8.27 18.31 7.11L16.89 8.53C17.43 9.28 17.77 10.13 17.91 11M15.55 5.55 11 1V4.07C7.06 4.56 4 7.92 4 12S7.05 19.44 11 19.93V17.91C8.16 17.43 6 14.97 6 12S8.16 6.57 11 6.09V10L15.55 5.55Z"/></svg>
+        </span>
+        <span class="chip-label">Rotate</span>
+      </button>
+      <button class="tool-chip" (click)="deletePage()">
+        <span class="chip-box">
+          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4h-3.5z"/></svg>
+        </span>
+        <span class="chip-label">Delete</span>
+      </button>
     </div>
   }
 
