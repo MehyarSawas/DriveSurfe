@@ -12,7 +12,7 @@ import { loadOpenCv, onOpenCvStatus } from './opencv-loader';
 import { PDFDocument } from 'pdf-lib';
 
 type Phase = 'camera' | 'review' | 'crop' | 'format' | 'uploading';
-type Enhance = 'color' | 'grayscale' | 'bw';
+type Enhance = 'original' | 'color' | 'grayscale' | 'bw';
 
 /** Separable box blur (2 passes ≈ Gaussian), used to estimate the illumination map. */
 function boxBlur2(src: Float32Array, w: number, h: number, r: number): Float32Array {
@@ -53,6 +53,20 @@ function boxBlur2(src: Float32Array, w: number, h: number, r: number): Float32Ar
 function enhanceImageData(img: ImageData, brightness: number, contrast: number, enhance: Enhance): void {
   const { data, width: w, height: h } = img;
   const n = w * h;
+
+  // 'original': no illumination flattening, no saturation/grayscale — only
+  // the user's brightness/contrast sliders apply (identity at 100/100).
+  if (enhance === 'original') {
+    if (brightness === 100 && contrast === 100) return;
+    const b0 = brightness / 100, c0 = contrast / 100;
+    for (let p = 0; p < data.length; p += 4) {
+      for (let k = 0; k < 3; k++) {
+        const v = (data[p + k] * b0 - 128) * c0 + 128;
+        data[p + k] = v < 0 ? 0 : v > 255 ? 255 : v;
+      }
+    }
+    return;
+  }
 
   const lum = new Float32Array(n);
   for (let i = 0, p = 0; i < n; i++, p += 4) {

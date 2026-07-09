@@ -84,6 +84,7 @@
     @if (filtersOpen()) {
       <div class="filters-panel">
         <div class="enhance-row">
+          <button class="enhance-btn" [class.active]="p.enhance === 'original'" (click)="patchPage({enhance: 'original'})">Original</button>
           <button class="enhance-btn" [class.active]="p.enhance === 'color'" (click)="patchPage({enhance: 'color'})">Color</button>
           <button class="enhance-btn" [class.active]="p.enhance === 'grayscale'" (click)="patchPage({enhance: 'grayscale'})">Grayscale</button>
           <button class="enhance-btn" [class.active]="p.enhance === 'bw'" (click)="patchPage({enhance: 'bw'})">B&amp;W</button>
