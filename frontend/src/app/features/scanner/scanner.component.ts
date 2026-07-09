@@ -716,17 +716,29 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
     this.resetReviewZoom();
   }
 
-  /** Bake a page for upload: warped pixels + exact pixel-level enhancement. */
+  /** Longest side of a saved page: ~290 DPI for A4 — text stays print-crisp
+   *  while the file is a fraction of the raw 4K bake. */
+  private static readonly SAVE_MAX_DIM = 2400;
+  /** JPEG quality for saved pages. The flattened near-white background
+   *  compresses extremely well, so 0.8 is visually lossless on documents. */
+  private static readonly SAVE_JPEG_QUALITY = 0.8;
+
+  /** Bake a page for upload: warped pixels + exact pixel-level enhancement,
+   *  downscaled to document resolution and compressed for small PDFs. */
   private async bakePage(p: ScanPage): Promise<Blob> {
     const img = await loadImage(p.warpedDataUrl);
-    const canvas = canvasFromImage(img);
+    const scale = Math.min(1, ScannerComponent.SAVE_MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
     const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     // Pixel manipulation, not ctx.filter — unsupported on iOS Safari.
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     enhanceImageData(imgData, p.brightness, p.contrast, p.enhance);
     ctx.putImageData(imgData, 0, 0);
     return new Promise<Blob>(resolve =>
-      canvas.toBlob(b => resolve(b!), 'image/jpeg', 0.9)
+      canvas.toBlob(b => resolve(b!), 'image/jpeg', ScannerComponent.SAVE_JPEG_QUALITY)
     );
   }
 
