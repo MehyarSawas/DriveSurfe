@@ -127,6 +127,16 @@ final class FileRoutes
             return self::json($res, $result);
         })->add($auth);
 
+        $group->get('/media', function (Request $req, Response $res) use ($drive): Response {
+            $cursor = $req->getQueryParams()['cursor'] ?? null;
+            $result = $drive->listMedia($cursor ?: null);
+            return self::json($res, [
+                'data'     => $result['files'],
+                'cursor'   => $result['cursor'],
+                'has_more' => $result['has_more'],
+            ]);
+        })->add($auth);
+
         $group->get('/trash', function (Request $req, Response $res) use ($drive): Response {
             return self::json($res, ['data' => $drive->listTrash()]);
         })->add($auth);

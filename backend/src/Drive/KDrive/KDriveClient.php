@@ -220,6 +220,45 @@ final class KDriveClient implements DriveInterface
         return isset($data['data']) ? $this->normalizeFile($data['data']) : [];
     }
 
+    /**
+     * One page of ALL media files under the drive (recursive), newest first.
+     * Uses the V3 search endpoint without a text query — server-side ordering
+     * by last_modified_at desc; media filtering (image/video) happens here
+     * since search has no reliable mime filter. A page can therefore yield
+     * fewer (even zero) items than `limit` while has_more is still true —
+     * callers must keep paginating by cursor.
+     */
+    public function listMedia(?string $cursor = null): array
+    {
+        $driveId = $this->getDriveId();
+        $params = [
+            'order_by' => 'last_modified_at',
+            'order'    => 'desc',
+            'limit'    => 200,
+            'depth'    => 'unlimited',
+            'with'     => 'is_favorite',
+            'type'     => 'file',
+        ];
+        if ($cursor) $params['cursor'] = $cursor;
+
+        $data  = $this->get("{$driveId}/files/search", $params, self::API_V3);
+        $files = $this->normalizeFiles($data['data'] ?? []);
+
+        $mediaExt = ['jpg','jpeg','png','gif','webp','heic','heif','avif','mp4','mov','m4v','webm','avi','mkv'];
+        $media = array_values(array_filter($files, function (array $f) use ($mediaExt) {
+            return str_starts_with($f['mime_type'], 'image/')
+                || str_starts_with($f['mime_type'], 'video/')
+                || in_array($f['extension'], $mediaExt, true);
+        }));
+
+        $hasMore = $data['has_more'] ?? false;
+        return [
+            'files'    => $media,
+            'cursor'   => $hasMore ? ($data['cursor'] ?? null) : null,
+            'has_more' => $hasMore,
+        ];
+    }
+
     public function createShareLink(string $fileId, array $options): array
     {
         $driveId = $this->getDriveId();

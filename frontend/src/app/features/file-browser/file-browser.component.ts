@@ -275,6 +275,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       await this.showStarred();
     } else if (folderId === '__shares__') {
       await this.showShares();
+    } else if (folderId === '__timeline__') {
+      await this.showTimeline();
     } else if (folderId !== HOME_FOLDER_ID) {
       this.fileService.currentFolderId.set(folderId);
       this.resolveBreadcrumb(folderId).then(crumbs => this.fileService.breadcrumb.set(crumbs));
@@ -572,6 +574,83 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
     this.fileService.currentFolderId.set('__starred__');
     this.router.navigate(['/folder', '__starred__'], { replaceUrl: true });
+  }
+
+  // --- Timeline (all media under the drive, newest first, grouped by month) ---
+
+  readonly isTimeline = computed(() => this.fileService.currentFolderId() === '__timeline__');
+  readonly timelineLoadingMore = signal(false);
+  readonly timelineDone = signal(false);
+  private timelineCursor: string | null = null;
+  private timelineGen = 0;
+
+  /** Consecutive month/year groups from the (already date-desc) flat list. */
+  readonly timelineGroups = computed(() => {
+    if (!this.isTimeline()) return [];
+    const files = this.fileService.searchResults() ?? [];
+    const groups: { key: string; label: string; files: DriveFile[] }[] = [];
+    let current: { key: string; label: string; files: DriveFile[] } | null = null;
+    for (const f of files) {
+      const d = f.modified_at ? new Date(f.modified_at) : null;
+      const key = d && !isNaN(d.getTime())
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        : 'unknown';
+      if (!current || current.key !== key) {
+        const label: string = key === 'unknown'
+          ? 'Unknown date'
+          : d!.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+        current = { key, label, files: [] };
+        groups.push(current);
+      }
+      current.files.push(f);
+    }
+    return groups;
+  });
+
+  async showTimeline(): Promise<void> {
+    this.closeSidebarOnMobile();
+    this.fileService.clearSelection();
+    this.fileService.breadcrumb.set([{ id: '__timeline__', name: 'Timeline' }]);
+    this.fileService.currentFolderId.set('__timeline__');
+    this.fileService.searchResults.set([]);
+    this.router.navigate(['/folder', '__timeline__'], { replaceUrl: true });
+    this.timelineCursor = null;
+    this.timelineDone.set(false);
+    ++this.timelineGen;
+    await this.loadMoreTimeline();
+  }
+
+  async loadMoreTimeline(): Promise<void> {
+    if (this.timelineLoadingMore() || this.timelineDone() || !this.isTimeline()) return;
+    const gen = this.timelineGen;
+    this.timelineLoadingMore.set(true);
+    try {
+      // Keep fetching until at least one media item arrives (pages can be
+      // media-empty while has_more is true) or the listing is exhausted.
+      let appended = 0;
+      do {
+        const page = await this.fileService.loadMediaPage(this.timelineCursor);
+        if (gen !== this.timelineGen || !this.isTimeline()) return;
+        this.timelineCursor = page.cursor;
+        if (!page.has_more || !page.cursor) this.timelineDone.set(true);
+        if (page.data.length > 0) {
+          appended = page.data.length;
+          this.fileService.searchResults.update(r => [...(r ?? []), ...page.data]);
+        }
+      } while (appended === 0 && !this.timelineDone());
+    } catch (err) {
+      console.error('timeline load error:', err);
+    } finally {
+      if (gen === this.timelineGen) this.timelineLoadingMore.set(false);
+    }
+  }
+
+  onContentScroll(e: Event): void {
+    if (!this.isTimeline()) return;
+    const el = e.target as HTMLElement;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 800) {
+      this.loadMoreTimeline();
+    }
   }
 
   async showShares(): Promise<void> {

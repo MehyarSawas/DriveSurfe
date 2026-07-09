@@ -201,6 +201,17 @@ export class FileService {
     }
   }
 
+  /** One page of the recursive media listing (newest first). A page may be
+   *  empty while has_more is still true (server-side media filtering) —
+   *  callers keep paginating by cursor. */
+  async loadMediaPage(cursor?: string | null): Promise<FilesResponse> {
+    const params: Record<string, string> = {};
+    if (cursor) params['cursor'] = cursor;
+    return firstValueFrom(
+      this.http.get<FilesResponse>('/api/media', { params })
+    );
+  }
+
   async loadShares(): Promise<void> {
     try {
       const res = await firstValueFrom(

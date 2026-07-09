@@ -507,6 +507,41 @@ ds-search-bar {
   padding: 16px;
 }
 
+/* Timeline: media grouped by month with sticky headers that swap while
+   scrolling (native position: sticky inside the scrolling .file-content). */
+.timeline-group {
+  margin-bottom: 8px;
+}
+
+.timeline-month {
+  position: sticky;
+  top: -16px; // cancel .file-content's top padding so it pins to the very top
+  z-index: 5;
+  margin: 0 -16px; // full-width bar across the padded container
+  padding: 10px 16px 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.timeline-group ds-file-grid {
+  display: block;
+  padding-top: 10px;
+}
+
+.timeline-loading {
+  padding: 24px 0;
+}
+
+.timeline-end {
+  text-align: center;
+  padding: 20px 0 28px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
 .load-more-bar {
   height: 3px;
   background: var(--color-border);

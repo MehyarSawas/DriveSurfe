@@ -19,6 +19,10 @@
         <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
         My Drive
       </button>
+      <button class="nav-item" (click)="showTimeline()">
+        <svg viewBox="0 0 24 24"><path d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l1.63 2.18 2.37-2.96L18 15H10zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z"/></svg>
+        Timeline
+      </button>
       <button class="nav-item" (click)="showStarred()">
         <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
         Starred
@@ -319,8 +323,41 @@
     }
 
     <!-- File content -->
-    <div class="file-content" [style.display]="previewFile() ? 'none' : null">
-      @if (fileService.searchLoading() || (!fileService.searchResults() && fileService.loading())) {
+    <div class="file-content" [style.display]="previewFile() ? 'none' : null"
+         (scroll)="onContentScroll($event)">
+      @if (isTimeline()) {
+        <div class="timeline">
+          @for (g of timelineGroups(); track g.key) {
+            <div class="timeline-group">
+              <div class="timeline-month">{{ g.label }}</div>
+              <ds-file-grid
+                [files]="g.files"
+                [selectedIds]="fileService.selectedIds()"
+                [sharedIds]="fileService.sharedFileIds()"
+                (fileClick)="openPreview($event)"
+                (selectToggle)="fileService.toggleSelect($event.id)"
+                (favorite)="toggleFavorite($event)"
+                (download)="fileService.downloadFile($event.id, $event.name)"
+                (delete)="fileService.delete($event)"
+                (rename)="handleRename($event)"
+                (move)="openMoveForFile($event)"
+                (copy)="openCopyForFile($event)"
+                (share)="openShare($event)"
+              />
+            </div>
+          }
+          @if (timelineLoadingMore()) {
+            <div class="loading timeline-loading"><div class="spinner"></div></div>
+          } @else if (timelineGroups().length === 0) {
+            <div class="empty">
+              <svg viewBox="0 0 24 24"><path d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l1.63 2.18 2.37-2.96L18 15H10z"/></svg>
+              <p>No media files found</p>
+            </div>
+          } @else if (timelineDone()) {
+            <p class="timeline-end">No more media</p>
+          }
+        </div>
+      } @else if (fileService.searchLoading() || (!fileService.searchResults() && fileService.loading())) {
         <div class="loading">
           <div class="spinner"></div>
         </div>
