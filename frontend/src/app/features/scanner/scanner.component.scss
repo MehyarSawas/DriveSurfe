@@ -115,7 +115,12 @@
     justify-content: center;
     gap: 40px;
   }
-  .cam-top-spacer { flex: 0 0 56px; }
+  .txt-btn.quality {
+    flex: 0 0 56px;
+    text-align: right;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
 }
 
 .txt-btn {

@@ -19,7 +19,9 @@
           </button>
         }
       </span>
-      <span class="cam-top-spacer"></span>
+      <button class="txt-btn quality" (click)="cycleQuality()" title="Capture quality">
+        {{ quality() === 'sd' ? 'SD' : quality() === 'hd' ? 'HD' : '4K' }}
+      </button>
     </div>
     <div class="camera-wrap">
       <video #videoEl class="camera-video" playsinline autoplay muted></video>

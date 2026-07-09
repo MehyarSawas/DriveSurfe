@@ -175,6 +175,25 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   /** True when the CV detector found a document in the last processed frame. */
   readonly cvFound = signal(false);
 
+  /** Capture quality → requested camera resolution (the browser falls back
+   *  to the closest the device supports). Persisted across sessions. */
+  readonly quality = signal<'sd' | 'hd' | '4k'>(
+    (localStorage.getItem('scanQuality') as 'sd' | 'hd' | '4k') || 'hd'
+  );
+  private static readonly QUALITY_WIDTH = { sd: 1280, hd: 1920, '4k': 3840 } as const;
+
+  cycleQuality(): void {
+    const order: Array<'sd' | 'hd' | '4k'> = ['sd', 'hd', '4k'];
+    const next = order[(order.indexOf(this.quality()) + 1) % order.length];
+    this.quality.set(next);
+    localStorage.setItem('scanQuality', next);
+    // Restart the stream so the new resolution takes effect immediately.
+    if (this.stream) {
+      this.stopCamera();
+      this.startCamera();
+    }
+  }
+
   // Camera controls — capability-gated (buttons only shown when supported)
   readonly torchOn = signal(false);
   readonly torchSupported = signal(false);
@@ -279,7 +298,10 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   async startCamera(): Promise<void> {
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: this.facing, width: { ideal: 1920 } }
+        video: {
+          facingMode: this.facing,
+          width: { ideal: ScannerComponent.QUALITY_WIDTH[this.quality()] },
+        }
       });
       const video = this.videoEl.nativeElement;
       video.srcObject = this.stream;
