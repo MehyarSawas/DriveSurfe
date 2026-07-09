@@ -186,6 +186,7 @@ function sharpnessScore(src: HTMLCanvasElement): number {
 })
 export class ScannerComponent implements AfterViewInit, OnDestroy {
   readonly targetFolderId = input.required<string>();
+  readonly targetFolderName = input<string>('My Drive');
   readonly closed = output<void>();
   readonly uploaded = output<DriveFile[]>();
 

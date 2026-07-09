@@ -632,6 +632,18 @@
   color: rgba(255,255,255,0.6);
 }
 
+.save-destination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 4px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.6);
+
+  svg { width: 16px; height: 16px; fill: rgba(255,255,255,0.5); flex-shrink: 0; }
+  strong { color: rgba(255,255,255,0.9); font-weight: 600; }
+}
+
 .upload-error {
   color: #ff5252;
   font-size: 13px;

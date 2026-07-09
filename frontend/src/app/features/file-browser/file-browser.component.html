@@ -446,7 +446,8 @@
 
 @if (scanOpen()) {
   <ds-scanner
-    [targetFolderId]="fileService.currentFolderId()"
+    [targetFolderId]="scanTargetFolderId()"
+    [targetFolderName]="scanTargetFolderName()"
     (closed)="scanOpen.set(false)"
     (uploaded)="onScanUploaded($event)"
   />

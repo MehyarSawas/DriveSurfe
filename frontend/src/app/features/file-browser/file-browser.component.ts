@@ -77,6 +77,16 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return crumbs[crumbs.length - 1]?.name ?? 'My Drive';
   });
 
+  /** Upload destination for the scanner: the current folder if it's a real,
+   *  uploadable kDrive folder, else My Drive — trash/starred/search are
+   *  virtual views with no valid destination to upload into. */
+  readonly scanTargetFolderId = computed(() =>
+    this.isVirtualFolder() ? HOME_FOLDER_ID : this.fileService.currentFolderId()
+  );
+  readonly scanTargetFolderName = computed(() =>
+    this.isVirtualFolder() ? 'My Drive' : this.currentFolderName()
+  );
+
   readonly previewIndex = computed(() => {
     const file = this.previewFile();
     if (!file) return 0;
@@ -204,6 +214,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly selectedCount = computed(() => this.fileService.selectedIds().size);
   readonly folderDirs = computed(() => this.displayFiles().filter(f => f.is_dir));
   readonly isTrash = computed(() => this.fileService.currentFolderId() === '__trash__');
+  /** True for any virtual (non-uploadable) view — trash, starred, search. */
+  readonly isVirtualFolder = computed(() => this.fileService.currentFolderId().startsWith('__'));
 
   statsPopoverOpen = signal(false);
   showCreateFolder = signal(false);

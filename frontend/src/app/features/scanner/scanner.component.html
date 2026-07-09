@@ -219,6 +219,10 @@
           @else if (estimatedSize() !== null) { ~{{ formatBytes(estimatedSize()!) }} }
         </span>
       </label>
+      <div class="save-destination">
+        <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
+        Saving to <strong>{{ targetFolderName() }}</strong>
+      </div>
       <input class="filename-input" type="text" placeholder="File name"
              [ngModel]="fileName()" (ngModelChange)="fileName.set($event)" />
       @if (uploadError()) {
