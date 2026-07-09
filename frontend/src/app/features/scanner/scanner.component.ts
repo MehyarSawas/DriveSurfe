@@ -726,12 +726,16 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
    *  ballooned to 2.4MB vs. ~1.1MB from an earlier single-tier 2400px/0.8
    *  config; capped at 0.95 here to keep "Original" meaning full-resolution,
    *  not artificially bloated. Medium raised from 0.6/1600px to sit clearly
-   *  above Low without crowding High. */
+   *  above Low without crowding High.
+   *  On-device readings after that pass: original 897KB, high 681KB (-24%),
+   *  medium 463KB (-32%) — a smooth curve — then low 151KB (-67%), a cliff
+   *  instead of continuing it. Low raised 1200px/0.45 -> 1500px/0.55 to
+   *  close that gap and keep the four tiers evenly spaced. */
   private static readonly QUALITY_TIERS = {
     original: { maxDim: Infinity, jpeg: 0.95 },
     high:     { maxDim: 2000, jpeg: 0.9 },
     medium:   { maxDim: 1800, jpeg: 0.75 },
-    low:      { maxDim: 1200, jpeg: 0.45 },
+    low:      { maxDim: 1500, jpeg: 0.55 },
   } as const;
   readonly saveQuality = signal<keyof typeof ScannerComponent.QUALITY_TIERS>('high');
   /** Estimated total output size for the current pages + quality tier, in bytes. */
