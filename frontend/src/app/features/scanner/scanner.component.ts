@@ -720,15 +720,17 @@ export class ScannerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Save-quality tiers: resolution cap (longest side, px) + JPEG quality.
-   *  Original skips downscaling entirely (maxDim=Infinity) and saves at
-   *  quality 1.0 — the full captured/warped resolution, uncompressed-visually.
-   *  On a real device (Safari's JPEG encoder, less efficient than desktop
-   *  encoders) a dense table-heavy A4 receipt measured: original ~2.1MB,
-   *  high(0.8) ~520KB — too big a jump, raised to 0.9 for a middle ground. */
+   *  Original skips downscaling (maxDim=Infinity) — full captured/warped
+   *  resolution. JPEG quality 1.0 (100%) disables most encoder compression
+   *  for near-zero visible gain over ~95%, which is why an on-device test
+   *  ballooned to 2.4MB vs. ~1.1MB from an earlier single-tier 2400px/0.8
+   *  config; capped at 0.95 here to keep "Original" meaning full-resolution,
+   *  not artificially bloated. Medium raised from 0.6/1600px to sit clearly
+   *  above Low without crowding High. */
   private static readonly QUALITY_TIERS = {
-    original: { maxDim: Infinity, jpeg: 1.0 },
+    original: { maxDim: Infinity, jpeg: 0.95 },
     high:     { maxDim: 2000, jpeg: 0.9 },
-    medium:   { maxDim: 1600, jpeg: 0.6 },
+    medium:   { maxDim: 1800, jpeg: 0.75 },
     low:      { maxDim: 1200, jpeg: 0.45 },
   } as const;
   readonly saveQuality = signal<keyof typeof ScannerComponent.QUALITY_TIERS>('high');
