@@ -239,8 +239,12 @@ final class KDriveClient implements DriveInterface
             'with'     => 'is_favorite',
             'type'     => 'file',
         ];
-        if ($after !== null)  $params['modified_after']  = $after;
-        if ($before !== null) $params['modified_before'] = $before;
+        // kDrive date filtering: modified_at=custom with from/until timestamps
+        if ($after !== null || $before !== null) {
+            $params['modified_at'] = 'custom';
+            if ($after !== null)  $params['from']  = $after;
+            if ($before !== null) $params['until'] = $before;
+        }
         if ($cursor) $params['cursor'] = $cursor;
 
         $data  = $this->get("{$driveId}/files/search", $params, self::API_V3);
@@ -272,7 +276,7 @@ final class KDriveClient implements DriveInterface
         $data = $this->get("{$driveId}/files/search", [
             'order_by' => 'last_modified_at',
             'order'    => 'asc',
-            'limit'    => 1,
+            'limit'    => 5, // kDrive enforces a minimum limit of 5
             'depth'    => 'unlimited',
             'type'     => 'file',
         ], self::API_V3);
@@ -317,15 +321,17 @@ final class KDriveClient implements DriveInterface
                     [
                         'headers' => ['Authorization' => "Bearer {$token}"],
                         'query' => [
-                            'order_by'        => 'last_modified_at',
-                            'order'           => 'desc',
+                            'order_by'    => 'last_modified_at',
+                            'order'       => 'desc',
                             // >1 because the newest files in a month may be
                             // non-media (PDFs etc.) — we want a media cover.
-                            'limit'           => 12,
-                            'depth'           => 'unlimited',
-                            'type'            => 'file',
-                            'modified_after'  => $r['after'],
-                            'modified_before' => $r['before'],
+                            'limit'       => 12,
+                            'depth'       => 'unlimited',
+                            'type'        => 'file',
+                            // kDrive date filter: modified_at=custom + from/until
+                            'modified_at' => 'custom',
+                            'from'        => $r['after'],
+                            'until'       => $r['before'],
                         ],
                     ]
                 );
@@ -347,15 +353,19 @@ final class KDriveClient implements DriveInterface
                 continue;
             }
             foreach ($this->normalizeFiles($data['data'] ?? []) as $f) {
-                if (self::isMediaFile($f)) {
-                    $months[] = [
-                        'key'   => $r['key'],
-                        'year'  => (int) substr($r['key'], 0, 4),
-                        'month' => (int) substr($r['key'], 5, 2),
-                        'cover' => $f,
-                    ];
-                    break;
-                }
+                if (!self::isMediaFile($f)) continue;
+                // Guard: if kDrive silently ignored the date filter, the probe
+                // returns the drive's newest files for EVERY month — only keep
+                // covers whose date genuinely falls inside the month range.
+                $ts = $f['modified_at'] ? strtotime($f['modified_at']) : false;
+                if ($ts === false || $ts < $r['after'] || $ts > $r['before']) continue;
+                $months[] = [
+                    'key'   => $r['key'],
+                    'year'  => (int) substr($r['key'], 0, 4),
+                    'month' => (int) substr($r['key'], 5, 2),
+                    'cover' => $f,
+                ];
+                break;
             }
         }
         return $months; // newest first (ranges were built descending)
