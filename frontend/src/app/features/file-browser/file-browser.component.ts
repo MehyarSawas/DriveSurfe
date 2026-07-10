@@ -592,6 +592,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   /** Month covers from the fast probe endpoint — fetched once, cached for the session. */
   readonly timelineCovers = signal<MonthCover[] | null>(null);
   readonly timelineCoversLoading = signal(false);
+  readonly timelineCoversError = signal<string | null>(null);
 
   /** Months grouped by year for the Months view (covers are newest-first). */
   readonly timelineMonthsByYear = computed(() => {
@@ -619,11 +620,13 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private async ensureTimelineCovers(): Promise<void> {
     if (this.timelineCovers() !== null || this.timelineCoversLoading()) return;
     this.timelineCoversLoading.set(true);
+    this.timelineCoversError.set(null);
     try {
       this.timelineCovers.set(await this.fileService.loadMediaMonths());
     } catch (err) {
       console.error('timeline covers error:', err);
       this.timelineCovers.set([]);
+      this.timelineCoversError.set((err as any)?.error?.error ?? 'Request failed');
     } finally {
       this.timelineCoversLoading.set(false);
     }

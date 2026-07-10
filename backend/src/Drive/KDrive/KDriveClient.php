@@ -294,12 +294,14 @@ final class KDriveClient implements DriveInterface
      * media are simply absent. Fast regardless of how much media the drive
      * holds — each probe transfers at most a dozen file records.
      */
-    public function listMediaMonths(): array
+    public function listMediaMonths(bool $debug = false): array
     {
         $driveId = $this->getDriveId();
         $token   = $this->getToken();
+        $diag    = ['oldest' => null, 'ranges' => 0, 'fulfilled' => 0, 'rejected' => [], 'samples' => []];
         $oldest  = $this->getOldestMediaDate();
-        if ($oldest === null) return [];
+        $diag['oldest'] = $oldest !== null ? date('c', $oldest) : null;
+        if ($oldest === null) return $debug ? ['months' => [], 'debug' => $diag] : [];
 
         $ranges   = [];
         $cursorTs = strtotime(date('Y-m-01 00:00:00'));
@@ -337,12 +339,19 @@ final class KDriveClient implements DriveInterface
                 );
             }
         };
+        $diag['ranges'] = count($ranges);
+        $rejected = [];
         $pool = new \GuzzleHttp\Pool($this->http, $makeRequests(), [
             'concurrency' => 8,
             'fulfilled'   => function ($response, $i) use (&$responses) { $responses[$i] = $response; },
-            'rejected'    => function ($reason, $i) { /* month probe failed — treated as empty */ },
+            'rejected'    => function ($reason, $i) use (&$rejected) {
+                $msg = $reason instanceof \Throwable ? $reason->getMessage() : (string) $reason;
+                $rejected[$i] = substr($msg, 0, 300);
+            },
         ]);
         $pool->promise()->wait();
+        $diag['fulfilled'] = count($responses);
+        $diag['rejected']  = array_slice($rejected, 0, 3, true);
 
         $months = [];
         foreach ($ranges as $i => $r) {
@@ -351,6 +360,19 @@ final class KDriveClient implements DriveInterface
                 $data = json_decode((string) $responses[$i]->getBody(), true, 512, JSON_THROW_ON_ERROR);
             } catch (\JsonException) {
                 continue;
+            }
+            if ($debug && count($diag['samples']) < 3) {
+                $raw = array_slice($data['data'] ?? [], 0, 2);
+                $diag['samples'][] = [
+                    'range'  => $r['key'],
+                    'result' => $data['result'] ?? null,
+                    'count'  => count($data['data'] ?? []),
+                    'items'  => array_map(fn($x) => [
+                        'name' => $x['name'] ?? null,
+                        'mime' => $x['mime_type'] ?? null,
+                        'last_modified_at' => $x['last_modified_at'] ?? null,
+                    ], $raw),
+                ];
             }
             foreach ($this->normalizeFiles($data['data'] ?? []) as $f) {
                 if (!self::isMediaFile($f)) continue;
@@ -368,7 +390,7 @@ final class KDriveClient implements DriveInterface
                 break;
             }
         }
-        return $months; // newest first (ranges were built descending)
+        return $debug ? ['months' => $months, 'debug' => $diag] : $months;
     }
 
     public function createShareLink(string $fileId, array $options): array
