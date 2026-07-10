@@ -635,11 +635,32 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   setTimelineScale(scale: 'year' | 'month' | 'all'): void {
     this.timelineScale.set(scale);
     if (scale === 'all') {
-      this.startTimelineStream('full', null);
+      this.resumeOrStartTimelineStream('full', null);
     } else {
+      // Cover scales don't need the stream — stop its background page loop
+      // immediately (it resumes from the saved cursor when returning to All).
+      this.cancelTimelineStream();
       this.ensureTimelineCovers();
     }
     this.scrollContentTop();
+  }
+
+  /** Stop the background page loop without discarding what's loaded. */
+  private cancelTimelineStream(): void {
+    ++this.timelineGen; // running loop bails on its next generation check
+    this.timelineLoadingMore.set(false);
+  }
+
+  /** Continue an interrupted stream from its cursor, or start a new one. */
+  private resumeOrStartTimelineStream(key: string, period: { after: number; before: number } | null): void {
+    if (this.timelineLoadedKey === key) {
+      if (!this.timelineDone() && !this.timelineLoadingMore()) {
+        ++this.timelineGen;
+        this.loadAllTimeline(); // resumes from this.timelineCursor
+      }
+      return;
+    }
+    this.startTimelineStream(key, period);
   }
 
   openTimelineYear(year: number): void {
@@ -655,7 +676,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const after = Math.floor(new Date(m.year, m.month - 1, 1).getTime() / 1000);
     const before = Math.floor(new Date(m.year, m.month, 1).getTime() / 1000) - 1;
     this.timelineScale.set('all');
-    this.startTimelineStream(m.key, { after, before });
+    // resume-or-start: re-tapping the month whose stream was interrupted
+    // continues from its cursor instead of being a silent no-op
+    this.resumeOrStartTimelineStream(m.key, { after, before });
     this.scrollContentTop();
   }
 
