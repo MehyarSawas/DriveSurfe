@@ -239,11 +239,12 @@ final class KDriveClient implements DriveInterface
             'with'     => 'is_favorite',
             'type'     => 'file',
         ];
-        // kDrive date filtering: modified_at=custom with from/until timestamps
+        // kDrive date filtering, exactly as Infomaniak's own Android app sends
+        // it: modified_at=custom&modified_after=X&modified_before=Y
         if ($after !== null || $before !== null) {
             $params['modified_at'] = 'custom';
-            if ($after !== null)  $params['from']  = $after;
-            if ($before !== null) $params['until'] = $before;
+            if ($after !== null)  $params['modified_after']  = $after;
+            if ($before !== null) $params['modified_before'] = $before;
         }
         if ($cursor) $params['cursor'] = $cursor;
 
@@ -330,10 +331,10 @@ final class KDriveClient implements DriveInterface
                             'limit'       => 12,
                             'depth'       => 'unlimited',
                             'type'        => 'file',
-                            // kDrive date filter: modified_at=custom + from/until
-                            'modified_at' => 'custom',
-                            'from'        => $r['after'],
-                            'until'       => $r['before'],
+                            // Exactly as Infomaniak's Android app sends it
+                            'modified_at'     => 'custom',
+                            'modified_after'  => $r['after'],
+                            'modified_before' => $r['before'],
                         ],
                     ]
                 );
