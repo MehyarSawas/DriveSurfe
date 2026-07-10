@@ -284,13 +284,8 @@ final class KDriveClient implements DriveInterface
             'depth'    => 'unlimited',
             'type'     => 'file',
         ];
-        try {
-            $data = $this->get("{$driveId}/files/search", $params, self::API_V3);
-        } catch (RuntimeException $e) {
-            if (!str_contains($e->getMessage(), '429')) throw $e;
-            sleep(3);
-            $data = $this->get("{$driveId}/files/search", $params, self::API_V3);
-        }
+        // get() itself honors retry_after on 429s
+        $data = $this->get("{$driveId}/files/search", $params, self::API_V3);
         $first = $data['data'][0] ?? null;
         if (!$first) return null;
         $ts = (int) ($first['last_modified_at'] ?? $first['created_at'] ?? 0);
@@ -667,24 +662,44 @@ final class KDriveClient implements DriveInterface
         $token = $this->getToken();
         $url = ($baseUrl ?? self::API_BASE) . ($path ? "/{$path}" : '');
 
-        try {
-            $response = $this->http->get($url, [
-                'headers' => ['Authorization' => "Bearer {$token}"],
-                'query' => $query ?: null,
-            ]);
-            $body = (string) $response->getBody();
+        // kDrive throttles with SHORT rolling windows (observed retry_after of
+        // ~18s) — one honored retry rides out most transient 429s.
+        for ($attempt = 0; ; $attempt++) {
             try {
-                $data = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-            } catch (\JsonException $e) {
-                throw new RuntimeException("kDrive API returned non-JSON response (HTTP {$response->getStatusCode()}): " . substr($body, 0, 200), 0, $e);
+                $response = $this->http->get($url, [
+                    'headers' => ['Authorization' => "Bearer {$token}"],
+                    'query' => $query ?: null,
+                ]);
+                $body = (string) $response->getBody();
+                try {
+                    $data = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+                } catch (\JsonException $e) {
+                    throw new RuntimeException("kDrive API returned non-JSON response (HTTP {$response->getStatusCode()}): " . substr($body, 0, 200), 0, $e);
+                }
+                if (($data['result'] ?? '') === 'error') {
+                    throw new RuntimeException('kDrive: ' . json_encode($data['error'] ?? 'unknown'));
+                }
+                return $data;
+            } catch (GuzzleException $e) {
+                $wait = $attempt === 0 ? self::retryAfterSeconds($e) : null;
+                if ($wait !== null) {
+                    sleep($wait);
+                    continue;
+                }
+                throw new RuntimeException("kDrive API error: " . $e->getMessage() . self::responseDetail($e), 0, $e);
             }
-            if (($data['result'] ?? '') === 'error') {
-                throw new RuntimeException('kDrive: ' . json_encode($data['error'] ?? 'unknown'));
-            }
-            return $data;
-        } catch (GuzzleException $e) {
-            throw new RuntimeException("kDrive API error: " . $e->getMessage() . self::responseDetail($e), 0, $e);
         }
+    }
+
+    /** Seconds to wait before retrying a 429, from the upstream error body —
+     *  null when the error isn't a retryable throttle or the wait is too long. */
+    private static function retryAfterSeconds(GuzzleException $e): ?int
+    {
+        if (!$e instanceof \GuzzleHttp\Exception\BadResponseException) return null;
+        if ($e->getResponse()->getStatusCode() !== 429) return null;
+        $body = json_decode((string) $e->getResponse()->getBody(), true);
+        $retryAfter = (int) ($body['error']['context']['retry_after'] ?? 10);
+        return $retryAfter <= 25 ? $retryAfter + 1 : null;
     }
 
     private function post(string $path, array $body = [], ?string $baseUrl = null): array
