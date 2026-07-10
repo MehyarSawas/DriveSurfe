@@ -130,9 +130,8 @@ final class FileRoutes
         $group->get('/media', function (Request $req, Response $res) use ($drive): Response {
             $params = $req->getQueryParams();
             $cursor = $params['cursor'] ?? null;
-            $after  = isset($params['after'])  && $params['after']  !== '' ? (int) $params['after']  : null;
             $before = isset($params['before']) && $params['before'] !== '' ? (int) $params['before'] : null;
-            $result = $drive->listMedia($cursor ?: null, $after, $before);
+            $result = $drive->listMedia($cursor ?: null, $before);
             return self::json($res, [
                 'data'     => $result['files'],
                 'cursor'   => $result['cursor'],
@@ -141,8 +140,10 @@ final class FileRoutes
         })->add($auth);
 
         $group->get('/media/months', function (Request $req, Response $res) use ($drive): Response {
-            $debug = ($req->getQueryParams()['debug'] ?? '') === '1';
-            return self::json($res, ['data' => $drive->listMediaMonths($debug)]);
+            $params = $req->getQueryParams();
+            $before = isset($params['before']) && $params['before'] !== '' ? (int) $params['before'] : null;
+            $debug  = ($params['debug'] ?? '') === '1';
+            return self::json($res, ['data' => $drive->listMediaMonths($before, $debug)]);
         })->add($auth);
 
         $group->get('/trash', function (Request $req, Response $res) use ($drive): Response {

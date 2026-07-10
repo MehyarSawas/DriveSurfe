@@ -330,42 +330,38 @@
         <div class="timeline">
           @switch (timelineScale()) {
             @case ('year') {
+              <div class="cover-grid years">
+                @for (y of timelineYearCovers(); track y.year) {
+                  <div class="cover-tile year" (click)="openTimelineYear(y.year)">
+                    <img [src]="y.cover.thumbnail_url" [alt]="y.year" loading="lazy" />
+                    <div class="cover-overlay"><span class="cover-label">{{ y.year }}</span></div>
+                  </div>
+                }
+              </div>
               @if (timelineCoversLoading()) {
                 <div class="loading timeline-loading"><div class="spinner"></div></div>
-              } @else {
-                <div class="cover-grid years">
-                  @for (y of timelineYearCovers(); track y.year) {
-                    <div class="cover-tile year" (click)="openTimelineYear(y.year)">
-                      <img [src]="y.cover.thumbnail_url" [alt]="y.year" loading="lazy" />
-                      <div class="cover-overlay"><span class="cover-label">{{ y.year }}</span></div>
-                    </div>
-                  }
-                </div>
-                @if (timelineYearCovers().length === 0) {
-                  <div class="empty"><p>{{ timelineCoversError() ? 'Failed to load: ' + timelineCoversError() : 'No media files found' }}</p></div>
-                }
+              } @else if (timelineYearCovers().length === 0) {
+                <div class="empty"><p>{{ timelineCoversError() ? 'Failed to load: ' + timelineCoversError() : 'No media files found' }}</p></div>
               }
             }
             @case ('month') {
+              @for (yg of timelineMonthsByYear(); track yg.year) {
+                <div class="months-year-block" [attr.data-year]="yg.year">
+                  <div class="timeline-month">{{ yg.year }}</div>
+                  <div class="cover-grid months">
+                    @for (m of yg.months; track m.key) {
+                      <div class="cover-tile" (click)="openTimelineMonth(m)">
+                        <img [src]="m.cover.thumbnail_url" [alt]="monthName(m)" loading="lazy" />
+                        <div class="cover-overlay"><span class="cover-label">{{ monthName(m) }}</span></div>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
               @if (timelineCoversLoading()) {
                 <div class="loading timeline-loading"><div class="spinner"></div></div>
-              } @else {
-                @for (yg of timelineMonthsByYear(); track yg.year) {
-                  <div class="months-year-block" [attr.data-year]="yg.year">
-                    <div class="timeline-month">{{ yg.year }}</div>
-                    <div class="cover-grid months">
-                      @for (m of yg.months; track m.key) {
-                        <div class="cover-tile" (click)="openTimelineMonth(m)">
-                          <img [src]="m.cover.thumbnail_url" [alt]="monthName(m)" loading="lazy" />
-                          <div class="cover-overlay"><span class="cover-label">{{ monthName(m) }}</span></div>
-                        </div>
-                      }
-                    </div>
-                  </div>
-                }
-                @if (timelineMonthsByYear().length === 0) {
-                  <div class="empty"><p>{{ timelineCoversError() ? 'Failed to load: ' + timelineCoversError() : 'No media files found' }}</p></div>
-                }
+              } @else if (timelineMonthsByYear().length === 0) {
+                <div class="empty"><p>{{ timelineCoversError() ? 'Failed to load: ' + timelineCoversError() : 'No media files found' }}</p></div>
               }
             }
             @default {

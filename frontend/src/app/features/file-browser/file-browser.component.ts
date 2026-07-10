@@ -595,10 +595,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   /** iPhone-Photos-style scale: cover tiles per year / per month, or the stream. */
   readonly timelineScale = signal<'year' | 'month' | 'all'>('all');
-  /** Month covers from the fast probe endpoint — fetched once, cached for the session. */
+  /** Month covers, accumulated batch-by-batch (newest first) as the backend
+   *  walks history backwards. null until the first batch arrives. */
   readonly timelineCovers = signal<MonthCover[] | null>(null);
   readonly timelineCoversLoading = signal(false);
   readonly timelineCoversError = signal<string | null>(null);
+  private timelineCoversComplete = false;
+  private timelineCoversNextBefore: number | null = null;
+  private coversGen = 0;
 
   /** Months grouped by year for the Months view (covers are newest-first). */
   readonly timelineMonthsByYear = computed(() => {
@@ -623,18 +627,33 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return new Date(m.year, m.month - 1, 1).toLocaleDateString(undefined, { month: 'long' });
   }
 
+  /** Pull month covers batch-by-batch (12 months at a time) until history is
+   *  exhausted, appending each batch so months appear progressively — newest
+   *  first. Each batch is one cheap request; the backend caches historical
+   *  batches so revisits are near-free. Bails if the user leaves the cover
+   *  scales. Safe to call repeatedly (guarded by loading + generation). */
   private async ensureTimelineCovers(): Promise<void> {
-    if (this.timelineCovers() !== null || this.timelineCoversLoading()) return;
+    if (this.timelineCoversComplete || this.timelineCoversLoading()) return;
+    const gen = ++this.coversGen;
     this.timelineCoversLoading.set(true);
     this.timelineCoversError.set(null);
     try {
-      this.timelineCovers.set(await this.fileService.loadMediaMonths());
+      for (;;) {
+        const res = await this.fileService.loadMediaMonths(this.timelineCoversNextBefore);
+        if (gen !== this.coversGen) return;
+        this.timelineCovers.update(cur => [...(cur ?? []), ...res.months]);
+        this.timelineCoversNextBefore = res.next_before;
+        if (res.complete || res.next_before == null) { this.timelineCoversComplete = true; break; }
+        // Stop pulling more history once the user has navigated away from the
+        // cover scales — they'll resume on demand.
+        if (!this.isTimeline() || this.timelineScale() === 'all') break;
+      }
     } catch (err) {
       console.error('timeline covers error:', err);
-      this.timelineCovers.set([]);
+      if (this.timelineCovers() === null) this.timelineCovers.set([]);
       this.timelineCoversError.set((err as any)?.error?.error ?? 'Request failed');
     } finally {
-      this.timelineCoversLoading.set(false);
+      if (gen === this.coversGen) this.timelineCoversLoading.set(false);
     }
   }
 
@@ -791,12 +810,24 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       while (!this.timelineDone()
           && (this.fileService.searchResults()?.length ?? 0)
              < this.timelineRenderLimit() + FileBrowserComponent.TIMELINE_BUFFER) {
-        const page = await this.fileService.loadMediaPage(this.timelineCursor, this.timelinePeriod ?? undefined);
+        const period = this.timelinePeriod;
+        // A month stream seeds page 0 with modified_before = end-of-month; later
+        // pages ride the cursor (which already encodes the filter). kDrive can't
+        // filter modified_after into the past, so the lower bound is applied
+        // client-side and the stream stops once files predate the month.
+        const before = period && !this.timelineCursor ? period.before : null;
+        const page = await this.fileService.loadMediaPage(this.timelineCursor, before);
         if (gen !== this.timelineGen || !this.isTimeline()) return;
         this.timelineCursor = page.cursor;
         if (!page.has_more || !page.cursor) this.timelineDone.set(true);
-        if (page.data.length > 0) {
-          this.fileService.searchResults.update(r => [...(r ?? []), ...page.data]);
+        let data = page.data;
+        if (period) {
+          const secs = (f: DriveFile) => (this.parseFileDate(f.modified_at)?.getTime() ?? 0) / 1000;
+          if (page.data.some(f => secs(f) < period.after)) this.timelineDone.set(true);
+          data = page.data.filter(f => { const t = secs(f); return t >= period.after && t <= period.before; });
+        }
+        if (data.length > 0) {
+          this.fileService.searchResults.update(r => [...(r ?? []), ...data]);
         }
       }
     } catch (err) {

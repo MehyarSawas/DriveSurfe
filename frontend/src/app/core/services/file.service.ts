@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, Subject, takeUntil } from 'rxjs';
-import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID, PreviewSession, ShareLink, ShareLinkOptions, MonthCover } from '../models/drive-file.model';
+import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID, PreviewSession, ShareLink, ShareLinkOptions, MonthCover, MediaMonthsResponse } from '../models/drive-file.model';
 import { FolderTreeNode, DriveUsage } from '../models/drive.model';
 
 interface ApiResponse<T> {
@@ -204,23 +204,22 @@ export class FileService {
   /** One page of the recursive media listing (newest first), optionally
    *  bounded to a period (unix seconds). A page may be empty while has_more
    *  is still true (server-side media filtering) — callers keep paginating. */
-  async loadMediaPage(cursor?: string | null, period?: { after: number; before: number }): Promise<FilesResponse> {
+  async loadMediaPage(cursor?: string | null, before?: number | null): Promise<FilesResponse> {
     const params: Record<string, string> = {};
     if (cursor) params['cursor'] = cursor;
-    if (period) {
-      params['after'] = String(period.after);
-      params['before'] = String(period.before);
-    }
+    if (before != null) params['before'] = String(before);
     return firstValueFrom(
       this.http.get<FilesResponse>('/api/media', { params })
     );
   }
 
-  /** Month covers for the timeline (newest first) — one probe per month on
-   *  the backend, independent of (and much faster than) the full stream. */
-  async loadMediaMonths(): Promise<MonthCover[]> {
+  /** One batch of timeline month covers (newest first). Pass the previous
+   *  batch's `next_before` to page further back through history. */
+  async loadMediaMonths(before?: number | null): Promise<MediaMonthsResponse> {
+    const params: Record<string, string> = {};
+    if (before != null) params['before'] = String(before);
     const res = await firstValueFrom(
-      this.http.get<ApiResponse<MonthCover[]>>('/api/media/months')
+      this.http.get<ApiResponse<MediaMonthsResponse>>('/api/media/months', { params })
     );
     return res.data;
   }

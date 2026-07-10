@@ -228,25 +228,30 @@ final class KDriveClient implements DriveInterface
      * fewer (even zero) items than `limit` while has_more is still true —
      * callers must keep paginating by cursor.
      */
-    public function listMedia(?string $cursor = null, ?int $after = null, ?int $before = null): array
+    public function listMedia(?string $cursor = null, ?int $before = null): array
     {
         $driveId = $this->getDriveId();
         $params = [
             'order_by' => 'last_modified_at',
             'order'    => 'desc',
-            // Max page size — Infomaniak rate-limits ~60 req/min per token,
-            // so fewer/larger pages beat many small ones.
+            // Max page size — Infomaniak rate-limits per rolling window, so
+            // fewer/larger pages beat many small ones.
             'limit'    => 1000,
             'depth'    => 'unlimited',
             'with'     => 'is_favorite',
-            'type'     => 'file',
+            // Server-side filter to images + videos (same as the kDrive app's
+            // Gallery: types[]=image&types[]=video) so pages are dense with
+            // media instead of mostly documents.
+            'types'    => ['image', 'video'],
         ];
-        // kDrive date filtering, exactly as Infomaniak's own Android app sends
-        // it: modified_at=custom&modified_after=X&modified_before=Y
-        if ($after !== null || $before !== null) {
-            $params['modified_at'] = 'custom';
-            if ($after !== null)  $params['modified_after']  = $after;
-            if ($before !== null) $params['modified_before'] = $before;
+        // Walk history with modified_before ONLY. modified_after can't be used
+        // to reach the past: its documented minimum is the drive-creation
+        // timestamp, so any older value is rejected 422 validation_rule_min.
+        // modified_before + order=desc is enough — pages arrive newest-first,
+        // and the oldest timestamp on a page is the resume point for the next.
+        if ($before !== null) {
+            $params['modified_at']     = 'custom';
+            $params['modified_before'] = $before;
         }
         if ($cursor) $params['cursor'] = $cursor;
 
@@ -271,154 +276,98 @@ final class KDriveClient implements DriveInterface
             || in_array($f['extension'], $mediaExt, true);
     }
 
-    /** Unix seconds of the oldest file on the drive (null if empty). Clamped to
-     *  year 2000 as a guard against corrupt epoch-adjacent timestamps.
-     *  Retries once after a pause on 429 (Infomaniak limits ~60 req/min). */
-    public function getOldestMediaDate(): ?int
-    {
-        $driveId = $this->getDriveId();
-        $params = [
-            'order_by' => 'last_modified_at',
-            'order'    => 'asc',
-            'limit'    => 5, // kDrive enforces a minimum limit of 5
-            'depth'    => 'unlimited',
-            'type'     => 'file',
-        ];
-        // get() itself honors retry_after on 429s
-        $data = $this->get("{$driveId}/files/search", $params, self::API_V3);
-        $first = $data['data'][0] ?? null;
-        if (!$first) return null;
-        $ts = (int) ($first['last_modified_at'] ?? $first['created_at'] ?? 0);
-        if ($ts <= 0) return null;
-        return max($ts, 946684800); // clamp to 2000-01-01
-    }
-
     /**
-     * Month covers for the timeline. Infomaniak rate-limits ~60 requests/min
-     * per token, so probing per-month (120+ calls) is not viable — instead we
-     * probe per-YEAR with limit=1000 (the API max): one response carries up to
-     * a year of newest-first files, from which every month of that year and
-     * its newest-media cover are derived. A 10-year drive costs ~11 requests.
-     * Years with >1000 files may miss their oldest months (accepted tradeoff).
+     * One BATCH of timeline month covers, walking the newest-first media
+     * stream backwards from `$before` (or now) with modified_before only.
+     *
+     * kDrive has no "list months" API and its date filter can't reach past the
+     * drive-creation date via modified_after, so months are discovered by
+     * walking the stream: each distinct Y-m seen (newest-first) yields one
+     * cover (its newest media file). To keep a single request cheap and bound
+     * the rate limit, a batch stops once MONTHS_PER_BATCH new months are found
+     * (or MONTHS_PAGE_CAP pages are read), returning `next_before` so the
+     * frontend can pull the next batch ("12 months, then another 12").
+     *
+     * Each batch is keyed by its `$before` and cached: history is immutable so
+     * historical batches cache indefinitely; the head batch (before=null)
+     * carries new uploads and expires after MONTHS_HEAD_TTL.
      */
-    private const MONTHS_CACHE_FILE = __DIR__ . '/../../../cache/media_months.json';
-    private const MONTHS_CACHE_TTL  = 900; // 15 min — probes cost ~1 request per year of history
+    private const MONTHS_CACHE_DIR   = __DIR__ . '/../../../cache/months';
+    private const MONTHS_HEAD_TTL    = 900;  // 15 min — only the newest batch changes
+    private const MONTHS_PER_BATCH   = 12;
+    private const MONTHS_PAGE_CAP    = 12;   // max stream pages per batch (rate-limit bound)
 
-    public function listMediaMonths(bool $debug = false): array
+    public function listMediaMonths(?int $before = null, bool $debug = false): array
     {
-        // Serve from cache when fresh — protects the ~1000 req/hour API quota
-        // from repeated probing across page reloads.
-        if (!$debug && is_file(self::MONTHS_CACHE_FILE)
-            && time() - (int) filemtime(self::MONTHS_CACHE_FILE) < self::MONTHS_CACHE_TTL) {
-            $cached = json_decode((string) file_get_contents(self::MONTHS_CACHE_FILE), true);
-            if (is_array($cached)) return $cached;
-        }
-
-        $driveId = $this->getDriveId();
-        $token   = $this->getToken();
-        $diag    = ['oldest' => null, 'years' => 0, 'fulfilled' => 0, 'rejected' => [], 'samples' => []];
-        $oldest  = $this->getOldestMediaDate();
-        $diag['oldest'] = $oldest !== null ? date('c', $oldest) : null;
-        if ($oldest === null) return $debug ? ['months' => [], 'debug' => $diag] : [];
-
-        $years = [];
-        for ($y = (int) date('Y'); $y >= (int) date('Y', $oldest) && count($years) < 30; $y--) {
-            $years[] = [
-                'year'   => $y,
-                'after'  => mktime(0, 0, 0, 1, 1, $y),
-                'before' => mktime(23, 59, 59, 12, 31, $y),
-            ];
-        }
-        $diag['years'] = count($years);
-
-        $responses = [];
-        $rejected  = [];
-        $makeRequests = function () use ($years, $driveId, $token) {
-            foreach ($years as $i => $r) {
-                yield $i => fn() => $this->http->getAsync(
-                    self::API_V3 . "/{$driveId}/files/search",
-                    [
-                        'headers' => ['Authorization' => "Bearer {$token}"],
-                        'query' => [
-                            'order_by'        => 'last_modified_at',
-                            'order'           => 'desc',
-                            'limit'           => 1000,
-                            'depth'           => 'unlimited',
-                            'type'            => 'file',
-                            // Exactly as Infomaniak's Android app sends it
-                            'modified_at'     => 'custom',
-                            'modified_after'  => $r['after'],
-                            'modified_before' => $r['before'],
-                        ],
-                    ]
-                );
+        $cacheFile = self::MONTHS_CACHE_DIR . '/' . ($before === null ? 'head' : (string) $before) . '.json';
+        if (!$debug && is_file($cacheFile)) {
+            $fresh = $before !== null // historical batches never change
+                || (time() - (int) filemtime($cacheFile) < self::MONTHS_HEAD_TTL);
+            if ($fresh) {
+                $cached = json_decode((string) file_get_contents($cacheFile), true);
+                if (is_array($cached)) return $cached;
             }
-        };
-        $pool = new \GuzzleHttp\Pool($this->http, $makeRequests(), [
-            'concurrency' => 3,
-            'fulfilled'   => function ($response, $i) use (&$responses) { $responses[$i] = $response; },
-            'rejected'    => function ($reason, $i) use (&$rejected) {
-                $msg = $reason instanceof \Throwable ? $reason->getMessage() : (string) $reason;
-                // Guzzle truncates response bodies in messages — append the full
-                // upstream error so validation failures (422) are diagnosable.
-                if ($reason instanceof \GuzzleHttp\Exception\BadResponseException) {
-                    $msg .= ' | body: ' . substr((string) $reason->getResponse()->getBody(), 0, 500);
-                }
-                $rejected[$i] = substr($msg, 0, 900);
-            },
-        ]);
-        $pool->promise()->wait();
-        $diag['fulfilled'] = count($responses);
-        $diag['rejected']  = array_slice($rejected, 0, 3, true);
+        }
 
-        $months = [];
-        foreach ($years as $i => $r) {
-            if (!isset($responses[$i])) continue;
+        $months     = [];
+        $seen       = [];
+        $cursor     = null;
+        $nextBefore = null;
+        $complete   = false;
+        $diag       = ['pages' => 0, 'rejected' => null];
+
+        for ($page = 0; $page < self::MONTHS_PAGE_CAP; $page++) {
             try {
-                $data = json_decode((string) $responses[$i]->getBody(), true, 512, JSON_THROW_ON_ERROR);
-            } catch (\JsonException) {
-                continue;
+                // Only page 0 sets modified_before; later pages ride the cursor
+                // (which already encodes the filter for this batch).
+                $res = $this->listMedia($cursor, $page === 0 ? $before : null);
+            } catch (RuntimeException $e) {
+                $diag['rejected'] = substr($e->getMessage(), 0, 600);
+                break;
             }
-            if ($debug && count($diag['samples']) < 2) {
-                $raw = array_slice($data['data'] ?? [], 0, 2);
-                $diag['samples'][] = [
-                    'year'   => $r['year'],
-                    'result' => $data['result'] ?? null,
-                    'count'  => count($data['data'] ?? []),
-                    'items'  => array_map(fn($x) => [
-                        'name' => $x['name'] ?? null,
-                        'mime' => $x['mime_type'] ?? null,
-                        'last_modified_at' => $x['last_modified_at'] ?? null,
-                    ], $raw),
-                ];
-            }
-            $seen = [];
-            foreach ($this->normalizeFiles($data['data'] ?? []) as $f) {
-                if (!self::isMediaFile($f)) continue;
+            $diag['pages']++;
+
+            $oldestTs = null;
+            foreach ($res['files'] as $f) {
                 $ts = $f['modified_at'] ? strtotime($f['modified_at']) : false;
-                // Guard: only trust files whose date falls inside the probed year
-                if ($ts === false || $ts < $r['after'] || $ts > $r['before']) continue;
+                if ($ts === false || $ts <= 0) continue;
+                $oldestTs = $oldestTs === null ? $ts : min($oldestTs, $ts);
                 $key = date('Y-m', $ts);
                 if (isset($seen[$key])) continue;
                 $seen[$key] = true;
-                $months[] = [
+                $months[$key] = [
                     'key'   => $key,
                     'year'  => (int) substr($key, 0, 4),
                     'month' => (int) substr($key, 5, 2),
-                    'cover' => $f,
+                    'cover' => $f, // first occurrence = newest media of the month
                 ];
             }
-        }
-        // Files arrive newest-first per year and years iterate desc, so
-        // $months is already globally newest-first.
-        if (!$debug && $months !== []) {
-            @mkdir(dirname(self::MONTHS_CACHE_FILE), 0775, true);
-            $tmp = self::MONTHS_CACHE_FILE . '.tmp.' . bin2hex(random_bytes(4));
-            if (@file_put_contents($tmp, json_encode($months), LOCK_EX) !== false) {
-                @rename($tmp, self::MONTHS_CACHE_FILE);
+
+            $cursor = $res['cursor'];
+            if (!($res['has_more'] ?? false) || !$cursor) { $complete = true; break; }
+            if (count($months) >= self::MONTHS_PER_BATCH) {
+                // Resume the next batch just before this page's oldest file.
+                $nextBefore = $oldestTs !== null ? $oldestTs - 1 : null;
+                if ($nextBefore === null) $complete = true;
+                break;
             }
         }
-        return $debug ? ['months' => $months, 'debug' => $diag] : $months;
+
+        $result = [
+            'months'      => array_values($months), // already newest-first
+            'next_before' => $complete ? null : $nextBefore,
+            'complete'    => $complete,
+        ];
+        if ($debug) $result['debug'] = $diag;
+
+        if (!$debug && ($complete || $months !== [])) {
+            @mkdir(self::MONTHS_CACHE_DIR, 0775, true);
+            $tmp = $cacheFile . '.tmp.' . bin2hex(random_bytes(4));
+            if (@file_put_contents($tmp, json_encode($result), LOCK_EX) !== false) {
+                @rename($tmp, $cacheFile);
+            }
+        }
+        return $result;
     }
 
     public function createShareLink(string $fileId, array $options): array

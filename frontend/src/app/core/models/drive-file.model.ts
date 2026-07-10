@@ -88,3 +88,12 @@ export interface MonthCover {
   month: number; // 1-12
   cover: DriveFile;
 }
+
+/** One batch of timeline month covers (newest first). The backend walks the
+ *  media stream backwards a batch at a time; `complete` is false while more
+ *  history remains, and `next_before` is the resume point for the next call. */
+export interface MediaMonthsResponse {
+  months: MonthCover[];
+  next_before: number | null;
+  complete: boolean;
+}
