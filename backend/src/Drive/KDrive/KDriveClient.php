@@ -234,7 +234,9 @@ final class KDriveClient implements DriveInterface
         $params = [
             'order_by' => 'last_modified_at',
             'order'    => 'desc',
-            'limit'    => 200,
+            // Max page size — Infomaniak rate-limits ~60 req/min per token,
+            // so fewer/larger pages beat many small ones.
+            'limit'    => 1000,
             'depth'    => 'unlimited',
             'with'     => 'is_favorite',
             'type'     => 'file',
@@ -270,17 +272,25 @@ final class KDriveClient implements DriveInterface
     }
 
     /** Unix seconds of the oldest file on the drive (null if empty). Clamped to
-     *  year 2000 as a guard against corrupt epoch-adjacent timestamps. */
+     *  year 2000 as a guard against corrupt epoch-adjacent timestamps.
+     *  Retries once after a pause on 429 (Infomaniak limits ~60 req/min). */
     public function getOldestMediaDate(): ?int
     {
         $driveId = $this->getDriveId();
-        $data = $this->get("{$driveId}/files/search", [
+        $params = [
             'order_by' => 'last_modified_at',
             'order'    => 'asc',
             'limit'    => 5, // kDrive enforces a minimum limit of 5
             'depth'    => 'unlimited',
             'type'     => 'file',
-        ], self::API_V3);
+        ];
+        try {
+            $data = $this->get("{$driveId}/files/search", $params, self::API_V3);
+        } catch (RuntimeException $e) {
+            if (!str_contains($e->getMessage(), '429')) throw $e;
+            sleep(3);
+            $data = $this->get("{$driveId}/files/search", $params, self::API_V3);
+        }
         $first = $data['data'][0] ?? null;
         if (!$first) return null;
         $ts = (int) ($first['last_modified_at'] ?? $first['created_at'] ?? 0);
@@ -289,48 +299,46 @@ final class KDriveClient implements DriveInterface
     }
 
     /**
-     * Month covers for the timeline: probes each month interval from the
-     * current month back to the oldest file (concurrently, small responses)
-     * and keeps the newest MEDIA file per month as its cover. Months without
-     * media are simply absent. Fast regardless of how much media the drive
-     * holds — each probe transfers at most a dozen file records.
+     * Month covers for the timeline. Infomaniak rate-limits ~60 requests/min
+     * per token, so probing per-month (120+ calls) is not viable — instead we
+     * probe per-YEAR with limit=1000 (the API max): one response carries up to
+     * a year of newest-first files, from which every month of that year and
+     * its newest-media cover are derived. A 10-year drive costs ~11 requests.
+     * Years with >1000 files may miss their oldest months (accepted tradeoff).
      */
     public function listMediaMonths(bool $debug = false): array
     {
         $driveId = $this->getDriveId();
         $token   = $this->getToken();
-        $diag    = ['oldest' => null, 'ranges' => 0, 'fulfilled' => 0, 'rejected' => [], 'samples' => []];
+        $diag    = ['oldest' => null, 'years' => 0, 'fulfilled' => 0, 'rejected' => [], 'samples' => []];
         $oldest  = $this->getOldestMediaDate();
         $diag['oldest'] = $oldest !== null ? date('c', $oldest) : null;
         if ($oldest === null) return $debug ? ['months' => [], 'debug' => $diag] : [];
 
-        $ranges   = [];
-        $cursorTs = strtotime(date('Y-m-01 00:00:00'));
-        $endTs    = strtotime(date('Y-m-01 00:00:00', $oldest));
-        while ($cursorTs >= $endTs && count($ranges) < 240) { // cap: 20 years
-            $ranges[] = [
-                'key'    => date('Y-m', $cursorTs),
-                'after'  => $cursorTs,
-                'before' => strtotime('+1 month', $cursorTs) - 1,
+        $years = [];
+        for ($y = (int) date('Y'); $y >= (int) date('Y', $oldest) && count($years) < 30; $y--) {
+            $years[] = [
+                'year'   => $y,
+                'after'  => mktime(0, 0, 0, 1, 1, $y),
+                'before' => mktime(23, 59, 59, 12, 31, $y),
             ];
-            $cursorTs = strtotime('-1 month', $cursorTs);
         }
+        $diag['years'] = count($years);
 
         $responses = [];
-        $makeRequests = function () use ($ranges, $driveId, $token) {
-            foreach ($ranges as $i => $r) {
+        $rejected  = [];
+        $makeRequests = function () use ($years, $driveId, $token) {
+            foreach ($years as $i => $r) {
                 yield $i => fn() => $this->http->getAsync(
                     self::API_V3 . "/{$driveId}/files/search",
                     [
                         'headers' => ['Authorization' => "Bearer {$token}"],
                         'query' => [
-                            'order_by'    => 'last_modified_at',
-                            'order'       => 'desc',
-                            // >1 because the newest files in a month may be
-                            // non-media (PDFs etc.) — we want a media cover.
-                            'limit'       => 12,
-                            'depth'       => 'unlimited',
-                            'type'        => 'file',
+                            'order_by'        => 'last_modified_at',
+                            'order'           => 'desc',
+                            'limit'           => 1000,
+                            'depth'           => 'unlimited',
+                            'type'            => 'file',
                             // Exactly as Infomaniak's Android app sends it
                             'modified_at'     => 'custom',
                             'modified_after'  => $r['after'],
@@ -340,10 +348,8 @@ final class KDriveClient implements DriveInterface
                 );
             }
         };
-        $diag['ranges'] = count($ranges);
-        $rejected = [];
         $pool = new \GuzzleHttp\Pool($this->http, $makeRequests(), [
-            'concurrency' => 8,
+            'concurrency' => 3,
             'fulfilled'   => function ($response, $i) use (&$responses) { $responses[$i] = $response; },
             'rejected'    => function ($reason, $i) use (&$rejected) {
                 $msg = $reason instanceof \Throwable ? $reason->getMessage() : (string) $reason;
@@ -355,17 +361,17 @@ final class KDriveClient implements DriveInterface
         $diag['rejected']  = array_slice($rejected, 0, 3, true);
 
         $months = [];
-        foreach ($ranges as $i => $r) {
+        foreach ($years as $i => $r) {
             if (!isset($responses[$i])) continue;
             try {
                 $data = json_decode((string) $responses[$i]->getBody(), true, 512, JSON_THROW_ON_ERROR);
             } catch (\JsonException) {
                 continue;
             }
-            if ($debug && count($diag['samples']) < 3) {
+            if ($debug && count($diag['samples']) < 2) {
                 $raw = array_slice($data['data'] ?? [], 0, 2);
                 $diag['samples'][] = [
-                    'range'  => $r['key'],
+                    'year'   => $r['year'],
                     'result' => $data['result'] ?? null,
                     'count'  => count($data['data'] ?? []),
                     'items'  => array_map(fn($x) => [
@@ -375,22 +381,25 @@ final class KDriveClient implements DriveInterface
                     ], $raw),
                 ];
             }
+            $seen = [];
             foreach ($this->normalizeFiles($data['data'] ?? []) as $f) {
                 if (!self::isMediaFile($f)) continue;
-                // Guard: if kDrive silently ignored the date filter, the probe
-                // returns the drive's newest files for EVERY month — only keep
-                // covers whose date genuinely falls inside the month range.
                 $ts = $f['modified_at'] ? strtotime($f['modified_at']) : false;
+                // Guard: only trust files whose date falls inside the probed year
                 if ($ts === false || $ts < $r['after'] || $ts > $r['before']) continue;
+                $key = date('Y-m', $ts);
+                if (isset($seen[$key])) continue;
+                $seen[$key] = true;
                 $months[] = [
-                    'key'   => $r['key'],
-                    'year'  => (int) substr($r['key'], 0, 4),
-                    'month' => (int) substr($r['key'], 5, 2),
+                    'key'   => $key,
+                    'year'  => (int) substr($key, 0, 4),
+                    'month' => (int) substr($key, 5, 2),
                     'cover' => $f,
                 ];
-                break;
             }
         }
+        // Files arrive newest-first per year and years iterate desc, so
+        // $months is already globally newest-first.
         return $debug ? ['months' => $months, 'debug' => $diag] : $months;
     }
 
