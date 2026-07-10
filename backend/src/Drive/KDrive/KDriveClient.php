@@ -626,6 +626,15 @@ final class KDriveClient implements DriveInterface
         return (string) $ts;
     }
 
+    /** Full upstream error body (Guzzle truncates it in getMessage()) — vital
+     *  for rate-limit context like remaining/reset. */
+    private static function responseDetail(GuzzleException $e): string
+    {
+        if (!$e instanceof \GuzzleHttp\Exception\BadResponseException) return '';
+        $body = (string) $e->getResponse()->getBody();
+        return $body !== '' ? ' | upstream: ' . substr($body, 0, 600) : '';
+    }
+
     private static function safeMimeType(string $mime): string
     {
         $allowed = [
@@ -674,7 +683,7 @@ final class KDriveClient implements DriveInterface
             }
             return $data;
         } catch (GuzzleException $e) {
-            throw new RuntimeException("kDrive API error: " . $e->getMessage(), 0, $e);
+            throw new RuntimeException("kDrive API error: " . $e->getMessage() . self::responseDetail($e), 0, $e);
         }
     }
 
@@ -692,7 +701,7 @@ final class KDriveClient implements DriveInterface
             }
             return $data;
         } catch (GuzzleException $e) {
-            throw new RuntimeException("kDrive API error: " . $e->getMessage(), 0, $e);
+            throw new RuntimeException("kDrive API error: " . $e->getMessage() . self::responseDetail($e), 0, $e);
         }
     }
 
@@ -710,7 +719,7 @@ final class KDriveClient implements DriveInterface
             }
             return $data;
         } catch (GuzzleException $e) {
-            throw new RuntimeException("kDrive API error: " . $e->getMessage(), 0, $e);
+            throw new RuntimeException("kDrive API error: " . $e->getMessage() . self::responseDetail($e), 0, $e);
         }
     }
 
@@ -724,7 +733,7 @@ final class KDriveClient implements DriveInterface
             ]);
             return json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
         } catch (GuzzleException $e) {
-            throw new RuntimeException("kDrive API error: " . $e->getMessage(), 0, $e);
+            throw new RuntimeException("kDrive API error: " . $e->getMessage() . self::responseDetail($e), 0, $e);
         }
     }
 
@@ -738,7 +747,7 @@ final class KDriveClient implements DriveInterface
             $body = (string) $response->getBody();
             return $body ? json_decode($body, true, 512, JSON_THROW_ON_ERROR) : [];
         } catch (GuzzleException $e) {
-            throw new RuntimeException("kDrive API error: " . $e->getMessage(), 0, $e);
+            throw new RuntimeException("kDrive API error: " . $e->getMessage() . self::responseDetail($e), 0, $e);
         }
     }
 
