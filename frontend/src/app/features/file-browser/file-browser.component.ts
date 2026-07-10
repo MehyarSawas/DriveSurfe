@@ -160,18 +160,24 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.preloadStrip(index, gen);
   }
 
-  // After adjacent preload, walk outward from index and load all remaining images in background.
+  // After adjacent preload, walk outward from index and preload nearby images
+  // in the background. CAPPED at ±40 around the current position — walking the
+  // whole list fires a /preview request per image, which with a thousands-item
+  // timeline burns straight through kDrive's ~1000 req/hour API quota.
+  private static readonly PRELOAD_WALK_RADIUS = 40;
   private async preloadStrip(index: number, gen: number): Promise<void> {
     const files = this.mediaFiles();
     const total = files.length;
     // Build indices spiralling out from current: index+6, index-3, index+7, index-4, ...
     const visited = new Set<number>([index-2, index-1, index, index+1, index+2, index+3, index+4, index+5]);
     const queue: number[] = [];
+    const minLo = Math.max(0, index - FileBrowserComponent.PRELOAD_WALK_RADIUS);
+    const maxHi = Math.min(total - 1, index + FileBrowserComponent.PRELOAD_WALK_RADIUS);
     let lo = index - 3;
     let hi = index + 6;
-    while (lo >= 0 || hi < total) {
-      if (hi < total) { if (!visited.has(hi)) { visited.add(hi); queue.push(hi); } hi++; }
-      if (lo >= 0)    { if (!visited.has(lo)) { visited.add(lo); queue.push(lo); } lo--; }
+    while (lo >= minLo || hi <= maxHi) {
+      if (hi <= maxHi) { if (!visited.has(hi)) { visited.add(hi); queue.push(hi); } hi++; }
+      if (lo >= minLo) { if (!visited.has(lo)) { visited.add(lo); queue.push(lo); } lo--; }
     }
     for (const i of queue) {
       if (gen !== this.preloadGen) return;

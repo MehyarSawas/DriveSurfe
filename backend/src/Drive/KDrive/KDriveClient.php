@@ -306,8 +306,19 @@ final class KDriveClient implements DriveInterface
      * its newest-media cover are derived. A 10-year drive costs ~11 requests.
      * Years with >1000 files may miss their oldest months (accepted tradeoff).
      */
+    private const MONTHS_CACHE_FILE = __DIR__ . '/../../../cache/media_months.json';
+    private const MONTHS_CACHE_TTL  = 900; // 15 min — probes cost ~1 request per year of history
+
     public function listMediaMonths(bool $debug = false): array
     {
+        // Serve from cache when fresh — protects the ~1000 req/hour API quota
+        // from repeated probing across page reloads.
+        if (!$debug && is_file(self::MONTHS_CACHE_FILE)
+            && time() - (int) filemtime(self::MONTHS_CACHE_FILE) < self::MONTHS_CACHE_TTL) {
+            $cached = json_decode((string) file_get_contents(self::MONTHS_CACHE_FILE), true);
+            if (is_array($cached)) return $cached;
+        }
+
         $driveId = $this->getDriveId();
         $token   = $this->getToken();
         $diag    = ['oldest' => null, 'years' => 0, 'fulfilled' => 0, 'rejected' => [], 'samples' => []];
@@ -400,6 +411,13 @@ final class KDriveClient implements DriveInterface
         }
         // Files arrive newest-first per year and years iterate desc, so
         // $months is already globally newest-first.
+        if (!$debug && $months !== []) {
+            @mkdir(dirname(self::MONTHS_CACHE_FILE), 0775, true);
+            $tmp = self::MONTHS_CACHE_FILE . '.tmp.' . bin2hex(random_bytes(4));
+            if (@file_put_contents($tmp, json_encode($months), LOCK_EX) !== false) {
+                @rename($tmp, self::MONTHS_CACHE_FILE);
+            }
+        }
         return $debug ? ['months' => $months, 'debug' => $diag] : $months;
     }
 
