@@ -662,7 +662,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (this.timelineLoadedKey === key) {
       if (!this.timelineDone() && !this.timelineLoadingMore()) {
         ++this.timelineGen;
-        this.loadAllTimeline(); // resumes from this.timelineCursor
+        this.ensureTimelineBuffer(); // resumes from this.timelineCursor
       }
       return;
     }
@@ -757,30 +757,40 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.timelineDone.set(false);
     this.timelineRenderLimit.set(200);
     ++this.timelineGen;
-    this.loadAllTimeline(); // fire-and-forget — pages stream in as they load
+    this.ensureTimelineBuffer(); // fills the initial render window + buffer only
   }
 
-  /** Grow the DOM render window as the user approaches the bottom. */
+  /** Grow the render window as the user approaches the bottom, and top up the
+   *  data buffer to stay ahead of it. */
   onContentScroll(e: Event): void {
-    if (!this.isTimeline()) return;
+    if (!this.isTimeline() || this.timelineScale() !== 'all') return;
     const el = e.target as HTMLElement;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1200) {
       const total = this.fileService.searchResults()?.length ?? 0;
       if (this.timelineRenderLimit() < total) {
         this.timelineRenderLimit.update(n => Math.min(n + 300, total));
       }
+      this.ensureTimelineBuffer();
     }
   }
 
-  /** Loads ALL media pages continuously in the background (same pattern as
-   *  loadFiles' cursor loop) — no scroll trigger needed; each page appends
-   *  to the visible list as it arrives. Generation-guarded so leaving and
-   *  re-entering the view can't double-append. */
-  private async loadAllTimeline(): Promise<void> {
+  /** How far ahead of the render window the data buffer is kept. */
+  private static readonly TIMELINE_BUFFER = 600;
+
+  /** Buffered LAZY loading — never loads the whole drive. With ~100k files
+   *  at 1000/page, a load-everything loop fires ~100 back-to-back requests
+   *  and permanently saturates kDrive's short rolling rate-limit window;
+   *  instead only fetch pages while the loaded count trails the render
+   *  window + buffer. Scrolling tops the buffer up; month drill-downs are
+   *  naturally small. Generation-guarded against stale appends. */
+  private async ensureTimelineBuffer(): Promise<void> {
+    if (this.timelineLoadingMore() || this.timelineDone() || !this.isTimeline()) return;
     const gen = this.timelineGen;
     this.timelineLoadingMore.set(true);
     try {
-      do {
+      while (!this.timelineDone()
+          && (this.fileService.searchResults()?.length ?? 0)
+             < this.timelineRenderLimit() + FileBrowserComponent.TIMELINE_BUFFER) {
         const page = await this.fileService.loadMediaPage(this.timelineCursor, this.timelinePeriod ?? undefined);
         if (gen !== this.timelineGen || !this.isTimeline()) return;
         this.timelineCursor = page.cursor;
@@ -788,7 +798,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
         if (page.data.length > 0) {
           this.fileService.searchResults.update(r => [...(r ?? []), ...page.data]);
         }
-      } while (!this.timelineDone());
+      }
     } catch (err) {
       console.error('timeline load error:', err);
     } finally {
