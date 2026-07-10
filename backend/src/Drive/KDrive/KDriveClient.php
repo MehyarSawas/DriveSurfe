@@ -228,7 +228,7 @@ final class KDriveClient implements DriveInterface
      * fewer (even zero) items than `limit` while has_more is still true —
      * callers must keep paginating by cursor.
      */
-    public function listMedia(?string $cursor = null): array
+    public function listMedia(?string $cursor = null, ?int $after = null, ?int $before = null): array
     {
         $driveId = $this->getDriveId();
         $params = [
@@ -239,17 +239,14 @@ final class KDriveClient implements DriveInterface
             'with'     => 'is_favorite',
             'type'     => 'file',
         ];
+        if ($after !== null)  $params['modified_after']  = $after;
+        if ($before !== null) $params['modified_before'] = $before;
         if ($cursor) $params['cursor'] = $cursor;
 
         $data  = $this->get("{$driveId}/files/search", $params, self::API_V3);
         $files = $this->normalizeFiles($data['data'] ?? []);
 
-        $mediaExt = ['jpg','jpeg','png','gif','webp','heic','heif','avif','mp4','mov','m4v','webm','avi','mkv'];
-        $media = array_values(array_filter($files, function (array $f) use ($mediaExt) {
-            return str_starts_with($f['mime_type'], 'image/')
-                || str_starts_with($f['mime_type'], 'video/')
-                || in_array($f['extension'], $mediaExt, true);
-        }));
+        $media = array_values(array_filter($files, fn(array $f) => self::isMediaFile($f)));
 
         $hasMore = $data['has_more'] ?? false;
         return [
@@ -257,6 +254,111 @@ final class KDriveClient implements DriveInterface
             'cursor'   => $hasMore ? ($data['cursor'] ?? null) : null,
             'has_more' => $hasMore,
         ];
+    }
+
+    private static function isMediaFile(array $f): bool
+    {
+        static $mediaExt = ['jpg','jpeg','png','gif','webp','heic','heif','avif','mp4','mov','m4v','webm','avi','mkv'];
+        return str_starts_with($f['mime_type'], 'image/')
+            || str_starts_with($f['mime_type'], 'video/')
+            || in_array($f['extension'], $mediaExt, true);
+    }
+
+    /** Unix seconds of the oldest file on the drive (null if empty). Clamped to
+     *  year 2000 as a guard against corrupt epoch-adjacent timestamps. */
+    public function getOldestMediaDate(): ?int
+    {
+        $driveId = $this->getDriveId();
+        $data = $this->get("{$driveId}/files/search", [
+            'order_by' => 'last_modified_at',
+            'order'    => 'asc',
+            'limit'    => 1,
+            'depth'    => 'unlimited',
+            'type'     => 'file',
+        ], self::API_V3);
+        $first = $data['data'][0] ?? null;
+        if (!$first) return null;
+        $ts = (int) ($first['last_modified_at'] ?? $first['created_at'] ?? 0);
+        if ($ts <= 0) return null;
+        return max($ts, 946684800); // clamp to 2000-01-01
+    }
+
+    /**
+     * Month covers for the timeline: probes each month interval from the
+     * current month back to the oldest file (concurrently, small responses)
+     * and keeps the newest MEDIA file per month as its cover. Months without
+     * media are simply absent. Fast regardless of how much media the drive
+     * holds — each probe transfers at most a dozen file records.
+     */
+    public function listMediaMonths(): array
+    {
+        $driveId = $this->getDriveId();
+        $token   = $this->getToken();
+        $oldest  = $this->getOldestMediaDate();
+        if ($oldest === null) return [];
+
+        $ranges   = [];
+        $cursorTs = strtotime(date('Y-m-01 00:00:00'));
+        $endTs    = strtotime(date('Y-m-01 00:00:00', $oldest));
+        while ($cursorTs >= $endTs && count($ranges) < 240) { // cap: 20 years
+            $ranges[] = [
+                'key'    => date('Y-m', $cursorTs),
+                'after'  => $cursorTs,
+                'before' => strtotime('+1 month', $cursorTs) - 1,
+            ];
+            $cursorTs = strtotime('-1 month', $cursorTs);
+        }
+
+        $responses = [];
+        $makeRequests = function () use ($ranges, $driveId, $token) {
+            foreach ($ranges as $i => $r) {
+                yield $i => fn() => $this->http->getAsync(
+                    self::API_V3 . "/{$driveId}/files/search",
+                    [
+                        'headers' => ['Authorization' => "Bearer {$token}"],
+                        'query' => [
+                            'order_by'        => 'last_modified_at',
+                            'order'           => 'desc',
+                            // >1 because the newest files in a month may be
+                            // non-media (PDFs etc.) — we want a media cover.
+                            'limit'           => 12,
+                            'depth'           => 'unlimited',
+                            'type'            => 'file',
+                            'modified_after'  => $r['after'],
+                            'modified_before' => $r['before'],
+                        ],
+                    ]
+                );
+            }
+        };
+        $pool = new \GuzzleHttp\Pool($this->http, $makeRequests(), [
+            'concurrency' => 8,
+            'fulfilled'   => function ($response, $i) use (&$responses) { $responses[$i] = $response; },
+            'rejected'    => function ($reason, $i) { /* month probe failed — treated as empty */ },
+        ]);
+        $pool->promise()->wait();
+
+        $months = [];
+        foreach ($ranges as $i => $r) {
+            if (!isset($responses[$i])) continue;
+            try {
+                $data = json_decode((string) $responses[$i]->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                continue;
+            }
+            foreach ($this->normalizeFiles($data['data'] ?? []) as $f) {
+                if (self::isMediaFile($f)) {
+                    $months[] = [
+                        'key'   => $r['key'],
+                        'year'  => (int) substr($r['key'], 0, 4),
+                        'month' => (int) substr($r['key'], 5, 2),
+                        'cover' => $f,
+                    ];
+                    break;
+                }
+            }
+        }
+        return $months; // newest first (ranges were built descending)
     }
 
     public function createShareLink(string $fileId, array $options): array

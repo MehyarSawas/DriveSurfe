@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom, Subject, takeUntil } from 'rxjs';
-import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID, PreviewSession, ShareLink, ShareLinkOptions } from '../models/drive-file.model';
+import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID, PreviewSession, ShareLink, ShareLinkOptions, MonthCover } from '../models/drive-file.model';
 import { FolderTreeNode, DriveUsage } from '../models/drive.model';
 
 interface ApiResponse<T> {
@@ -201,15 +201,28 @@ export class FileService {
     }
   }
 
-  /** One page of the recursive media listing (newest first). A page may be
-   *  empty while has_more is still true (server-side media filtering) —
-   *  callers keep paginating by cursor. */
-  async loadMediaPage(cursor?: string | null): Promise<FilesResponse> {
+  /** One page of the recursive media listing (newest first), optionally
+   *  bounded to a period (unix seconds). A page may be empty while has_more
+   *  is still true (server-side media filtering) — callers keep paginating. */
+  async loadMediaPage(cursor?: string | null, period?: { after: number; before: number }): Promise<FilesResponse> {
     const params: Record<string, string> = {};
     if (cursor) params['cursor'] = cursor;
+    if (period) {
+      params['after'] = String(period.after);
+      params['before'] = String(period.before);
+    }
     return firstValueFrom(
       this.http.get<FilesResponse>('/api/media', { params })
     );
+  }
+
+  /** Month covers for the timeline (newest first) — one probe per month on
+   *  the backend, independent of (and much faster than) the full stream. */
+  async loadMediaMonths(): Promise<MonthCover[]> {
+    const res = await firstValueFrom(
+      this.http.get<ApiResponse<MonthCover[]>>('/api/media/months')
+    );
+    return res.data;
   }
 
   async loadShares(): Promise<void> {

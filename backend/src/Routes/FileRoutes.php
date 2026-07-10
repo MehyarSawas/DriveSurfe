@@ -128,13 +128,20 @@ final class FileRoutes
         })->add($auth);
 
         $group->get('/media', function (Request $req, Response $res) use ($drive): Response {
-            $cursor = $req->getQueryParams()['cursor'] ?? null;
-            $result = $drive->listMedia($cursor ?: null);
+            $params = $req->getQueryParams();
+            $cursor = $params['cursor'] ?? null;
+            $after  = isset($params['after'])  && $params['after']  !== '' ? (int) $params['after']  : null;
+            $before = isset($params['before']) && $params['before'] !== '' ? (int) $params['before'] : null;
+            $result = $drive->listMedia($cursor ?: null, $after, $before);
             return self::json($res, [
                 'data'     => $result['files'],
                 'cursor'   => $result['cursor'],
                 'has_more' => $result['has_more'],
             ]);
+        })->add($auth);
+
+        $group->get('/media/months', function (Request $req, Response $res) use ($drive): Response {
+            return self::json($res, ['data' => $drive->listMediaMonths()]);
         })->add($auth);
 
         $group->get('/trash', function (Request $req, Response $res) use ($drive): Response {

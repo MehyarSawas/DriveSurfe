@@ -7,7 +7,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PreviewCacheService } from '../../core/services/preview-cache.service';
-import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession, BreadcrumbItem } from '../../core/models/drive-file.model';
+import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession, BreadcrumbItem, MonthCover } from '../../core/models/drive-file.model';
 import { FileGridComponent } from './components/file-grid/file-grid.component';
 import { FileListComponent } from './components/file-list/file-list.component';
 import { FolderTreeComponent } from './components/folder-tree/folder-tree.component';
@@ -583,6 +583,82 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly timelineDone = signal(false);
   private timelineCursor: string | null = null;
   private timelineGen = 0;
+  private timelinePeriod: { after: number; before: number } | null = null;
+  /** What the stream currently holds: 'full' or a month key — avoids reloading. */
+  private timelineLoadedKey: string | null = null;
+
+  /** iPhone-Photos-style scale: cover tiles per year / per month, or the stream. */
+  readonly timelineScale = signal<'year' | 'month' | 'all'>('all');
+  /** Month covers from the fast probe endpoint — fetched once, cached for the session. */
+  readonly timelineCovers = signal<MonthCover[] | null>(null);
+  readonly timelineCoversLoading = signal(false);
+
+  /** Months grouped by year for the Months view (covers are newest-first). */
+  readonly timelineMonthsByYear = computed(() => {
+    const groups: { year: number; months: MonthCover[] }[] = [];
+    let current: { year: number; months: MonthCover[] } | null = null;
+    for (const m of this.timelineCovers() ?? []) {
+      if (!current || current.year !== m.year) {
+        current = { year: m.year, months: [] };
+        groups.push(current);
+      }
+      current.months.push(m);
+    }
+    return groups;
+  });
+
+  /** One tile per year — its newest month's cover represents the year. */
+  readonly timelineYearCovers = computed(() =>
+    this.timelineMonthsByYear().map(g => ({ year: g.year, cover: g.months[0].cover }))
+  );
+
+  monthName(m: MonthCover): string {
+    return new Date(m.year, m.month - 1, 1).toLocaleDateString(undefined, { month: 'long' });
+  }
+
+  private async ensureTimelineCovers(): Promise<void> {
+    if (this.timelineCovers() !== null || this.timelineCoversLoading()) return;
+    this.timelineCoversLoading.set(true);
+    try {
+      this.timelineCovers.set(await this.fileService.loadMediaMonths());
+    } catch (err) {
+      console.error('timeline covers error:', err);
+      this.timelineCovers.set([]);
+    } finally {
+      this.timelineCoversLoading.set(false);
+    }
+  }
+
+  setTimelineScale(scale: 'year' | 'month' | 'all'): void {
+    this.timelineScale.set(scale);
+    if (scale === 'all') {
+      this.startTimelineStream('full', null);
+    } else {
+      this.ensureTimelineCovers();
+    }
+    this.scrollContentTop();
+  }
+
+  openTimelineYear(year: number): void {
+    this.timelineScale.set('month');
+    this.ensureTimelineCovers();
+    setTimeout(() => {
+      document.querySelector(`.months-year-block[data-year="${year}"]`)
+        ?.scrollIntoView({ block: 'start' });
+    }, 50);
+  }
+
+  openTimelineMonth(m: MonthCover): void {
+    const after = Math.floor(new Date(m.year, m.month - 1, 1).getTime() / 1000);
+    const before = Math.floor(new Date(m.year, m.month, 1).getTime() / 1000) - 1;
+    this.timelineScale.set('all');
+    this.startTimelineStream(m.key, { after, before });
+    this.scrollContentTop();
+  }
+
+  private scrollContentTop(): void {
+    document.querySelector('.file-content')?.scrollTo({ top: 0 });
+  }
 
   /** DOM render window: data loads fully in the background, but only this many
    *  items are RENDERED — thousands of file cards at once freeze the app.
@@ -632,8 +708,19 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.clearSelection();
     this.fileService.breadcrumb.set([{ id: '__timeline__', name: 'Timeline' }]);
     this.fileService.currentFolderId.set('__timeline__');
-    this.fileService.searchResults.set([]);
     this.router.navigate(['/folder', '__timeline__'], { replaceUrl: true });
+    this.timelineScale.set('all');
+    this.timelineLoadedKey = null; // fresh entry — always (re)load the stream
+    this.startTimelineStream('full', null);
+  }
+
+  /** (Re)start the media stream for a target: 'full' or one month (period
+   *  bounds, unix seconds). No-op if that exact target is already loaded. */
+  private startTimelineStream(key: string, period: { after: number; before: number } | null): void {
+    if (this.timelineLoadedKey === key) return;
+    this.timelineLoadedKey = key;
+    this.timelinePeriod = period;
+    this.fileService.searchResults.set([]);
     this.timelineCursor = null;
     this.timelineDone.set(false);
     this.timelineRenderLimit.set(200);
@@ -662,7 +749,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.timelineLoadingMore.set(true);
     try {
       do {
-        const page = await this.fileService.loadMediaPage(this.timelineCursor);
+        const page = await this.fileService.loadMediaPage(this.timelineCursor, this.timelinePeriod ?? undefined);
         if (gen !== this.timelineGen || !this.isTimeline()) return;
         this.timelineCursor = page.cursor;
         if (!page.has_more || !page.cursor) this.timelineDone.set(true);

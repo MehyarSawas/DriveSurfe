@@ -328,35 +328,84 @@
          (scroll)="onContentScroll($event)">
       @if (isTimeline()) {
         <div class="timeline">
-          @for (g of timelineGroups(); track g.key) {
-            <div class="timeline-group">
-              <div class="timeline-month">{{ g.label }}</div>
-              <ds-file-grid
-                [files]="g.files"
-                [selectedIds]="fileService.selectedIds()"
-                [sharedIds]="fileService.sharedFileIds()"
-                (fileClick)="openPreview($event)"
-                (selectToggle)="fileService.toggleSelect($event.id)"
-                (favorite)="toggleFavorite($event)"
-                (download)="fileService.downloadFile($event.id, $event.name)"
-                (delete)="fileService.delete($event)"
-                (rename)="handleRename($event)"
-                (move)="openMoveForFile($event)"
-                (copy)="openCopyForFile($event)"
-                (share)="openShare($event)"
-              />
-            </div>
+          @switch (timelineScale()) {
+            @case ('year') {
+              @if (timelineCoversLoading()) {
+                <div class="loading timeline-loading"><div class="spinner"></div></div>
+              } @else {
+                <div class="cover-grid years">
+                  @for (y of timelineYearCovers(); track y.year) {
+                    <div class="cover-tile year" (click)="openTimelineYear(y.year)">
+                      <img [src]="y.cover.thumbnail_url" [alt]="y.year" loading="lazy" />
+                      <div class="cover-overlay"><span class="cover-label">{{ y.year }}</span></div>
+                    </div>
+                  }
+                </div>
+                @if (timelineYearCovers().length === 0) {
+                  <div class="empty"><p>No media files found</p></div>
+                }
+              }
+            }
+            @case ('month') {
+              @if (timelineCoversLoading()) {
+                <div class="loading timeline-loading"><div class="spinner"></div></div>
+              } @else {
+                @for (yg of timelineMonthsByYear(); track yg.year) {
+                  <div class="months-year-block" [attr.data-year]="yg.year">
+                    <div class="timeline-month">{{ yg.year }}</div>
+                    <div class="cover-grid months">
+                      @for (m of yg.months; track m.key) {
+                        <div class="cover-tile" (click)="openTimelineMonth(m)">
+                          <img [src]="m.cover.thumbnail_url" [alt]="monthName(m)" loading="lazy" />
+                          <div class="cover-overlay"><span class="cover-label">{{ monthName(m) }}</span></div>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+                @if (timelineMonthsByYear().length === 0) {
+                  <div class="empty"><p>No media files found</p></div>
+                }
+              }
+            }
+            @default {
+              @for (g of timelineGroups(); track g.key) {
+                <div class="timeline-group">
+                  <div class="timeline-month">{{ g.label }}</div>
+                  <ds-file-grid
+                    [files]="g.files"
+                    [selectedIds]="fileService.selectedIds()"
+                    [sharedIds]="fileService.sharedFileIds()"
+                    (fileClick)="openPreview($event)"
+                    (selectToggle)="fileService.toggleSelect($event.id)"
+                    (favorite)="toggleFavorite($event)"
+                    (download)="fileService.downloadFile($event.id, $event.name)"
+                    (delete)="fileService.delete($event)"
+                    (rename)="handleRename($event)"
+                    (move)="openMoveForFile($event)"
+                    (copy)="openCopyForFile($event)"
+                    (share)="openShare($event)"
+                  />
+                </div>
+              }
+              @if (timelineLoadingMore() || timelineHasMoreToRender()) {
+                <div class="loading timeline-loading"><div class="spinner"></div></div>
+              } @else if (timelineGroups().length === 0) {
+                <div class="empty">
+                  <svg viewBox="0 0 24 24"><path d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l1.63 2.18 2.37-2.96L18 15H10z"/></svg>
+                  <p>No media files found</p>
+                </div>
+              } @else if (timelineDone()) {
+                <p class="timeline-end">No more media</p>
+              }
+            }
           }
-          @if (timelineLoadingMore() || timelineHasMoreToRender()) {
-            <div class="loading timeline-loading"><div class="spinner"></div></div>
-          } @else if (timelineGroups().length === 0) {
-            <div class="empty">
-              <svg viewBox="0 0 24 24"><path d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l1.63 2.18 2.37-2.96L18 15H10z"/></svg>
-              <p>No media files found</p>
-            </div>
-          } @else if (timelineDone()) {
-            <p class="timeline-end">No more media</p>
-          }
+
+          <div class="timeline-scale-pill">
+            <button [class.active]="timelineScale() === 'year'" (click)="setTimelineScale('year')">Years</button>
+            <button [class.active]="timelineScale() === 'month'" (click)="setTimelineScale('month')">Months</button>
+            <button [class.active]="timelineScale() === 'all'" (click)="setTimelineScale('all')">All</button>
+          </div>
         </div>
       } @else if (fileService.searchLoading() || (!fileService.searchResults() && fileService.loading())) {
         <div class="loading">

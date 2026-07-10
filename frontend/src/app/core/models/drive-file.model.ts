@@ -80,3 +80,11 @@ export interface BreadcrumbItem {
   id: string;
   name: string;
 }
+
+/** One existing month in the media timeline, with its newest media file as cover. */
+export interface MonthCover {
+  key: string;   // 'YYYY-MM'
+  year: number;
+  month: number; // 1-12
+  cover: DriveFile;
+}
