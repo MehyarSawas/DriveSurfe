@@ -359,7 +359,12 @@ final class KDriveClient implements DriveInterface
             'fulfilled'   => function ($response, $i) use (&$responses) { $responses[$i] = $response; },
             'rejected'    => function ($reason, $i) use (&$rejected) {
                 $msg = $reason instanceof \Throwable ? $reason->getMessage() : (string) $reason;
-                $rejected[$i] = substr($msg, 0, 300);
+                // Guzzle truncates response bodies in messages — append the full
+                // upstream error so validation failures (422) are diagnosable.
+                if ($reason instanceof \GuzzleHttp\Exception\BadResponseException) {
+                    $msg .= ' | body: ' . substr((string) $reason->getResponse()->getBody(), 0, 500);
+                }
+                $rejected[$i] = substr($msg, 0, 900);
             },
         ]);
         $pool->promise()->wait();
