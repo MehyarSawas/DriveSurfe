@@ -333,6 +333,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this._lastSearchEvent = null;
     this.preSearchBreadcrumb.set([]);
     this.fileService.currentFolderId.set(folderId);
+    this.applySavedSort(folderId);
     if (folderId !== HOME_FOLDER_ID) {
       this.resolveBreadcrumb(folderId).then(crumbs => this.fileService.breadcrumb.set(crumbs));
     } else {
@@ -582,6 +583,40 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Per-folder sort preferences, persisted in localStorage. */
+  private static readonly SORTS_KEY = 'ds-folder-sorts';
+
+  private static loadFolderSorts(): Record<string, { by: SortBy; dir: SortDir }> {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(FileBrowserComponent.SORTS_KEY) ?? '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private saveFolderSort(folderId: string): void {
+    if (folderId.startsWith('__')) return; // virtual views manage their own sort
+    try {
+      const sorts = FileBrowserComponent.loadFolderSorts();
+      sorts[folderId] = { by: this.sortBy(), dir: this.sortDir() };
+      localStorage.setItem(FileBrowserComponent.SORTS_KEY, JSON.stringify(sorts));
+    } catch { /* storage blocked/full — sort just won't persist */ }
+  }
+
+  /** Restore this folder's remembered sort (if any) BEFORE loading it, so the
+   *  folder opens already sorted the way the user left it. */
+  private applySavedSort(folderId: string): void {
+    if (folderId.startsWith('__')) return;
+    const saved = FileBrowserComponent.loadFolderSorts()[folderId];
+    if (!saved) return;
+    if (['name', 'size', 'last_modified_at'].includes(saved.by)
+        && ['asc', 'desc'].includes(saved.dir)) {
+      this.sortBy.set(saved.by);
+      this.sortDir.set(saved.dir);
+    }
+  }
+
   toggleSort(by: SortBy): void {
     if (this.sortBy() === by) {
       this.sortDir.update(d => d === 'asc' ? 'desc' : 'asc');
@@ -606,6 +641,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (this.fileService.searchResults() !== null) {
       if (this._lastSearchEvent) this.onSearch(this._lastSearchEvent);
     } else {
+      this.saveFolderSort(this.fileService.currentFolderId());
       this.loadCurrentFolder();
     }
   }
@@ -1077,6 +1113,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   navigateToFolder(id: string, name: string): void {
     this.fileService.clearSelection();
+    this.applySavedSort(id);
     this.fileService.navigateToFolder(id, name);
     this.router.navigate(['/folder', id]);
     this.loadCurrentFolder();
