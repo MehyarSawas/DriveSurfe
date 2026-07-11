@@ -249,6 +249,10 @@ final class KDriveClient implements DriveInterface
         // modified_before returns empty once it points into the past — both
         // verified against production. History is only reachable via plain
         // cursor pagination; period views filter client-side.
+        $timelineFolder = $this->getTimelineFolderId();
+        if ($timelineFolder !== null) {
+            $params['directory_id'] = (int) $timelineFolder;
+        }
         if ($cursor) $params['cursor'] = $cursor;
 
         $data  = $this->get("{$driveId}/files/search", $params, self::API_V3);
@@ -346,17 +350,25 @@ final class KDriveClient implements DriveInterface
      * history behind the head never changes.
      */
     private const MONTHS_CACHE_DIR      = __DIR__ . '/../../../cache/months';
-    // v4: covers prefer images over videos (schema bump forces a clean rebuild)
-    private const MONTHS_STATE_FILE     = self::MONTHS_CACHE_DIR . '/v4-state.json';
     private const MONTHS_HEAD_TTL       = 900; // 15 min — only the head of the stream changes
     private const MONTHS_PAGES_PER_CALL = 5;   // per poll — bounded by rate limit + PHP exec time
     private const MONTHS_TIME_BUDGET    = 8;   // s per poll — return partial fast instead of hanging
 
+    /** State file path — versioned (v4: image-preferring covers) and keyed by
+     *  the configured TIMELINE_FOLDER_ID, so changing the folder in .env
+     *  automatically starts a fresh index instead of serving the old one. */
+    private function monthsStateFile(): string
+    {
+        $folder = $this->getTimelineFolderId();
+        return self::MONTHS_CACHE_DIR . '/v4-state' . ($folder !== null ? "-{$folder}" : '') . '.json';
+    }
+
     public function listMediaMonths(bool $debug = false, bool $refresh = false): array
     {
+        $stateFile = $this->monthsStateFile();
         $state = ['months' => [], 'cursor' => null, 'complete' => false, 'updated_at' => 0];
-        if (is_file(self::MONTHS_STATE_FILE)) {
-            $cached = json_decode((string) file_get_contents(self::MONTHS_STATE_FILE), true);
+        if (is_file($stateFile)) {
+            $cached = json_decode((string) file_get_contents($stateFile), true);
             if (is_array($cached) && isset($cached['months']) && is_array($cached['months'])) {
                 $state = array_merge($state, $cached);
             }
@@ -410,7 +422,7 @@ final class KDriveClient implements DriveInterface
             'complete' => (bool) $state['complete'],
             'meta'     => [
                 'updated_at' => (int) $state['updated_at'],
-                'size_bytes' => is_file(self::MONTHS_STATE_FILE) ? (int) filesize(self::MONTHS_STATE_FILE) : 0,
+                'size_bytes' => is_file($stateFile) ? (int) filesize($stateFile) : 0,
                 'count'      => count($months),
             ],
         ];
@@ -467,9 +479,10 @@ final class KDriveClient implements DriveInterface
     private function saveMonthsState(array $state): void
     {
         @mkdir(self::MONTHS_CACHE_DIR, 0775, true);
-        $tmp = self::MONTHS_STATE_FILE . '.tmp.' . bin2hex(random_bytes(4));
+        $stateFile = $this->monthsStateFile();
+        $tmp = $stateFile . '.tmp.' . bin2hex(random_bytes(4));
         if (@file_put_contents($tmp, json_encode($state), LOCK_EX) !== false) {
-            @rename($tmp, self::MONTHS_STATE_FILE);
+            @rename($tmp, $stateFile);
         }
     }
 
@@ -712,6 +725,15 @@ final class KDriveClient implements DriveInterface
     private function getToken(): string
     {
         return $_ENV['KDRIVE_TOKEN'] ?? throw new RuntimeException('KDRIVE_TOKEN not set in .env');
+    }
+
+    /** Optional root folder for the timeline (TIMELINE_FOLDER_ID in .env).
+     *  When set, the media stream and month index only cover that folder
+     *  (recursively) instead of the whole drive. Null = whole drive. */
+    private function getTimelineFolderId(): ?string
+    {
+        $id = trim((string) ($_ENV['TIMELINE_FOLDER_ID'] ?? ''));
+        return $id !== '' && preg_match('/^\d+$/', $id) ? $id : null;
     }
 
     private function get(string $path, array $query = [], ?string $baseUrl = null): array
