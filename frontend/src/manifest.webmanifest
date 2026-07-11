@@ -1,7 +1,7 @@
 {
   "name": "DriveSurfe",
   "short_name": "DriveSurfe",
-  "theme_color": "#0284c7",
+  "theme_color": "#1a73e8",
   "background_color": "#f8f9fa",
   "display": "standalone",
   "scope": "/",
