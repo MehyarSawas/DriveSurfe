@@ -950,7 +950,9 @@ ds-search-bar {
 .info-overlay {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  // Above the preview (root z-index 1000) and the share dialog (1200) —
+  // Info can be opened from the preview's three-dots menu.
+  z-index: 1300;
   background: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
