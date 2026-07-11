@@ -504,7 +504,7 @@
   svg {
     width: 16px;
     height: 16px;
-    fill: var(--color-primary, #1a73e8);
+    fill: var(--color-primary, #0284c7);
     flex-shrink: 0;
   }
 }
@@ -667,8 +667,8 @@
   &:active { background: var(--color-hover, #f5f5f5); }
 
   &.add-folder {
-    color: var(--color-primary, #1a73e8);
-    svg { fill: var(--color-primary, #1a73e8); }
+    color: var(--color-primary, #0284c7);
+    svg { fill: var(--color-primary, #0284c7); }
   }
 }
 
@@ -689,14 +689,14 @@
   background: var(--color-bg, #f8f9fa);
   outline: none;
 
-  &:focus { border-color: var(--color-primary, #1a73e8); }
+  &:focus { border-color: var(--color-primary, #0284c7); }
 }
 
 .folder-create-btn {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--color-primary, #1a73e8);
+  background: var(--color-primary, #0284c7);
   display: flex;
   align-items: center;
   justify-content: center;

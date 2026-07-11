@@ -107,76 +107,39 @@ function makePng(size, bgR, bgG, bgB, draw) {
 }
 
 function drawIcon(pixels, size) {
-  // Draw a simple mountain/wave shape (white) on blue bg
-  const cx = size / 2, cy = size / 2;
-  const r = size * 0.38;
-
+  // Dual-tone surf waves on the sky-blue bg (matches the in-app SVG mark):
+  // a 40%-white back crest, a solid-white front crest, both filled to the
+  // bottom. PWA icons stay full-bleed squares — the OS applies its own mask.
   function setPixel(x, y, r2, g2, b2) {
-    x = Math.round(x); y = Math.round(y);
     if (x < 0 || x >= size || y < 0 || y >= size) return;
     const i = (y * size + x) * 4;
     pixels[i] = r2; pixels[i+1] = g2; pixels[i+2] = b2;
   }
 
-  // Draw mountain peaks (white triangles)
-  const peakY = cy - r * 0.15;
-  const baseY = cy + r * 0.45;
-  const left  = cx - r * 0.75;
-  const right = cx + r * 0.75;
+  // Back tone = white at 40% over #0284c7 (icons are opaque RGB)
+  const BACK = [154, 206, 233];
 
-  // Fill mountain shape using scanline
-  for (let y = Math.floor(peakY - r * 0.5); y <= Math.ceil(baseY); y++) {
-    const t = (y - peakY) / (baseY - peakY);
-    if (t < 0) continue;
-    // left mountain peak at cx-r*0.25, smaller right peak at cx+r*0.3
-    const lx1 = left + (cx - r * 0.25 - left) * Math.max(0, 1 - Math.abs(t - 0) / 1);
-    const rx1 = right - (right - (cx + r * 0.3)) * Math.max(0, 1 - Math.abs(t - 0) / 1);
-    const xL = left + (right - left) * Math.max(0, (t - 0));
-    const xR = right - (right - left) * Math.max(0, (t - 0));
-    // Simple: just two triangles
-    // Left triangle: peak at cx-r*0.2, base left..cx+r*0.1
-    const lPeakX = cx - r * 0.2;
-    const lBaseL = left, lBaseR = cx + r * 0.1;
-    const rPeakX = cx + r * 0.35;
-    const rBaseL = cx - r * 0.05, rBaseR = right;
+  // Crest curves as smooth cosines, ~1.5 periods across the icon —
+  // approximates the SVG cubic curves closely enough at icon sizes.
+  const yBack  = x => size * (0.51 + 0.085 * Math.cos((x / size) * Math.PI * 3 + 0.6));
+  const yFront = x => size * (0.67 + 0.09  * Math.cos((x / size) * Math.PI * 3 + 1.1));
 
-    // Left mountain
-    const tL = Math.min(1, (y - (peakY - r * 0.4)) / (baseY - (peakY - r * 0.4)));
-    if (tL >= 0) {
-      const wL = Math.abs(lPeakX - lBaseL) * tL;
-      const wR = Math.abs(lPeakX - lBaseR) * tL;
-      for (let x = Math.floor(lPeakX - wL); x <= Math.ceil(lPeakX + wR); x++) {
-        setPixel(x, y, 255, 255, 255);
-      }
-    }
-    // Right mountain (smaller, starts higher)
-    const tR = Math.min(1, (y - (peakY + r * 0.05)) / (baseY - (peakY + r * 0.05)));
-    if (tR >= 0) {
-      const wL2 = Math.abs(rPeakX - rBaseL) * tR;
-      const wR2 = Math.abs(rPeakX - rBaseR) * tR;
-      for (let x = Math.floor(rPeakX - wL2); x <= Math.ceil(rPeakX + wR2); x++) {
-        setPixel(x, y, 255, 255, 255);
-      }
-    }
-  }
-
-  // Horizon line
-  const horizY = cy + r * 0.5;
-  for (let x = Math.floor(left); x <= Math.ceil(right); x++) {
-    for (let dy = 0; dy < Math.max(2, size * 0.04); dy++) {
-      setPixel(x, Math.round(horizY) + dy, 255, 255, 255);
-    }
+  for (let x = 0; x < size; x++) {
+    const yb = Math.round(yBack(x));
+    const yf = Math.round(yFront(x));
+    for (let y = yb; y < size; y++) setPixel(x, y, BACK[0], BACK[1], BACK[2]);
+    for (let y = yf; y < size; y++) setPixel(x, y, 255, 255, 255);
   }
 }
 
 const SIZES = [72, 96, 128, 144, 152, 192, 384, 512];
 for (const size of SIZES) {
-  const png = makePng(size, 26, 115, 232, drawIcon); // #1a73e8
+  const png = makePng(size, 2, 132, 199, drawIcon); // #0284c7
   writeFileSync(join(DEST, `icon-${size}x${size}.png`), png);
   console.log(`✓ icon-${size}x${size}.png`);
 }
 
 // favicon.ico = 32x32 PNG renamed (browsers accept PNG as favicon)
-const fav = makePng(32, 26, 115, 232, drawIcon);
+const fav = makePng(32, 2, 132, 199, drawIcon);
 writeFileSync(join(__dirname, 'src/favicon.ico'), fav);
 console.log('✓ favicon.ico');

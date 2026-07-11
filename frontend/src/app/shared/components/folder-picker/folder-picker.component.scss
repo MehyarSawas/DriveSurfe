@@ -59,7 +59,7 @@
 .crumb-link {
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-primary, #1a73e8);
+  color: var(--color-primary, #0284c7);
   white-space: nowrap;
   max-width: 80px;
   overflow: hidden;
@@ -114,7 +114,7 @@
   .recent-check {
     width: 18px;
     height: 18px;
-    fill: var(--color-primary, #1a73e8);
+    fill: var(--color-primary, #0284c7);
     flex-shrink: 0;
   }
 }
@@ -135,7 +135,7 @@
   width: 24px;
   height: 24px;
   border: 3px solid var(--color-border, #e0e0e0);
-  border-top-color: var(--color-primary, #1a73e8);
+  border-top-color: var(--color-primary, #0284c7);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -178,11 +178,11 @@
 .new-folder-icon {
   width: 22px;
   height: 22px;
-  fill: var(--color-primary, #1a73e8);
+  fill: var(--color-primary, #0284c7);
   flex-shrink: 0;
 }
 
-.new-folder-row { color: var(--color-primary, #1a73e8); }
+.new-folder-row { color: var(--color-primary, #0284c7); }
 
 .folder-name {
   flex: 1;
@@ -228,14 +228,14 @@
   background: var(--color-bg, #f8f9fa);
   outline: none;
 
-  &:focus { border-color: var(--color-primary, #1a73e8); }
+  &:focus { border-color: var(--color-primary, #0284c7); }
 }
 
 .create-btn {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--color-primary, #1a73e8);
+  background: var(--color-primary, #0284c7);
   display: flex;
   align-items: center;
   justify-content: center;
