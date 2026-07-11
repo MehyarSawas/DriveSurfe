@@ -228,7 +228,7 @@ final class KDriveClient implements DriveInterface
      * fewer (even zero) items than `limit` while has_more is still true —
      * callers must keep paginating by cursor.
      */
-    public function listMedia(?string $cursor = null, ?int $before = null): array
+    public function listMedia(?string $cursor = null): array
     {
         $driveId = $this->getDriveId();
         $params = [
@@ -244,15 +244,11 @@ final class KDriveClient implements DriveInterface
             // media instead of mostly documents.
             'types'    => ['image', 'video'],
         ];
-        // Walk history with modified_before ONLY. modified_after can't be used
-        // to reach the past: its documented minimum is the drive-creation
-        // timestamp, so any older value is rejected 422 validation_rule_min.
-        // modified_before + order=desc is enough — pages arrive newest-first,
-        // and the oldest timestamp on a page is the resume point for the next.
-        if ($before !== null) {
-            $params['modified_at']     = 'custom';
-            $params['modified_before'] = $before;
-        }
+        // NO date params here, deliberately: on this endpoint modified_after
+        // is floored at the drive-creation date (422 below it) and
+        // modified_before returns empty once it points into the past — both
+        // verified against production. History is only reachable via plain
+        // cursor pagination; period views filter client-side.
         if ($cursor) $params['cursor'] = $cursor;
 
         $data  = $this->get("{$driveId}/files/search", $params, self::API_V3);
@@ -333,104 +329,118 @@ final class KDriveClient implements DriveInterface
     }
 
     /**
-     * One BATCH of timeline month covers, walking the newest-first media
-     * stream backwards from `$before` (or now) with modified_before only.
+     * Timeline month covers, built as a persistent CURSOR-WALK index.
      *
-     * kDrive has no "list months" API and its date filter can't reach past the
-     * drive-creation date via modified_after, so months are discovered by
-     * walking the stream: each distinct Y-m seen (newest-first) yields one
-     * cover (its newest media file). To keep a single request cheap and bound
-     * the rate limit, a batch stops once MONTHS_PER_BATCH new months are found
-     * (or MONTHS_PAGE_CAP pages are read), returning `next_before` so the
-     * frontend can pull the next batch ("12 months, then another 12").
+     * Empirically (this drive), the search endpoint's modified_before returns
+     * nothing once it points into the past beyond the newest weeks, and
+     * modified_after is floored at the drive-creation date — so date params
+     * cannot enumerate history at all. The only thing that reliably walks the
+     * whole newest-first stream is plain cursor pagination.
      *
-     * Each batch is keyed by its `$before` and cached: history is immutable so
-     * historical batches cache indefinitely; the head batch (before=null)
-     * carries new uploads and expires after MONTHS_HEAD_TTL.
+     * So: each call advances the walk by up to MONTHS_PAGES_PER_CALL pages
+     * from a cursor persisted in a state file, merging every newly seen
+     * Y-m month (its first/newest file = cover, plus the CURSOR of the page
+     * it appeared on — month drill-down streams from that cursor). The
+     * frontend polls until `complete`. Once complete, only the newest page is
+     * rescanned (at most every MONTHS_HEAD_TTL) to pick up new uploads —
+     * history behind the head never changes.
      */
-    private const MONTHS_CACHE_DIR   = __DIR__ . '/../../../cache/months';
-    private const MONTHS_HEAD_TTL    = 900;  // 15 min — only the newest batch changes
-    private const MONTHS_PER_BATCH   = 12;
-    private const MONTHS_PAGE_CAP    = 12;   // max stream pages per batch (rate-limit bound)
+    private const MONTHS_CACHE_DIR      = __DIR__ . '/../../../cache/months';
+    private const MONTHS_STATE_FILE     = self::MONTHS_CACHE_DIR . '/v3-state.json';
+    private const MONTHS_HEAD_TTL       = 900; // 15 min — only the head of the stream changes
+    private const MONTHS_PAGES_PER_CALL = 5;   // per poll — bounded by rate limit + PHP exec time
 
-    public function listMediaMonths(?int $before = null, bool $debug = false): array
+    public function listMediaMonths(bool $debug = false): array
     {
-        // Version prefix: bump when the batch schema/walk logic changes so
-        // indefinitely-cached historical batches from an older build are ignored.
-        $cacheFile = self::MONTHS_CACHE_DIR . '/v2-' . ($before === null ? 'head' : (string) $before) . '.json';
-        if (!$debug && is_file($cacheFile)) {
-            $fresh = $before !== null // historical batches never change
-                || (time() - (int) filemtime($cacheFile) < self::MONTHS_HEAD_TTL);
-            if ($fresh) {
-                $cached = json_decode((string) file_get_contents($cacheFile), true);
-                if (is_array($cached)) return $cached;
+        $state = ['months' => [], 'cursor' => null, 'complete' => false, 'updated_at' => 0];
+        if (is_file(self::MONTHS_STATE_FILE)) {
+            $cached = json_decode((string) file_get_contents(self::MONTHS_STATE_FILE), true);
+            if (is_array($cached) && isset($cached['months']) && is_array($cached['months'])) {
+                $state = array_merge($state, $cached);
             }
         }
+        $diag = ['pages' => 0, 'rejected' => null];
 
-        $months        = [];
-        $seen          = [];
-        $cursor        = null;
-        $oldestOverall = null; // oldest ts seen across ALL pages in this batch
-        $complete      = false;
-        $diag          = ['pages' => 0, 'rejected' => null];
-
-        for ($page = 0; $page < self::MONTHS_PAGE_CAP; $page++) {
+        if (!$state['complete']) {
+            // Advance the walk; keep partial progress on error (e.g. a 429 that
+            // outlives get()'s retry) — the next poll resumes from the cursor.
             try {
-                // Only page 0 sets modified_before; later pages ride the cursor
-                // (which already encodes the filter for this batch).
-                $res = $this->listMedia($cursor, $page === 0 ? $before : null);
+                for ($i = 0; $i < self::MONTHS_PAGES_PER_CALL; $i++) {
+                    $pageCursor = $state['cursor'];
+                    $res = $this->listMedia($pageCursor);
+                    $diag['pages']++;
+                    $this->mergeMonths($state['months'], $res['files'], $pageCursor, false);
+                    $state['cursor'] = $res['cursor'];
+                    if (!($res['has_more'] ?? false) || !$res['cursor']) {
+                        $state['complete'] = true;
+                        break;
+                    }
+                }
             } catch (RuntimeException $e) {
                 $diag['rejected'] = substr($e->getMessage(), 0, 600);
-                break;
             }
-            $diag['pages']++;
-
-            foreach ($res['files'] as $f) {
-                $ts = $f['modified_at'] ? strtotime($f['modified_at']) : false;
-                if ($ts === false || $ts <= 0) continue;
-                $oldestOverall = $oldestOverall === null ? $ts : min($oldestOverall, $ts);
-                $key = date('Y-m', $ts);
-                if (isset($seen[$key])) continue;
-                $seen[$key] = true;
-                $months[$key] = [
-                    'key'   => $key,
-                    'year'  => (int) substr($key, 0, 4),
-                    'month' => (int) substr($key, 5, 2),
-                    'cover' => $f, // first occurrence = newest media of the month
-                ];
+            $state['updated_at'] = time();
+            $this->saveMonthsState($state);
+        } elseif (time() - (int) $state['updated_at'] >= self::MONTHS_HEAD_TTL) {
+            // Index complete — refresh only the head page so new uploads show
+            // up (new months appear; the newest months' covers track them).
+            try {
+                $res = $this->listMedia(null);
+                $diag['pages']++;
+                $this->mergeMonths($state['months'], $res['files'], null, true);
+                $state['updated_at'] = time();
+                $this->saveMonthsState($state);
+            } catch (RuntimeException $e) {
+                $diag['rejected'] = substr($e->getMessage(), 0, 600); // serve stale
             }
-
-            $cursor = $res['cursor'];
-            if (!($res['has_more'] ?? false) || !$cursor) { $complete = true; break; }
-            // Stop this batch once we have enough months OR hit the page cap
-            // (the for-condition). Either way the resume point is computed
-            // below from the oldest ts seen — NOT only in the month-count
-            // branch, or a page-cap stop would drop the cursor and the walk
-            // would end prematurely.
-            if (count($months) >= self::MONTHS_PER_BATCH) break;
         }
 
-        // Resume the next batch just before the oldest file we've seen. Null
-        // only when the walk genuinely reached the end (complete) or the batch
-        // returned nothing usable.
-        $nextBefore = $oldestOverall !== null ? $oldestOverall - 1 : null;
-        if ($nextBefore === null) $complete = true;
-
+        $months = $state['months'];
+        krsort($months); // 'YYYY-MM' string keys — reverse-sorted = newest first
         $result = [
-            'months'      => array_values($months), // already newest-first
-            'next_before' => $complete ? null : $nextBefore,
-            'complete'    => $complete,
+            'months'   => array_values($months),
+            'complete' => (bool) $state['complete'],
         ];
-        if ($debug) $result['debug'] = $diag;
-
-        if (!$debug && ($complete || $months !== [])) {
-            @mkdir(self::MONTHS_CACHE_DIR, 0775, true);
-            $tmp = $cacheFile . '.tmp.' . bin2hex(random_bytes(4));
-            if (@file_put_contents($tmp, json_encode($result), LOCK_EX) !== false) {
-                @rename($tmp, $cacheFile);
-            }
+        if ($debug) {
+            $result['debug'] = $diag + ['cursor' => $state['cursor'], 'count' => count($months)];
         }
         return $result;
+    }
+
+    /** Merge one page of newest-first files into the months map. On refresh,
+     *  the first file seen per month also replaces the cover (newest wins). */
+    private function mergeMonths(array &$months, array $files, ?string $pageCursor, bool $refreshCovers): void
+    {
+        $seenThisPage = [];
+        foreach ($files as $f) {
+            $ts = $f['modified_at'] ? strtotime($f['modified_at']) : false;
+            if ($ts === false || $ts <= 0) continue;
+            $key = date('Y-m', $ts);
+            if (isset($seenThisPage[$key])) continue;
+            $seenThisPage[$key] = true;
+            if (!isset($months[$key])) {
+                $months[$key] = [
+                    'key'    => $key,
+                    'year'   => (int) substr($key, 0, 4),
+                    'month'  => (int) substr($key, 5, 2),
+                    'cover'  => $f, // first occurrence = newest media of the month
+                    // Cursor of the page this month first appeared on (null =
+                    // stream head) — month drill-down streams from here.
+                    'cursor' => $pageCursor,
+                ];
+            } elseif ($refreshCovers) {
+                $months[$key]['cover'] = $f;
+            }
+        }
+    }
+
+    private function saveMonthsState(array $state): void
+    {
+        @mkdir(self::MONTHS_CACHE_DIR, 0775, true);
+        $tmp = self::MONTHS_STATE_FILE . '.tmp.' . bin2hex(random_bytes(4));
+        if (@file_put_contents($tmp, json_encode($state), LOCK_EX) !== false) {
+            @rename($tmp, self::MONTHS_STATE_FILE);
+        }
     }
 
     public function createShareLink(string $fileId, array $options): array

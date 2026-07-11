@@ -204,22 +204,19 @@ export class FileService {
   /** One page of the recursive media listing (newest first), optionally
    *  bounded to a period (unix seconds). A page may be empty while has_more
    *  is still true (server-side media filtering) — callers keep paginating. */
-  async loadMediaPage(cursor?: string | null, before?: number | null): Promise<FilesResponse> {
+  async loadMediaPage(cursor?: string | null): Promise<FilesResponse> {
     const params: Record<string, string> = {};
     if (cursor) params['cursor'] = cursor;
-    if (before != null) params['before'] = String(before);
     return firstValueFrom(
       this.http.get<FilesResponse>('/api/media', { params })
     );
   }
 
-  /** One batch of timeline month covers (newest first). Pass the previous
-   *  batch's `next_before` to page further back through history. */
-  async loadMediaMonths(before?: number | null): Promise<MediaMonthsResponse> {
-    const params: Record<string, string> = {};
-    if (before != null) params['before'] = String(before);
+  /** The month-cover index so far (newest first). Each call advances the
+   *  backend's cursor walk a few pages — poll until `complete` is true. */
+  async loadMediaMonths(): Promise<MediaMonthsResponse> {
     const res = await firstValueFrom(
-      this.http.get<ApiResponse<MediaMonthsResponse>>('/api/media/months', { params })
+      this.http.get<ApiResponse<MediaMonthsResponse>>('/api/media/months')
     );
     return res.data;
   }

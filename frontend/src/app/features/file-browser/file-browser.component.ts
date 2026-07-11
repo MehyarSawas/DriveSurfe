@@ -589,7 +589,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly timelineDone = signal(false);
   private timelineCursor: string | null = null;
   private timelineGen = 0;
-  private timelinePeriod: { key: string; before: number | null } | null = null;
+  private timelinePeriod: { key: string; startCursor: string | null } | null = null;
   /** What the stream currently holds: 'full' or a month key — avoids reloading. */
   private timelineLoadedKey: string | null = null;
 
@@ -601,7 +601,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly timelineCoversLoading = signal(false);
   readonly timelineCoversError = signal<string | null>(null);
   private timelineCoversComplete = false;
-  private timelineCoversNextBefore: number | null = null;
   private coversGen = 0;
 
   /** Months grouped by year for the Months view (covers are newest-first). */
@@ -639,13 +638,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.timelineCoversError.set(null);
     try {
       for (;;) {
-        const res = await this.fileService.loadMediaMonths(this.timelineCoversNextBefore);
+        // Each call advances the backend's cursor walk a few pages and returns
+        // ALL months discovered so far (newest first) — so replace, not append.
+        const res = await this.fileService.loadMediaMonths();
         if (gen !== this.coversGen) return;
-        this.timelineCovers.update(cur => [...(cur ?? []), ...res.months]);
-        this.timelineCoversNextBefore = res.next_before;
-        if (res.complete || res.next_before == null) { this.timelineCoversComplete = true; break; }
-        // Keep pulling the rest of history immediately (batches are cheap and
-        // cached); only stop if the user leaves the timeline entirely.
+        this.timelineCovers.set(res.months);
+        if (res.complete) { this.timelineCoversComplete = true; break; }
+        // Keep polling until the walk reaches the oldest photo; only stop if
+        // the user leaves the timeline entirely.
         if (!this.isTimeline()) break;
       }
     } catch (err) {
@@ -677,7 +677,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   /** Continue an interrupted stream from its cursor, or start a new one. */
-  private resumeOrStartTimelineStream(key: string, period: { key: string; before: number | null } | null): void {
+  private resumeOrStartTimelineStream(key: string, period: { key: string; startCursor: string | null } | null): void {
     if (this.timelineLoadedKey === key) {
       if (!this.timelineDone() && !this.timelineLoadingMore()) {
         ++this.timelineGen;
@@ -698,17 +698,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   openTimelineMonth(m: MonthCover): void {
-    // Seed the server scan just past the end of the target month so page 0
-    // begins at its newest file. Clamp to now: kDrive rejects a
-    // modified_before that lands after tomorrow, so for the current month we
-    // send no bound and just start from the newest media.
-    const now = Math.floor(Date.now() / 1000);
-    const endOfMonth = Math.floor(new Date(m.year, m.month, 1).getTime() / 1000); // 1st of next month
-    const before = endOfMonth >= now ? null : endOfMonth;
+    // kDrive's date params can't reach into history (verified in production),
+    // so the month stream starts from the page CURSOR the month-index walk
+    // recorded for this month (null = stream head) and filters by month key
+    // client-side until an older month shows up.
     this.timelineScale.set('all');
     // resume-or-start: re-tapping the month whose stream was interrupted
     // continues from its cursor instead of being a silent no-op
-    this.resumeOrStartTimelineStream(m.key, { key: m.key, before });
+    this.resumeOrStartTimelineStream(m.key, { key: m.key, startCursor: m.cursor });
     this.scrollContentTop();
   }
 
@@ -775,14 +772,15 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.startTimelineStream('full', null);
   }
 
-  /** (Re)start the media stream for a target: 'full' or one month (period
-   *  bounds, unix seconds). No-op if that exact target is already loaded. */
-  private startTimelineStream(key: string, period: { key: string; before: number | null } | null): void {
+  /** (Re)start the media stream for a target: 'full' or one month. A month
+   *  stream starts from the page cursor the month index recorded for it.
+   *  No-op if that exact target is already loaded. */
+  private startTimelineStream(key: string, period: { key: string; startCursor: string | null } | null): void {
     if (this.timelineLoadedKey === key) return;
     this.timelineLoadedKey = key;
     this.timelinePeriod = period;
     this.fileService.searchResults.set([]);
-    this.timelineCursor = null;
+    this.timelineCursor = period?.startCursor ?? null;
     this.timelineDone.set(false);
     this.timelineRenderLimit.set(200);
     ++this.timelineGen;
@@ -821,14 +819,12 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
           && (this.fileService.searchResults()?.length ?? 0)
              < this.timelineRenderLimit() + FileBrowserComponent.TIMELINE_BUFFER) {
         const period = this.timelinePeriod;
-        // A month stream seeds page 0 with modified_before = end-of-month; later
-        // pages ride the cursor (which already encodes the filter). kDrive can't
-        // filter modified_after into the past, so the month lower bound is
-        // applied client-side by comparing each file's OWN month key (computed
-        // the same way as the group headers, so it can't drift by timezone) —
-        // the stream stops once a file falls into an older month.
-        const before = period && !this.timelineCursor ? period.before : null;
-        const page = await this.fileService.loadMediaPage(this.timelineCursor, before);
+        // A month stream starts from the month's recorded page cursor and is
+        // filtered client-side by each file's OWN month key (computed the same
+        // way as the group headers, so no timezone drift); it stops once a
+        // file falls into an older month. kDrive's date params can't do this
+        // server-side — see listMedia() in the backend.
+        const page = await this.fileService.loadMediaPage(this.timelineCursor);
         if (gen !== this.timelineGen || !this.isTimeline()) return;
         this.timelineCursor = page.cursor;
         if (!page.has_more || !page.cursor) this.timelineDone.set(true);
