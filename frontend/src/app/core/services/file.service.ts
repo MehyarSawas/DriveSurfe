@@ -213,10 +213,12 @@ export class FileService {
   }
 
   /** The month-cover index so far (newest first). Each call advances the
-   *  backend's cursor walk a few pages — poll until `complete` is true. */
-  async loadMediaMonths(): Promise<MediaMonthsResponse> {
+   *  backend's cursor walk a few pages — poll until `complete` is true.
+   *  `refresh` forces a head-page rescan (new uploads) ignoring the TTL. */
+  async loadMediaMonths(refresh = false): Promise<MediaMonthsResponse> {
+    const params: Record<string, string> = refresh ? { refresh: '1' } : {};
     const res = await firstValueFrom(
-      this.http.get<ApiResponse<MediaMonthsResponse>>('/api/media/months')
+      this.http.get<ApiResponse<MediaMonthsResponse>>('/api/media/months', { params })
     );
     return res.data;
   }

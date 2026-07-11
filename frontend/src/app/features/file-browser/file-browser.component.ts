@@ -7,7 +7,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { FileService } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PreviewCacheService } from '../../core/services/preview-cache.service';
-import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession, BreadcrumbItem, MonthCover } from '../../core/models/drive-file.model';
+import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession, BreadcrumbItem, MonthCover, MediaMonthsResponse } from '../../core/models/drive-file.model';
 import { FileGridComponent } from './components/file-grid/file-grid.component';
 import { FileListComponent } from './components/file-list/file-list.component';
 import { FolderTreeComponent } from './components/folder-tree/folder-tree.component';
@@ -589,7 +589,12 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly timelineDone = signal(false);
   private timelineCursor: string | null = null;
   private timelineGen = 0;
-  private timelinePeriod: { key: string; startCursor: string | null } | null = null;
+  /** When set, the All stream was entered via a month tile: files newer than
+   *  `newestKey` are dropped (they belong to months above the entry point);
+   *  older months stream in continuously. Scrolling to the top prepends the
+   *  next newer month and moves this anchor up. */
+  private timelinePeriod: { newestKey: string } | null = null;
+  readonly timelinePrepending = signal(false);
   /** What the stream currently holds: 'full' or a month key — avoids reloading. */
   private timelineLoadedKey: string | null = null;
 
@@ -600,8 +605,13 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly timelineCovers = signal<MonthCover[] | null>(null);
   readonly timelineCoversLoading = signal(false);
   readonly timelineCoversError = signal<string | null>(null);
+  /** Server cache stats (count / size / last update) for the info popover. */
+  readonly timelineCoversMeta = signal<MediaMonthsResponse['meta'] | null>(null);
+  readonly timelineInfoOpen = signal(false);
   private timelineCoversComplete = false;
   private coversGen = 0;
+  /** Remembered scroll offsets for the cover scales, restored on return. */
+  private timelineScrollPos: Partial<Record<'year' | 'month', number>> = {};
 
   /** Months grouped by year for the Months view (covers are newest-first). */
   readonly timelineMonthsByYear = computed(() => {
@@ -646,6 +656,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
           const res = await this.fileService.loadMediaMonths();
           if (gen !== this.coversGen) return;
           this.timelineCovers.set(res.months);
+          this.timelineCoversMeta.set(res.meta);
           if (res.complete) { this.timelineCoversComplete = true; break; }
           errors = 0;
           // No forward progress means the backend is being rate-limited —
@@ -671,16 +682,35 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   setTimelineScale(scale: 'year' | 'month' | 'all'): void {
+    if (scale === this.timelineScale()) return;
+    this.saveTimelineScroll();
     this.timelineScale.set(scale);
     if (scale === 'all') {
       this.resumeOrStartTimelineStream('full', null);
+      this.scrollContentTop();
     } else {
       // Cover scales don't need the stream — stop its background page loop
       // immediately (it resumes from the saved cursor when returning to All).
       this.cancelTimelineStream();
       this.ensureTimelineCovers();
+      this.restoreTimelineScroll(scale);
     }
-    this.scrollContentTop();
+  }
+
+  /** Remember where the user was in the current cover scale (months/years)
+   *  so returning to it lands on the same spot. */
+  private saveTimelineScroll(): void {
+    const scale = this.timelineScale();
+    if (scale === 'all') return;
+    const el = document.querySelector('.file-content');
+    if (el) this.timelineScrollPos[scale] = el.scrollTop;
+  }
+
+  private restoreTimelineScroll(scale: 'year' | 'month'): void {
+    const pos = this.timelineScrollPos[scale] ?? 0;
+    setTimeout(() => {
+      document.querySelector('.file-content')?.scrollTo({ top: pos });
+    }, 50);
   }
 
   /** Stop the background page loop without discarding what's loaded. */
@@ -702,6 +732,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   openTimelineYear(year: number): void {
+    this.saveTimelineScroll();
     this.timelineScale.set('month');
     this.ensureTimelineCovers();
     setTimeout(() => {
@@ -713,8 +744,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   openTimelineMonth(m: MonthCover): void {
     // kDrive's date params can't reach into history (verified in production),
     // so the month stream starts from the page CURSOR the month-index walk
-    // recorded for this month (null = stream head) and filters by month key
-    // client-side until an older month shows up.
+    // recorded for this month (null = stream head), drops the shared page's
+    // newer-month files, and then streams continuously into older months.
+    this.saveTimelineScroll();
     this.timelineScale.set('all');
     // resume-or-start: re-tapping the month whose stream was interrupted
     // continues from its cursor instead of being a silent no-op
@@ -791,7 +823,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private startTimelineStream(key: string, period: { key: string; startCursor: string | null } | null): void {
     if (this.timelineLoadedKey === key) return;
     this.timelineLoadedKey = key;
-    this.timelinePeriod = period;
+    this.timelinePeriod = period ? { newestKey: period.key } : null;
     this.fileService.searchResults.set([]);
     this.timelineCursor = period?.startCursor ?? null;
     this.timelineDone.set(false);
@@ -811,6 +843,79 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
         this.timelineRenderLimit.update(n => Math.min(n + 300, total));
       }
       this.ensureTimelineBuffer();
+    }
+    // Near the top of a month-entered stream: pull in the next NEWER month
+    // above the anchor so scrolling up walks back toward the present.
+    if (el.scrollTop <= 100 && this.timelinePeriod) {
+      this.loadNewerMonth(el);
+    }
+  }
+
+  /** Prepend the month directly above the current anchor (timelinePeriod).
+   *  Streams from that month's recorded cursor, keeps only its files, then
+   *  moves the anchor up and restores the visual scroll position. */
+  private async loadNewerMonth(el: HTMLElement): Promise<void> {
+    const period = this.timelinePeriod;
+    const covers = this.timelineCovers();
+    if (!period || !covers || this.timelinePrepending() || !this.isTimeline()) return;
+    const idx = covers.findIndex(c => c.key === period.newestKey);
+    if (idx <= 0) return; // anchor is already the newest month known
+    const target = covers[idx - 1];
+    const gen = this.timelineGen;
+    this.timelinePrepending.set(true);
+    try {
+      const collected: DriveFile[] = [];
+      let cursor = target.cursor;
+      for (let pages = 0; pages < 10; pages++) {
+        const page = await this.fileService.loadMediaPage(cursor);
+        if (gen !== this.timelineGen || !this.isTimeline()) return;
+        let pastMonth = false;
+        for (const f of page.data) {
+          const k = this.monthKeyOf(f);
+          if (k === null || k > target.key) continue; // newer months on the shared page
+          if (k < target.key) { pastMonth = true; break; }
+          collected.push(f);
+        }
+        if (pastMonth || !page.has_more || !page.cursor) break;
+        cursor = page.cursor;
+      }
+      this.timelinePeriod = { newestKey: target.key };
+      if (collected.length > 0) {
+        const prevHeight = el.scrollHeight;
+        this.timelineRenderLimit.update(n => n + collected.length);
+        this.fileService.searchResults.update(r => [...collected, ...(r ?? [])]);
+        // Keep what the user was looking at in place after the prepend.
+        requestAnimationFrame(() => {
+          el.scrollTop += el.scrollHeight - prevHeight;
+        });
+      }
+    } catch (err) {
+      console.error('prepend month error:', err);
+    } finally {
+      this.timelinePrepending.set(false);
+    }
+  }
+
+  /** Leave the timeline back to My Drive (the header back button). */
+  exitTimeline(): void {
+    this.cancelTimelineStream();
+    ++this.coversGen; // stop the covers polling loop
+    this.timelineCoversLoading.set(false);
+    this.timelineInfoOpen.set(false);
+    this.fileService.searchResults.set(null);
+    this.navigateToFolder(HOME_FOLDER_ID, 'My Drive');
+  }
+
+  /** Info-popover reload action: force a head rescan of the month index. */
+  async reloadTimelineCache(): Promise<void> {
+    try {
+      const res = await this.fileService.loadMediaMonths(true);
+      this.timelineCovers.set(res.months);
+      this.timelineCoversMeta.set(res.meta);
+      this.timelineCoversComplete = res.complete;
+      if (!res.complete) this.ensureTimelineCovers(); // resume the walk
+    } catch (err) {
+      console.error('timeline cache reload error:', err);
     }
   }
 
@@ -832,21 +937,19 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
           && (this.fileService.searchResults()?.length ?? 0)
              < this.timelineRenderLimit() + FileBrowserComponent.TIMELINE_BUFFER) {
         const period = this.timelinePeriod;
-        // A month stream starts from the month's recorded page cursor and is
-        // filtered client-side by each file's OWN month key (computed the same
-        // way as the group headers, so no timezone drift); it stops once a
-        // file falls into an older month. kDrive's date params can't do this
-        // server-side — see listMedia() in the backend.
         const page = await this.fileService.loadMediaPage(this.timelineCursor);
         if (gen !== this.timelineGen || !this.isTimeline()) return;
         this.timelineCursor = page.cursor;
         if (!page.has_more || !page.cursor) this.timelineDone.set(true);
         let data = page.data;
         if (period) {
-          if (page.data.some(f => { const k = this.monthKeyOf(f); return k !== null && k < period.key; })) {
-            this.timelineDone.set(true);
-          }
-          data = page.data.filter(f => this.monthKeyOf(f) === period.key);
+          // Month-entered stream: drop only files NEWER than the anchor month
+          // (the shared first page also carries them); older months keep
+          // streaming in continuously as the user scrolls down.
+          data = page.data.filter(f => {
+            const k = this.monthKeyOf(f);
+            return k === null || k <= period.newestKey;
+          });
         }
         if (data.length > 0) {
           this.fileService.searchResults.update(r => [...(r ?? []), ...data]);
@@ -1108,6 +1211,7 @@ onScanUploaded(_files: DriveFile[]): void {
     this.viewMenuOpen.set(false);
     this.statsPopoverOpen.set(false);
     this.addMenuOpen.set(false);
+    this.timelineInfoOpen.set(false);
   }
 
   onKeyDown(e: KeyboardEvent): void {

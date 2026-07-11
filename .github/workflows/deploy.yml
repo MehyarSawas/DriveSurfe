@@ -49,4 +49,5 @@ jobs:
           rsync -az frontend/dist/drivesurfe/browser/ $DEST/backend/public/
           rsync -az backend/public/index.php backend/public/.htaccess $DEST/backend/public/
           rsync -az backend/src/ $DEST/backend/src/
+          rsync -az backend/bin/ $DEST/backend/bin/
           rsync -az backend/vendor/ $DEST/backend/vendor/

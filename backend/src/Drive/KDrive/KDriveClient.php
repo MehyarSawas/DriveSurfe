@@ -346,12 +346,13 @@ final class KDriveClient implements DriveInterface
      * history behind the head never changes.
      */
     private const MONTHS_CACHE_DIR      = __DIR__ . '/../../../cache/months';
-    private const MONTHS_STATE_FILE     = self::MONTHS_CACHE_DIR . '/v3-state.json';
+    // v4: covers prefer images over videos (schema bump forces a clean rebuild)
+    private const MONTHS_STATE_FILE     = self::MONTHS_CACHE_DIR . '/v4-state.json';
     private const MONTHS_HEAD_TTL       = 900; // 15 min — only the head of the stream changes
     private const MONTHS_PAGES_PER_CALL = 5;   // per poll — bounded by rate limit + PHP exec time
     private const MONTHS_TIME_BUDGET    = 8;   // s per poll — return partial fast instead of hanging
 
-    public function listMediaMonths(bool $debug = false): array
+    public function listMediaMonths(bool $debug = false, bool $refresh = false): array
     {
         $state = ['months' => [], 'cursor' => null, 'complete' => false, 'updated_at' => 0];
         if (is_file(self::MONTHS_STATE_FILE)) {
@@ -387,9 +388,10 @@ final class KDriveClient implements DriveInterface
             }
             $state['updated_at'] = time();
             $this->saveMonthsState($state);
-        } elseif (time() - (int) $state['updated_at'] >= self::MONTHS_HEAD_TTL) {
+        } elseif ($refresh || time() - (int) $state['updated_at'] >= self::MONTHS_HEAD_TTL) {
             // Index complete — refresh only the head page so new uploads show
             // up (new months appear; the newest months' covers track them).
+            // $refresh (user hit the reload action / cron) bypasses the TTL.
             try {
                 $res = $this->listMedia(null);
                 $diag['pages']++;
@@ -406,36 +408,58 @@ final class KDriveClient implements DriveInterface
         $result = [
             'months'   => array_values($months),
             'complete' => (bool) $state['complete'],
+            'meta'     => [
+                'updated_at' => (int) $state['updated_at'],
+                'size_bytes' => is_file(self::MONTHS_STATE_FILE) ? (int) filesize(self::MONTHS_STATE_FILE) : 0,
+                'count'      => count($months),
+            ],
         ];
         if ($debug) {
-            $result['debug'] = $diag + ['cursor' => $state['cursor'], 'count' => count($months)];
+            $result['debug'] = $diag + ['cursor' => $state['cursor']];
         }
         return $result;
     }
 
-    /** Merge one page of newest-first files into the months map. On refresh,
-     *  the first file seen per month also replaces the cover (newest wins). */
+    /** Merge one page of newest-first files into the months map.
+     *  Cover rule: the newest IMAGE of the month; a video only stands in
+     *  while no image has been seen yet (files arrive newest-first, so the
+     *  first image encountered is the newest one). On refresh (head rescan),
+     *  the first file per month may replace the cover under the same rule. */
     private function mergeMonths(array &$months, array $files, ?string $pageCursor, bool $refreshCovers): void
     {
+        $isImage = fn(array $f): bool =>
+            str_starts_with($f['mime_type'] ?? '', 'image/')
+            || in_array($f['extension'] ?? '', ['jpg','jpeg','png','gif','webp','heic','heif','avif'], true);
+
         $seenThisPage = [];
         foreach ($files as $f) {
             $ts = $f['modified_at'] ? strtotime($f['modified_at']) : false;
             if ($ts === false || $ts <= 0) continue;
             $key = date('Y-m', $ts);
-            if (isset($seenThisPage[$key])) continue;
-            $seenThisPage[$key] = true;
+
             if (!isset($months[$key])) {
                 $months[$key] = [
                     'key'    => $key,
                     'year'   => (int) substr($key, 0, 4),
                     'month'  => (int) substr($key, 5, 2),
-                    'cover'  => $f, // first occurrence = newest media of the month
+                    'cover'  => $f, // newest file so far — upgraded to an image below
                     // Cursor of the page this month first appeared on (null =
                     // stream head) — month drill-down streams from here.
                     'cursor' => $pageCursor,
                 ];
-            } elseif ($refreshCovers) {
+                continue;
+            }
+
+            if (!$isImage($f)) continue; // videos never replace an existing cover
+            if (!$isImage($months[$key]['cover'])) {
+                // Upgrade a video placeholder to the newest image of the month.
                 $months[$key]['cover'] = $f;
+                $seenThisPage[$key] = true;
+            } elseif ($refreshCovers && !isset($seenThisPage[$key])) {
+                // Head rescan: first image per month in this page = the newest
+                // image of the month — it becomes the cover.
+                $months[$key]['cover'] = $f;
+                $seenThisPage[$key] = true;
             }
         }
     }

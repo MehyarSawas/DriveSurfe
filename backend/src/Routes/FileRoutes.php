@@ -142,8 +142,10 @@ final class FileRoutes
         })->add($auth);
 
         $group->get('/media/months', function (Request $req, Response $res) use ($drive): Response {
-            $debug = ($req->getQueryParams()['debug'] ?? '') === '1';
-            return self::json($res, ['data' => $drive->listMediaMonths($debug)]);
+            $params  = $req->getQueryParams();
+            $debug   = ($params['debug'] ?? '') === '1';
+            $refresh = ($params['refresh'] ?? '') === '1';
+            return self::json($res, ['data' => $drive->listMediaMonths($debug, $refresh)]);
         })->add($auth);
 
         $group->get('/trash', function (Request $req, Response $res) use ($drive): Response {

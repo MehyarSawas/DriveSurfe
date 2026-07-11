@@ -98,4 +98,9 @@ export interface MonthCover {
 export interface MediaMonthsResponse {
   months: MonthCover[];
   complete: boolean;
+  meta: {
+    updated_at: number; // unix seconds of the last index update
+    size_bytes: number; // size of the server-side cache file
+    count: number;      // months in the index
+  };
 }
