@@ -575,9 +575,7 @@
     (rename)="handleRename($event)"
     (copy)="openCopyForFile($event)"
     (share)="openShare($event)"
-          (info)="openInfo($event)"
-          [pinnedIds]="pinnedFolderIds()"
-          (pin)="togglePinnedFolder($event)"
+    (info)="openInfo($event)"
     (createFolder)="handleCreateFolderFromPreview($event)"
   />
 }
