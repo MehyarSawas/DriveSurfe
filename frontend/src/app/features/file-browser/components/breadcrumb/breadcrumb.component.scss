@@ -4,9 +4,18 @@
   gap: 4px;
   padding: 8px 20px;
   flex-shrink: 0;
+  /* Long paths: scroll horizontally instead of wrapping/truncating, and keep
+     the scrollbar invisible — the component auto-scrolls to the end. */
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+
+  &::-webkit-scrollbar { display: none; }
 }
 
 .crumb {
+  flex-shrink: 0;
   font-size: 14px;
   color: var(--color-text-secondary);
   padding: 4px 6px;
@@ -25,6 +34,7 @@
 }
 
 .sep {
+  flex-shrink: 0;
   color: var(--color-text-secondary);
   font-size: 16px;
   user-select: none;
