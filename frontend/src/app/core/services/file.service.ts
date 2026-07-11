@@ -96,11 +96,17 @@ export class FileService {
 
   async loadFolderStats(folderId: string): Promise<void> {
     try {
-      const res = await firstValueFrom(
-        this.http.get<ApiResponse<FolderStats>>(`/api/files/${folderId}/stats`)
-      );
-      this.folderStats.set(res.data);
+      this.folderStats.set(await this.getFolderStats(folderId));
     } catch { /* non-critical */ }
+  }
+
+  /** Folder stats as a return value (doesn't touch the shared folderStats
+   *  signal) — used by the per-file Info dialog. */
+  async getFolderStats(folderId: string): Promise<FolderStats> {
+    const res = await firstValueFrom(
+      this.http.get<ApiResponse<FolderStats>>(`/api/files/${folderId}/stats`)
+    );
+    return res.data;
   }
 
   async loadSessions(): Promise<void> {

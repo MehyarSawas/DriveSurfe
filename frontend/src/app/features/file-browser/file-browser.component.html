@@ -406,6 +406,7 @@
                     (move)="openMoveForFile($event)"
                     (copy)="openCopyForFile($event)"
                     (share)="openShare($event)"
+          (info)="openInfo($event)"
                   />
                 </div>
               }
@@ -454,6 +455,7 @@
           (move)="openMoveForFile($event)"
           (copy)="openCopyForFile($event)"
           (share)="openShare($event)"
+          (info)="openInfo($event)"
         />
       } @else {
         <ds-file-list
@@ -472,6 +474,7 @@
           (move)="openMoveForFile($event)"
           (copy)="openCopyForFile($event)"
           (share)="openShare($event)"
+          (info)="openInfo($event)"
         />
       }
     </div>
@@ -550,8 +553,56 @@
     (rename)="handleRename($event)"
     (copy)="openCopyForFile($event)"
     (share)="openShare($event)"
+          (info)="openInfo($event)"
     (createFolder)="handleCreateFolderFromPreview($event)"
   />
+}
+
+<!-- Info dialog -->
+@if (infoFile(); as f) {
+  <div class="info-overlay" (click)="infoFile.set(null)">
+    <div class="info-dialog" (click)="$event.stopPropagation()">
+      <div class="info-header">
+        @if (f.thumbnail_url && !f.is_dir) {
+          <img class="info-thumb" [src]="f.thumbnail_url" [alt]="f.name" />
+        } @else {
+          <svg class="info-type-icon" viewBox="0 0 24 24">
+            @if (f.is_dir) {
+              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+            } @else {
+              <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+            }
+          </svg>
+        }
+        <span class="info-name">{{ f.name }}</span>
+        <button class="icon-btn" (click)="infoFile.set(null)" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="info-body">
+        <div class="info-row"><span>Type</span><span>{{ f.is_dir ? 'Folder' : (f.extension ? f.extension.toUpperCase() + ' file' : (f.mime_type || 'File')) }}</span></div>
+        @if (!f.is_dir) {
+          <div class="info-row"><span>Size</span><span>{{ formatSize(f.size) }}</span></div>
+        } @else if (infoStatsLoading()) {
+          <div class="info-row"><span>Contents</span><span>Loading…</span></div>
+        } @else if (infoStats(); as st) {
+          <div class="info-row"><span>Size</span><span>{{ formatSize(st.size) }}</span></div>
+          <div class="info-row"><span>Contents</span><span>{{ st.total_files }} files, {{ st.total_directories }} folders</span></div>
+        }
+        @if (f.modified_at) {
+          <div class="info-row"><span>Modified</span><span>{{ parseDateForInfo(f.modified_at) | date:'MMM d, y, HH:mm' }}</span></div>
+        }
+        @if (f.created_at) {
+          <div class="info-row"><span>Created</span><span>{{ parseDateForInfo(f.created_at) | date:'MMM d, y, HH:mm' }}</span></div>
+        }
+        <div class="info-row"><span>Starred</span><span>{{ f.is_favorite ? 'Yes' : 'No' }}</span></div>
+        <div class="info-row"><span>Shared</span><span>{{ fileService.sharedFileIds().has(f.id) ? 'Yes — has share link' : 'No' }}</span></div>
+        @if (!f.is_dir && f.mime_type) {
+          <div class="info-row"><span>MIME type</span><span>{{ f.mime_type }}</span></div>
+        }
+      </div>
+    </div>
+  </div>
 }
 
 <!-- Share dialog -->

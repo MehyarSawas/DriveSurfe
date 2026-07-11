@@ -53,6 +53,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly rename = output<DriveFile>();
   readonly copy = output<DriveFile>();
   readonly share = output<DriveFile>();
+  readonly info = output<DriveFile>();
   readonly stripScrolled = output<{from: number, to: number}>();
   readonly createFolder = output<{parentId: string, name: string, then: (f: DriveFile) => void}>();
 

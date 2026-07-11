@@ -4,7 +4,7 @@ import {
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { FileService } from '../../core/services/file.service';
+import { FileService, FolderStats } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PreviewCacheService } from '../../core/services/preview-cache.service';
 import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession, BreadcrumbItem, MonthCover, MediaMonthsResponse } from '../../core/models/drive-file.model';
@@ -61,6 +61,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly pendingMoveIds = signal<Set<string>>(new Set());
   readonly sessionLoading = signal(false);
   readonly bulkMoveToast = signal<string | null>(null);
+  /** File/folder shown in the Info dialog (null = closed). */
+  readonly infoFile = signal<DriveFile | null>(null);
+  readonly infoStats = signal<FolderStats | null>(null);
+  readonly infoStatsLoading = signal(false);
   @ViewChild(SearchBarComponent) private searchBar?: SearchBarComponent;
 
   private readonly preSearchBreadcrumb = signal<BreadcrumbItem[]>([]);
@@ -996,6 +1000,25 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.router.navigate(['/folder', id]);
     this.loadCurrentFolder();
     this.closeSidebarOnMobile();
+  }
+
+  /** Template helper: kDrive dates may be unix seconds — reuse the timeline
+   *  parser so the Info dialog never shows Jan 1970. */
+  parseDateForInfo(raw: string | null): Date | null {
+    return this.parseFileDate(raw);
+  }
+
+  /** Open the Info dialog; folders additionally load their stats. */
+  async openInfo(file: DriveFile): Promise<void> {
+    this.infoFile.set(file);
+    this.infoStats.set(null);
+    if (!file.is_dir) return;
+    this.infoStatsLoading.set(true);
+    try {
+      const stats = await this.fileService.getFolderStats(file.id);
+      if (this.infoFile()?.id === file.id) this.infoStats.set(stats);
+    } catch { /* stats are optional */ }
+    finally { this.infoStatsLoading.set(false); }
   }
 
   async toggleFavorite(file: DriveFile): Promise<void> {

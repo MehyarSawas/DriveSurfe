@@ -27,6 +27,7 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   readonly download = output<DriveFile>();
   readonly delete = output<DriveFile>();
   readonly share = output<DriveFile>();
+  readonly info = output<DriveFile>();
 
   isShared(id: string): boolean {
     return this.sharedIds().has(id);
