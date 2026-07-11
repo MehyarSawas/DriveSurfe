@@ -349,6 +349,7 @@ final class KDriveClient implements DriveInterface
     private const MONTHS_STATE_FILE     = self::MONTHS_CACHE_DIR . '/v3-state.json';
     private const MONTHS_HEAD_TTL       = 900; // 15 min — only the head of the stream changes
     private const MONTHS_PAGES_PER_CALL = 5;   // per poll — bounded by rate limit + PHP exec time
+    private const MONTHS_TIME_BUDGET    = 8;   // s per poll — return partial fast instead of hanging
 
     public function listMediaMonths(bool $debug = false): array
     {
@@ -362,10 +363,15 @@ final class KDriveClient implements DriveInterface
         $diag = ['pages' => 0, 'rejected' => null];
 
         if (!$state['complete']) {
-            // Advance the walk; keep partial progress on error (e.g. a 429 that
-            // outlives get()'s retry) — the next poll resumes from the cursor.
+            // Advance the walk under a hard TIME budget, not just a page count:
+            // when kDrive starts 429ing, get()'s retry sleeps (~18s each) would
+            // otherwise stack up inside one request and the poll appears hung.
+            // Better to return whatever we have quickly — the frontend polls
+            // again after a pause, giving the rolling rate window room to
+            // recover. Partial progress is kept on error (resume from cursor).
+            $deadline = time() + self::MONTHS_TIME_BUDGET;
             try {
-                for ($i = 0; $i < self::MONTHS_PAGES_PER_CALL; $i++) {
+                for ($i = 0; $i < self::MONTHS_PAGES_PER_CALL && time() < $deadline; $i++) {
                     $pageCursor = $state['cursor'];
                     $res = $this->listMedia($pageCursor);
                     $diag['pages']++;
