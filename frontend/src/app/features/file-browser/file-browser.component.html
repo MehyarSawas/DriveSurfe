@@ -448,6 +448,9 @@
               }
             }
             @default {
+              @if (timelinePrepending()) {
+                <div class="loading timeline-loading"><div class="spinner"></div></div>
+              }
               @for (g of timelineGroups(); track g.key) {
                 <div class="timeline-group">
                   @if (g.label) {
