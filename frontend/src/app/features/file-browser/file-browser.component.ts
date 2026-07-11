@@ -68,6 +68,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly pinnedFolders = signal<{ id: string; name: string }[]>([]);
   readonly pinnedFolderIds = computed(() => new Set(this.pinnedFolders().map(f => f.id)));
 
+  /** Three-dots menu for the folder currently being viewed (stats bar). */
+  readonly folderMenuOpen = signal(false);
+  readonly currentFolderFile = signal<DriveFile | null>(null);
+
   /** File/folder shown in the Info dialog (null = closed). */
   readonly infoFile = signal<DriveFile | null>(null);
   readonly infoStats = signal<FolderStats | null>(null);
@@ -1119,6 +1123,36 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return this.parseFileDate(raw);
   }
 
+  /** Toggle the current-folder three-dots menu (stats bar). Fetches the
+   *  folder's DriveFile on first open so menu actions (rename, share, pin,
+   *  star …) work on real data. */
+  async toggleFolderMenu(e: Event): Promise<void> {
+    e.stopPropagation();
+    if (this.folderMenuOpen()) {
+      this.folderMenuOpen.set(false);
+      return;
+    }
+    this.folderMenuOpen.set(true);
+    const id = this.fileService.currentFolderId();
+    if (this.currentFolderFile()?.id !== id) {
+      this.currentFolderFile.set(null);
+      try {
+        this.currentFolderFile.set(await this.fileService.getFile(id));
+      } catch {
+        this.folderMenuOpen.set(false);
+      }
+    }
+  }
+
+  /** Delete the folder currently being viewed, then leave it upward. */
+  async deleteCurrentFolder(file: DriveFile): Promise<void> {
+    this.folderMenuOpen.set(false);
+    await this.fileService.delete(file);
+    const crumbs = this.fileService.breadcrumb();
+    const parent = crumbs.length >= 2 ? crumbs[crumbs.length - 2] : crumbs[0];
+    this.navigateToFolder(parent?.id ?? HOME_FOLDER_ID, parent?.name ?? 'My Drive');
+  }
+
   /** Open the Info dialog; folders additionally load their stats. */
   async openInfo(file: DriveFile): Promise<void> {
     this.infoFile.set(file);
@@ -1346,6 +1380,7 @@ onScanUploaded(_files: DriveFile[]): void {
     this.statsPopoverOpen.set(false);
     this.addMenuOpen.set(false);
     this.timelineInfoOpen.set(false);
+    this.folderMenuOpen.set(false);
   }
 
   onKeyDown(e: KeyboardEvent): void {

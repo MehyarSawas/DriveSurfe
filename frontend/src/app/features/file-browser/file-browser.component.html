@@ -352,6 +352,53 @@
             }
           </button>
           · {{ formatSize(stats.size) }}
+          @if (!isVirtualFolder() && fileService.currentFolderId() !== '5') {
+            <div class="folder-menu-wrap" (click)="$event.stopPropagation()">
+              <button class="icon-btn folder-menu-btn" (click)="toggleFolderMenu($event)" title="Folder actions">
+                <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+              </button>
+              @if (folderMenuOpen()) {
+                <div class="add-menu folder-menu">
+                  @if (currentFolderFile(); as cf) {
+                    <button class="add-menu-item" (click)="togglePinnedFolder(cf); folderMenuOpen.set(false)">
+                      <svg viewBox="0 0 24 24"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/></svg>
+                      {{ pinnedFolderIds().has(cf.id) ? 'Remove from sidebar' : 'Add to sidebar' }}
+                    </button>
+                    <button class="add-menu-item" (click)="openInfo(cf); folderMenuOpen.set(false)">
+                      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                      Info
+                    </button>
+                    <button class="add-menu-item" (click)="toggleFavorite(cf); folderMenuOpen.set(false)">
+                      <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                      {{ cf.is_favorite ? 'Unstar' : 'Star' }}
+                    </button>
+                    <button class="add-menu-item" (click)="openMoveForFile(cf); folderMenuOpen.set(false)">
+                      <svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM16 11h-5V8l-5 5 5 5v-3h5z"/></svg>
+                      Move to
+                    </button>
+                    <button class="add-menu-item" (click)="openCopyForFile(cf); folderMenuOpen.set(false)">
+                      <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                      Make a copy
+                    </button>
+                    <button class="add-menu-item" (click)="openShare(cf); folderMenuOpen.set(false)">
+                      <svg viewBox="0 0 24 24"><path d="M11 17H7c-2.76 0-5-2.24-5-5s2.24-5 5-5h4v1.9H7c-1.71 0-3.1 1.39-3.1 3.1S5.29 15.1 7 15.1h4V17zm6-10h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5zM8 13h8v-2H8v2z"/></svg>
+                      {{ fileService.sharedFileIds().has(cf.id) ? 'Edit share' : 'Share' }}
+                    </button>
+                    <button class="add-menu-item" (click)="handleRename(cf); folderMenuOpen.set(false)">
+                      <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                      Rename
+                    </button>
+                    <button class="add-menu-item danger" (click)="deleteCurrentFolder(cf)">
+                      <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                      Delete
+                    </button>
+                  } @else {
+                    <div class="add-menu-item folder-menu-loading">Loading…</div>
+                  }
+                </div>
+              }
+            </div>
+          }
         </div>
       }
     </div>

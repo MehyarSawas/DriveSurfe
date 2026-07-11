@@ -1061,3 +1061,26 @@ ds-search-bar {
     .pinned-remove { opacity: 1; } /* touch devices: always visible */
   }
 }
+
+/* Current-folder three-dots menu (stats bar, beside folder size) */
+.folder-menu-wrap {
+  position: relative;
+  display: inline-flex;
+  margin-left: 2px;
+
+  .folder-menu-btn {
+    width: 26px;
+    height: 26px;
+
+    svg { width: 16px; height: 16px; }
+  }
+
+  .folder-menu {
+    right: 0;
+    left: auto;
+    top: calc(100% + 4px);
+
+    .add-menu-item.danger { color: #d93025; svg { fill: #d93025; } }
+    .folder-menu-loading { color: var(--color-text-secondary); cursor: default; }
+  }
+}
