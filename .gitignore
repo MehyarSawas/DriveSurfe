@@ -14,6 +14,7 @@ frontend/dist/
 # PHP
 backend/passkeys.json
 backend/sessions.json
+backend/pinned_folders.json
 backend/registration_attempts.json
 backend/public/uploads/
 backend/cache/

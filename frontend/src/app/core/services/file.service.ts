@@ -230,6 +230,28 @@ export class FileService {
     return res.data;
   }
 
+  /** Sidebar-pinned folders — server-side so pins match across devices. */
+  async loadPins(): Promise<{ id: string; name: string }[]> {
+    const res = await firstValueFrom(
+      this.http.get<ApiResponse<{ id: string; name: string }[]>>('/api/pins')
+    );
+    return res.data;
+  }
+
+  async addPin(id: string, name: string): Promise<{ id: string; name: string }[]> {
+    const res = await firstValueFrom(
+      this.http.post<ApiResponse<{ id: string; name: string }[]>>('/api/pins', { id, name })
+    );
+    return res.data;
+  }
+
+  async removePin(id: string): Promise<{ id: string; name: string }[]> {
+    const res = await firstValueFrom(
+      this.http.delete<ApiResponse<{ id: string; name: string }[]>>(`/api/pins/${id}`)
+    );
+    return res.data;
+  }
+
   async loadShares(): Promise<void> {
     try {
       const res = await firstValueFrom(

@@ -64,8 +64,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly pendingMoveIds = signal<Set<string>>(new Set());
   readonly sessionLoading = signal(false);
   readonly bulkMoveToast = signal<string | null>(null);
-  /** Folders pinned to the sidebar (persisted in localStorage). */
-  readonly pinnedFolders = signal<{ id: string; name: string }[]>(FileBrowserComponent.loadPinnedFolders());
+  /** Folders pinned to the sidebar (server-side — same on every device). */
+  readonly pinnedFolders = signal<{ id: string; name: string }[]>([]);
   readonly pinnedFolderIds = computed(() => new Set(this.pinnedFolders().map(f => f.id)));
 
   /** File/folder shown in the Info dialog (null = closed). */
@@ -276,6 +276,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     this.fileService.loadSessions();
     this.fileService.loadShares();
+    this.loadPinnedFolders();
     this.fileService.loading.set(true);
 
     // Warm up OpenCV.js in the background so the scanner's smart detection is
@@ -1076,36 +1077,40 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.closeSidebarOnMobile();
   }
 
-  private static loadPinnedFolders(): { id: string; name: string }[] {
+  private async loadPinnedFolders(): Promise<void> {
     try {
-      const raw = localStorage.getItem('ds-pinned-folders');
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed)
-        ? parsed.filter(f => f && typeof f.id === 'string' && typeof f.name === 'string')
-        : [];
-    } catch {
-      return [];
+      this.pinnedFolders.set(await this.fileService.loadPins());
+    } catch { /* non-critical — sidebar just shows no pins */ }
+  }
+
+  /** 'Add to sidebar' / 'Remove from sidebar' context-menu action (folders
+   *  only). Optimistic update; the server response is authoritative. */
+  async togglePinnedFolder(folder: DriveFile): Promise<void> {
+    if (!folder.is_dir) return;
+    const pinned = this.pinnedFolderIds().has(folder.id);
+    this.pinnedFolders.update(list =>
+      pinned ? list.filter(f => f.id !== folder.id) : [...list, { id: folder.id, name: folder.name }]
+    );
+    try {
+      this.pinnedFolders.set(
+        pinned
+          ? await this.fileService.removePin(folder.id)
+          : await this.fileService.addPin(folder.id, folder.name)
+      );
+    } catch (err) {
+      console.error('pin toggle error:', err);
+      this.loadPinnedFolders(); // re-sync with the server
     }
   }
 
-  /** 'Add to sidebar' / 'Remove from sidebar' context-menu action (folders only). */
-  togglePinnedFolder(folder: DriveFile): void {
-    if (!folder.is_dir) return;
-    this.pinnedFolders.update(list =>
-      list.some(f => f.id === folder.id)
-        ? list.filter(f => f.id !== folder.id)
-        : [...list, { id: folder.id, name: folder.name }]
-    );
-    try {
-      localStorage.setItem('ds-pinned-folders', JSON.stringify(this.pinnedFolders()));
-    } catch { /* storage full/blocked — pin just won't persist */ }
-  }
-
-  unpinFolder(id: string): void {
+  async unpinFolder(id: string): Promise<void> {
     this.pinnedFolders.update(list => list.filter(f => f.id !== id));
     try {
-      localStorage.setItem('ds-pinned-folders', JSON.stringify(this.pinnedFolders()));
-    } catch { /* non-critical */ }
+      this.pinnedFolders.set(await this.fileService.removePin(id));
+    } catch (err) {
+      console.error('unpin error:', err);
+      this.loadPinnedFolders();
+    }
   }
 
   /** Template helper: kDrive dates may be unix seconds — reuse the timeline
