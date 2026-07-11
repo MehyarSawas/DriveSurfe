@@ -604,16 +604,22 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     } catch { /* storage blocked/full — sort just won't persist */ }
   }
 
-  /** Restore this folder's remembered sort (if any) BEFORE loading it, so the
-   *  folder opens already sorted the way the user left it. */
+  /** Restore this folder's remembered sort BEFORE loading it, so the folder
+   *  opens already sorted the way the user left it. Folders WITHOUT a saved
+   *  entry reset to the default (Modified desc) — the sort signals are
+   *  app-global, so without this reset the previous folder's preference
+   *  would leak into every folder opened after it. */
   private applySavedSort(folderId: string): void {
     if (folderId.startsWith('__')) return;
     const saved = FileBrowserComponent.loadFolderSorts()[folderId];
-    if (!saved) return;
-    if (['name', 'size', 'last_modified_at'].includes(saved.by)
+    if (saved
+        && ['name', 'size', 'last_modified_at'].includes(saved.by)
         && ['asc', 'desc'].includes(saved.dir)) {
       this.sortBy.set(saved.by);
       this.sortDir.set(saved.dir);
+    } else {
+      this.sortBy.set('last_modified_at');
+      this.sortDir.set('desc');
     }
   }
 
