@@ -1,7 +1,7 @@
 import {
   Component, OnInit, OnDestroy, inject, signal, computed, ViewChild
 } from '@angular/core';
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule, DatePipe, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, skip } from 'rxjs';
@@ -49,6 +49,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private previewCache = inject(PreviewCacheService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private location = inject(Location);
 
   readonly viewMode = signal<ViewMode>('grid');
   // Default sort: newest first — the sort-bar indicator reflects this from the start
@@ -947,6 +948,29 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     } finally {
       this.timelinePrepending.set(false);
     }
+  }
+
+  /** Header back arrow (search-context bar). For search results it cancels
+   *  the search in place; for virtual views (Starred/Shares/Timeline) it
+   *  navigates BACK through history so the route-param subscription reloads
+   *  the previous folder and rebuilds its real breadcrumb — cancelSearch()
+   *  would fabricate a wrong 'My Drive' crumb pointing at the virtual id. */
+  onContextBack(): void {
+    if (this.isTimeline()) {
+      this.exitTimeline();
+      return;
+    }
+    const id = this.fileService.currentFolderId();
+    if (id === '__starred__' || id === '__shares__') {
+      this.fileService.searchResults.set(null);
+      if (window.history.length > 1) {
+        this.location.back();
+      } else {
+        this.navigateToFolder(HOME_FOLDER_ID, 'My Drive'); // deep-linked — no history
+      }
+      return;
+    }
+    this.cancelSearch();
   }
 
   /** Leave the timeline back to My Drive (the header back button). */
