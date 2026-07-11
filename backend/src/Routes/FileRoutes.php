@@ -139,6 +139,10 @@ final class FileRoutes
             ]);
         })->add($auth);
 
+        $group->get('/media/diag', function (Request $req, Response $res) use ($drive): Response {
+            return self::json($res, ['data' => $drive->diagnoseMedia()]);
+        })->add($auth);
+
         $group->get('/media/months', function (Request $req, Response $res) use ($drive): Response {
             $params = $req->getQueryParams();
             $before = isset($params['before']) && $params['before'] !== '' ? (int) $params['before'] : null;
