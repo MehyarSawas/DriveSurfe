@@ -160,7 +160,7 @@
   &:hover { background: var(--color-hover); }
 
   &.starred svg { fill: #fbbf24; }
-  &.shared svg { fill: var(--color-primary, #2f6ac9); }
+  &.shared svg { fill: var(--color-primary, #14a4dd); }
 
   &.danger {
     color: var(--color-danger);
@@ -246,6 +246,6 @@
 .shared-icon {
   width: 13px;
   height: 13px;
-  fill: var(--color-primary, #2f6ac9);
+  fill: var(--color-primary, #14a4dd);
   flex-shrink: 0;
 }
