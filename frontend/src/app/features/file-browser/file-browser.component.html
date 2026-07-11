@@ -392,7 +392,9 @@
             @default {
               @for (g of timelineGroups(); track g.key) {
                 <div class="timeline-group">
-                  <div class="timeline-month">{{ g.label }}</div>
+                  @if (g.label) {
+                    <div class="timeline-month">{{ g.label }}</div>
+                  }
                   <ds-file-grid
                     [files]="g.files"
                     [selectedIds]="fileService.selectedIds()"

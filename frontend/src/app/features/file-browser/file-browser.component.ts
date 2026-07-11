@@ -787,12 +787,31 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : null;
   }
 
-  /** Consecutive month/year groups from the (already date-desc) flat list —
-   *  capped at the render window; the full list stays in searchResults so
-   *  preview navigation spans everything loaded. */
+  /** Month/year groups from the loaded flat list, honoring the sort bar.
+   *  kDrive's search endpoint can only order by last_modified_at server-side,
+   *  so Name/Size sorting is CLIENT-side over what's loaded so far (more
+   *  files re-sort in as the stream continues): those render as one flat,
+   *  ungrouped list since month headers make no sense there. Modified asc
+   *  just reverses the stream. Capped at the render window; the full list
+   *  stays in searchResults so preview navigation spans everything loaded. */
   readonly timelineGroups = computed(() => {
     if (!this.isTimeline()) return [];
-    const files = (this.fileService.searchResults() ?? []).slice(0, this.timelineRenderLimit());
+    const all = this.fileService.searchResults() ?? [];
+    const by = this.sortBy();
+    const dir = this.sortDir();
+
+    if (by === 'name' || by === 'size') {
+      const sorted = [...all].sort((a, b) => {
+        const cmp = by === 'name'
+          ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+          : a.size - b.size;
+        return dir === 'asc' ? cmp : -cmp;
+      });
+      return [{ key: 'sorted', label: '', files: sorted.slice(0, this.timelineRenderLimit()) }];
+    }
+
+    const ordered = dir === 'asc' ? [...all].reverse() : all;
+    const files = ordered.slice(0, this.timelineRenderLimit());
     const groups: { key: string; label: string; files: DriveFile[] }[] = [];
     let current: { key: string; label: string; files: DriveFile[] } | null = null;
     for (const f of files) {
@@ -817,6 +836,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.currentFolderId.set('__timeline__');
     this.router.navigate(['/folder', '__timeline__'], { replaceUrl: true });
     this.timelineScale.set('all');
+    // Sync the sort bar with the stream's natural order (newest first)
+    this.sortBy.set('last_modified_at');
+    this.sortDir.set('desc');
     this.timelineLoadedKey = null; // fresh entry — always (re)load the stream
     this.startTimelineStream('full', null);
   }
