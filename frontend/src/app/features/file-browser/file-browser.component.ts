@@ -4,6 +4,7 @@ import {
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription, skip } from 'rxjs';
 import { FileService, FolderStats } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PreviewCacheService } from '../../core/services/preview-cache.service';
@@ -259,7 +260,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     try { localStorage.setItem('recentMoveFolder', JSON.stringify(entry)); } catch {}
   }
 
+  private routeSub?: Subscription;
+
   ngOnDestroy(): void {
+    this.routeSub?.unsubscribe();
     this.abortBackground();
     this.fileService.cancelLoad();
   }
@@ -280,28 +284,49 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const folderId: string = params['folderId'] ?? HOME_FOLDER_ID;
     const fileId: string | null = params['fileId'] ?? null;
 
-    if (folderId === '__trash__') {
-      await this.showTrash();
-    } else if (folderId === '__starred__') {
-      await this.showStarred();
-    } else if (folderId === '__shares__') {
-      await this.showShares();
-    } else if (folderId === '__timeline__') {
-      await this.showTimeline();
-    } else if (folderId !== HOME_FOLDER_ID) {
-      this.fileService.currentFolderId.set(folderId);
-      this.resolveBreadcrumb(folderId).then(crumbs => this.fileService.breadcrumb.set(crumbs));
-      await this.loadCurrentFolder();
-    } else {
-      await this.loadCurrentFolder();
-    }
+    await this.handleFolderParam(folderId);
 
     if (fileId) {
       const file = await this.fileService.getFile(fileId).catch(() => null);
       if (file) await this.openPreview(file);
     }
 
+    // React to LATER url changes too — most importantly the browser back
+    // button. The route is reused (same component), so without this the URL
+    // changes but the view, currentFolderId, and breadcrumb all go stale
+    // (e.g. back from Starred/Trash showed the old folder with a wrong
+    // breadcrumb). In-app navigation sets currentFolderId before navigating,
+    // so the guard makes those emissions no-ops.
+    this.routeSub = this.route.params.pipe(skip(1)).subscribe(p => {
+      const id: string = p['folderId'] ?? HOME_FOLDER_ID;
+      if (id === this.fileService.currentFolderId()) return;
+      this.handleFolderParam(id);
+    });
+
     this.fileService.loadFolderTree();
+  }
+
+  /** Dispatch a folderId route param: virtual views or a real folder load
+   *  (with full breadcrumb resolution). Clears leftover search state so a
+   *  back-navigation out of Starred/Shares doesn't strand searchResults. */
+  private async handleFolderParam(folderId: string): Promise<void> {
+    switch (folderId) {
+      case '__trash__':    await this.showTrash();    return;
+      case '__starred__':  await this.showStarred();  return;
+      case '__shares__':   await this.showShares();   return;
+      case '__timeline__': await this.showTimeline(); return;
+    }
+    this.cancelTimelineStream();
+    this.fileService.searchResults.set(null);
+    this._lastSearchEvent = null;
+    this.preSearchBreadcrumb.set([]);
+    this.fileService.currentFolderId.set(folderId);
+    if (folderId !== HOME_FOLDER_ID) {
+      this.resolveBreadcrumb(folderId).then(crumbs => this.fileService.breadcrumb.set(crumbs));
+    } else {
+      this.fileService.breadcrumb.set([{ id: HOME_FOLDER_ID, name: 'My Drive' }]);
+    }
+    await this.loadCurrentFolder();
   }
 
   // Walk up parent_id chain to build a full breadcrumb from root to folderId.
@@ -589,7 +614,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
     this.fileService.currentFolderId.set('__trash__');
     this.fileService.searchResults.set(null);
-    this.router.navigate(['/folder', '__trash__'], { replaceUrl: true });
+    this.router.navigate(['/folder', '__trash__']); // push — back returns to the previous folder
   }
 
   async showStarred(): Promise<void> {
@@ -598,7 +623,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.searchResults.set(results);
     this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
     this.fileService.currentFolderId.set('__starred__');
-    this.router.navigate(['/folder', '__starred__'], { replaceUrl: true });
+    this.router.navigate(['/folder', '__starred__']); // push — back returns to the previous folder
   }
 
   // --- Timeline (all media under the drive, newest first, grouped by month) ---
@@ -831,7 +856,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.clearSelection();
     this.fileService.breadcrumb.set([{ id: '__timeline__', name: 'Timeline' }]);
     this.fileService.currentFolderId.set('__timeline__');
-    this.router.navigate(['/folder', '__timeline__'], { replaceUrl: true });
+    this.router.navigate(['/folder', '__timeline__']); // push — back returns to the previous folder
     this.timelineScale.set('all');
     // Sync the sort bar with the stream's natural order (newest first)
     this.sortBy.set('last_modified_at');
@@ -993,7 +1018,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.searchResults.set(this.fileService.sharedFiles());
     this.fileService.breadcrumb.set([{ id: '__shares__', name: 'My Shares' }]);
     this.fileService.currentFolderId.set('__shares__');
-    this.router.navigate(['/folder', '__shares__'], { replaceUrl: true });
+    this.router.navigate(['/folder', '__shares__']); // push — back returns to the previous folder
   }
 
   openShare(file: DriveFile): void {
