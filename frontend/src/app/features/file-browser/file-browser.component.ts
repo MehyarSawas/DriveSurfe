@@ -50,8 +50,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private router = inject(Router);
 
   readonly viewMode = signal<ViewMode>('grid');
-  readonly sortBy = signal<SortBy>('name');
-  readonly sortDir = signal<SortDir>('asc');
+  // Default sort: newest first — the sort-bar indicator reflects this from the start
+  readonly sortBy = signal<SortBy>('last_modified_at');
+  readonly sortDir = signal<SortDir>('desc');
   readonly filterType = signal<string>('');
   readonly filterMenuOpen = signal(false);
   readonly viewMenuOpen = signal(false);
