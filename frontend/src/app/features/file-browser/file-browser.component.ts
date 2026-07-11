@@ -76,6 +76,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly infoFile = signal<DriveFile | null>(null);
   readonly infoStats = signal<FolderStats | null>(null);
   readonly infoStatsLoading = signal(false);
+  /** Resolved location of the item ("My Drive / A / B"), null while loading. */
+  readonly infoPath = signal<string | null>(null);
   @ViewChild(SearchBarComponent) private searchBar?: SearchBarComponent;
 
   private readonly preSearchBreadcrumb = signal<BreadcrumbItem[]>([]);
@@ -1153,10 +1155,20 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.navigateToFolder(parent?.id ?? HOME_FOLDER_ID, parent?.name ?? 'My Drive');
   }
 
-  /** Open the Info dialog; folders additionally load their stats. */
+  /** Open the Info dialog; folders additionally load their stats, and the
+   *  item's path is resolved by walking its parent chain. */
   async openInfo(file: DriveFile): Promise<void> {
     this.infoFile.set(file);
     this.infoStats.set(null);
+    this.infoPath.set(null);
+
+    // Path = the containing location (parent chain), like Drive's "Location".
+    this.resolveBreadcrumb(file.parent_id).then(crumbs => {
+      if (this.infoFile()?.id === file.id) {
+        this.infoPath.set(crumbs.map(c => c.name).join(' / '));
+      }
+    });
+
     if (!file.is_dir) return;
     this.infoStatsLoading.set(true);
     try {

@@ -664,6 +664,7 @@
         @if (f.created_at) {
           <div class="info-row"><span>Created</span><span>{{ parseDateForInfo(f.created_at) | date:'MMM d, y, HH:mm' }}</span></div>
         }
+        <div class="info-row"><span>Path</span><span>{{ infoPath() ?? 'Loading…' }}</span></div>
         <div class="info-row"><span>Starred</span><span>{{ f.is_favorite ? 'Yes' : 'No' }}</span></div>
         <div class="info-row"><span>Shared</span><span>{{ fileService.sharedFileIds().has(f.id) ? 'Yes — has share link' : 'No' }}</span></div>
         @if (!f.is_dir && f.mime_type) {
