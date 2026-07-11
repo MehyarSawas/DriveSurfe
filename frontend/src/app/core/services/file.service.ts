@@ -210,9 +210,10 @@ export class FileService {
   /** One page of the recursive media listing (newest first), optionally
    *  bounded to a period (unix seconds). A page may be empty while has_more
    *  is still true (server-side media filtering) — callers keep paginating. */
-  async loadMediaPage(cursor?: string | null): Promise<FilesResponse> {
+  async loadMediaPage(cursor?: string | null, order: 'asc' | 'desc' = 'desc'): Promise<FilesResponse> {
     const params: Record<string, string> = {};
     if (cursor) params['cursor'] = cursor;
+    if (order === 'asc') params['order'] = 'asc';
     return firstValueFrom(
       this.http.get<FilesResponse>('/api/media', { params })
     );

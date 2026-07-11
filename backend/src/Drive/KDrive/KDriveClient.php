@@ -228,12 +228,14 @@ final class KDriveClient implements DriveInterface
      * fewer (even zero) items than `limit` while has_more is still true —
      * callers must keep paginating by cursor.
      */
-    public function listMedia(?string $cursor = null): array
+    public function listMedia(?string $cursor = null, string $order = 'desc'): array
     {
         $driveId = $this->getDriveId();
         $params = [
             'order_by' => 'last_modified_at',
-            'order'    => 'desc',
+            // asc = oldest first, desc = newest first — the only order_by the
+            // search endpoint supports server-side is last_modified_at.
+            'order'    => $order === 'asc' ? 'asc' : 'desc',
             // Max page size — Infomaniak rate-limits per rolling window, so
             // fewer/larger pages beat many small ones.
             'limit'    => 1000,

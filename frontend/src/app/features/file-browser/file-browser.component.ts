@@ -552,6 +552,20 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.sortBy.set(by);
       this.sortDir.set('asc');
     }
+    if (this.isTimeline()) {
+      // Modified sorts SERVER-side: restart the stream in the chosen order so
+      // it truly begins at the newest/oldest media of the drive, not just a
+      // re-sort of what happens to be loaded. Name/Size have no server-side
+      // order on kDrive's search endpoint — they stay client-side (see
+      // timelineGroups).
+      if (by === 'last_modified_at') {
+        this.timelineOrder = this.sortDir() === 'asc' ? 'asc' : 'desc';
+        this.timelineLoadedKey = null; // force a restart even for same key
+        this.startTimelineStream(`full-${this.timelineOrder}`, null);
+        this.scrollContentTop();
+      }
+      return;
+    }
     if (this.fileService.searchResults() !== null) {
       if (this._lastSearchEvent) this.onSearch(this._lastSearchEvent);
     } else {
@@ -599,6 +613,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
    *  older months stream in continuously. Scrolling to the top prepends the
    *  next newer month and moves this anchor up. */
   private timelinePeriod: { newestKey: string } | null = null;
+  /** Server-side stream order (order_by=last_modified_at asc|desc). */
+  private timelineOrder: 'asc' | 'desc' = 'desc';
   readonly timelinePrepending = signal(false);
   /** What the stream currently holds: 'full' or a month key — avoids reloading. */
   private timelineLoadedKey: string | null = null;
@@ -791,8 +807,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       return [{ key: 'sorted', label: '', files: sorted.slice(0, this.timelineRenderLimit()) }];
     }
 
-    const ordered = dir === 'asc' ? [...all].reverse() : all;
-    const files = ordered.slice(0, this.timelineRenderLimit());
+    // Modified asc/desc arrive server-ordered — no client-side reordering.
+    const files = all.slice(0, this.timelineRenderLimit());
     const groups: { key: string; label: string; files: DriveFile[] }[] = [];
     let current: { key: string; label: string; files: DriveFile[] } | null = null;
     for (const f of files) {
@@ -820,6 +836,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     // Sync the sort bar with the stream's natural order (newest first)
     this.sortBy.set('last_modified_at');
     this.sortDir.set('desc');
+    this.timelineOrder = 'desc';
     this.timelineLoadedKey = null; // fresh entry — always (re)load the stream
     this.startTimelineStream('full', null);
   }
@@ -944,7 +961,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
           && (this.fileService.searchResults()?.length ?? 0)
              < this.timelineRenderLimit() + FileBrowserComponent.TIMELINE_BUFFER) {
         const period = this.timelinePeriod;
-        const page = await this.fileService.loadMediaPage(this.timelineCursor);
+        const page = await this.fileService.loadMediaPage(
+          this.timelineCursor, period ? 'desc' : this.timelineOrder);
         if (gen !== this.timelineGen || !this.isTimeline()) return;
         this.timelineCursor = page.cursor;
         if (!page.has_more || !page.cursor) this.timelineDone.set(true);

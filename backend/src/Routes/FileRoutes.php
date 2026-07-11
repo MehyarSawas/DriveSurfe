@@ -128,8 +128,10 @@ final class FileRoutes
         })->add($auth);
 
         $group->get('/media', function (Request $req, Response $res) use ($drive): Response {
-            $cursor = $req->getQueryParams()['cursor'] ?? null;
-            $result = $drive->listMedia($cursor ?: null);
+            $params = $req->getQueryParams();
+            $cursor = $params['cursor'] ?? null;
+            $order  = ($params['order'] ?? '') === 'asc' ? 'asc' : 'desc';
+            $result = $drive->listMedia($cursor ?: null, $order);
             return self::json($res, [
                 'data'     => $result['files'],
                 'cursor'   => $result['cursor'],
