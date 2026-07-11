@@ -86,7 +86,7 @@
   svg { width: 18px; height: 18px; fill: var(--color-icon); }
 
   &:hover { background: var(--color-border); }
-  &.active svg { fill: var(--color-primary, #1a73e8); }
+  &.active svg { fill: var(--color-primary, #2f6ac9); }
 }
 
 .filter-dropdown {
@@ -149,8 +149,8 @@
     transition: background var(--transition), border-color var(--transition);
 
     &.checked {
-      background: var(--color-primary, #1a73e8);
-      border-color: var(--color-primary, #1a73e8);
+      background: var(--color-primary, #2f6ac9);
+      border-color: var(--color-primary, #2f6ac9);
       svg { width: 12px; height: 12px; fill: #fff; display: block; }
     }
   }
