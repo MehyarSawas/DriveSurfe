@@ -641,43 +641,23 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return new Date(m.year, m.month - 1, 1).toLocaleDateString(undefined, { month: 'long' });
   }
 
-  /** Poll the backend's month-index walk until history is exhausted, showing
-   *  months progressively (each poll returns ALL months found so far). PACED:
-   *  a pause between polls keeps kDrive's rolling rate window breathing —
-   *  back-to-back polling is what trips permanent 429s. Transient errors back
-   *  off and continue rather than aborting the walk. Safe to call repeatedly
-   *  (guarded by loading + generation). */
+  /** Read the month index from the server cache — a single, read-only fetch.
+   *  The index is only BUILT by the nightly cron (bin/build-months-cache.php)
+   *  or the explicit Reload action; opening the timeline never walks the
+   *  drive or writes the cache, so there is nothing to poll for. */
   private async ensureTimelineCovers(): Promise<void> {
-    if (this.timelineCoversComplete || this.timelineCoversLoading()) return;
+    if (this.timelineCovers() !== null || this.timelineCoversLoading()) return;
     const gen = ++this.coversGen;
     this.timelineCoversLoading.set(true);
     this.timelineCoversError.set(null);
-    const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-    let errors = 0;
-    let lastCount = -1;
     try {
-      for (;;) {
-        try {
-          const res = await this.fileService.loadMediaMonths();
-          if (gen !== this.coversGen) return;
-          this.timelineCovers.set(res.months);
-          this.timelineCoversMeta.set(res.meta);
-          if (res.complete) { this.timelineCoversComplete = true; break; }
-          errors = 0;
-          // No forward progress means the backend is being rate-limited —
-          // wait longer so the rolling window can actually recover.
-          await sleep(res.months.length > lastCount ? 2000 : 15000);
-          lastCount = res.months.length;
-        } catch (err) {
-          if (gen !== this.coversGen) return;
-          if (++errors >= 4) throw err; // persistent failure — surface it
-          await sleep(15000); // transient (429/timeout): back off and continue
-        }
-        if (gen !== this.coversGen) return;
-        // Only stop if the user leaves the timeline entirely.
-        if (!this.isTimeline()) break;
-      }
+      const res = await this.fileService.loadMediaMonths();
+      if (gen !== this.coversGen) return;
+      this.timelineCovers.set(res.months);
+      this.timelineCoversMeta.set(res.meta);
+      this.timelineCoversComplete = res.complete;
     } catch (err) {
+      if (gen !== this.coversGen) return;
       console.error('timeline covers error:', err);
       if (this.timelineCovers() === null) this.timelineCovers.set([]);
       this.timelineCoversError.set((err as any)?.error?.error ?? 'Request failed');

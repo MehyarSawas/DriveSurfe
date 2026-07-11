@@ -363,7 +363,17 @@ final class KDriveClient implements DriveInterface
         return self::MONTHS_CACHE_DIR . '/v4-state' . ($folder !== null ? "-{$folder}" : '') . '.json';
     }
 
-    public function listMediaMonths(bool $debug = false, bool $refresh = false): array
+    /**
+     * @param bool $refresh Head-page rescan (new uploads) + write — the app's
+     *                      explicit Reload action.
+     * @param bool $build   Advance the cursor walk + write — used ONLY by the
+     *                      cron script (bin/build-months-cache.php).
+     *
+     * A plain call (both false) is strictly READ-ONLY: it serves whatever the
+     * state file holds without touching the kDrive API or writing anything —
+     * opening the timeline must never burn API quota or grow the cache.
+     */
+    public function listMediaMonths(bool $debug = false, bool $refresh = false, bool $build = false): array
     {
         $stateFile = $this->monthsStateFile();
         $state = ['months' => [], 'cursor' => null, 'complete' => false, 'updated_at' => 0];
@@ -375,11 +385,11 @@ final class KDriveClient implements DriveInterface
         }
         $diag = ['pages' => 0, 'rejected' => null];
 
-        if (!$state['complete']) {
+        if ($build && !$state['complete']) {
             // Advance the walk under a hard TIME budget, not just a page count:
             // when kDrive starts 429ing, get()'s retry sleeps (~18s each) would
-            // otherwise stack up inside one request and the poll appears hung.
-            // Better to return whatever we have quickly — the frontend polls
+            // otherwise stack up inside one request and the call appears hung.
+            // Better to return whatever we have quickly — the cron loop calls
             // again after a pause, giving the rolling rate window room to
             // recover. Partial progress is kept on error (resume from cursor).
             $deadline = time() + self::MONTHS_TIME_BUDGET;
@@ -400,10 +410,10 @@ final class KDriveClient implements DriveInterface
             }
             $state['updated_at'] = time();
             $this->saveMonthsState($state);
-        } elseif ($refresh || time() - (int) $state['updated_at'] >= self::MONTHS_HEAD_TTL) {
-            // Index complete — refresh only the head page so new uploads show
-            // up (new months appear; the newest months' covers track them).
-            // $refresh (user hit the reload action / cron) bypasses the TTL.
+        } elseif ($refresh || ($build && time() - (int) $state['updated_at'] >= self::MONTHS_HEAD_TTL)) {
+            // Rescan only the head page so new uploads show up (new months
+            // appear; the newest months' covers track them). Reached via the
+            // app's Reload action or the cron's head-refresh pass.
             try {
                 $res = $this->listMedia(null);
                 $diag['pages']++;
