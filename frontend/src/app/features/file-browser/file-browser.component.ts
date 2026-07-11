@@ -589,7 +589,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly timelineDone = signal(false);
   private timelineCursor: string | null = null;
   private timelineGen = 0;
-  private timelinePeriod: { after: number; before: number } | null = null;
+  private timelinePeriod: { key: string; before: number | null } | null = null;
   /** What the stream currently holds: 'full' or a month key — avoids reloading. */
   private timelineLoadedKey: string | null = null;
 
@@ -644,9 +644,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
         this.timelineCovers.update(cur => [...(cur ?? []), ...res.months]);
         this.timelineCoversNextBefore = res.next_before;
         if (res.complete || res.next_before == null) { this.timelineCoversComplete = true; break; }
-        // Stop pulling more history once the user has navigated away from the
-        // cover scales — they'll resume on demand.
-        if (!this.isTimeline() || this.timelineScale() === 'all') break;
+        // Keep pulling the rest of history immediately (batches are cheap and
+        // cached); only stop if the user leaves the timeline entirely.
+        if (!this.isTimeline()) break;
       }
     } catch (err) {
       console.error('timeline covers error:', err);
@@ -677,7 +677,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   /** Continue an interrupted stream from its cursor, or start a new one. */
-  private resumeOrStartTimelineStream(key: string, period: { after: number; before: number } | null): void {
+  private resumeOrStartTimelineStream(key: string, period: { key: string; before: number | null } | null): void {
     if (this.timelineLoadedKey === key) {
       if (!this.timelineDone() && !this.timelineLoadingMore()) {
         ++this.timelineGen;
@@ -698,12 +698,17 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   openTimelineMonth(m: MonthCover): void {
-    const after = Math.floor(new Date(m.year, m.month - 1, 1).getTime() / 1000);
-    const before = Math.floor(new Date(m.year, m.month, 1).getTime() / 1000) - 1;
+    // Seed the server scan just past the end of the target month so page 0
+    // begins at its newest file. Clamp to now: kDrive rejects a
+    // modified_before that lands after tomorrow, so for the current month we
+    // send no bound and just start from the newest media.
+    const now = Math.floor(Date.now() / 1000);
+    const endOfMonth = Math.floor(new Date(m.year, m.month, 1).getTime() / 1000); // 1st of next month
+    const before = endOfMonth >= now ? null : endOfMonth;
     this.timelineScale.set('all');
     // resume-or-start: re-tapping the month whose stream was interrupted
     // continues from its cursor instead of being a silent no-op
-    this.resumeOrStartTimelineStream(m.key, { after, before });
+    this.resumeOrStartTimelineStream(m.key, { key: m.key, before });
     this.scrollContentTop();
   }
 
@@ -729,6 +734,13 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return isNaN(d.getTime()) ? null : d;
   }
 
+  /** 'YYYY-MM' for a file (browser-local), matching how group headers and the
+   *  month drill-down filter bucket files — so the two never drift apart. */
+  private monthKeyOf(f: DriveFile): string | null {
+    const d = this.parseFileDate(f.modified_at);
+    return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : null;
+  }
+
   /** Consecutive month/year groups from the (already date-desc) flat list —
    *  capped at the render window; the full list stays in searchResults so
    *  preview navigation spans everything loaded. */
@@ -739,9 +751,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     let current: { key: string; label: string; files: DriveFile[] } | null = null;
     for (const f of files) {
       const d = this.parseFileDate(f.modified_at);
-      const key = d
-        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-        : 'unknown';
+      const key = this.monthKeyOf(f) ?? 'unknown';
       if (!current || current.key !== key) {
         const label: string = d
           ? d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
@@ -767,7 +777,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   /** (Re)start the media stream for a target: 'full' or one month (period
    *  bounds, unix seconds). No-op if that exact target is already loaded. */
-  private startTimelineStream(key: string, period: { after: number; before: number } | null): void {
+  private startTimelineStream(key: string, period: { key: string; before: number | null } | null): void {
     if (this.timelineLoadedKey === key) return;
     this.timelineLoadedKey = key;
     this.timelinePeriod = period;
@@ -813,8 +823,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
         const period = this.timelinePeriod;
         // A month stream seeds page 0 with modified_before = end-of-month; later
         // pages ride the cursor (which already encodes the filter). kDrive can't
-        // filter modified_after into the past, so the lower bound is applied
-        // client-side and the stream stops once files predate the month.
+        // filter modified_after into the past, so the month lower bound is
+        // applied client-side by comparing each file's OWN month key (computed
+        // the same way as the group headers, so it can't drift by timezone) —
+        // the stream stops once a file falls into an older month.
         const before = period && !this.timelineCursor ? period.before : null;
         const page = await this.fileService.loadMediaPage(this.timelineCursor, before);
         if (gen !== this.timelineGen || !this.isTimeline()) return;
@@ -822,9 +834,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
         if (!page.has_more || !page.cursor) this.timelineDone.set(true);
         let data = page.data;
         if (period) {
-          const secs = (f: DriveFile) => (this.parseFileDate(f.modified_at)?.getTime() ?? 0) / 1000;
-          if (page.data.some(f => secs(f) < period.after)) this.timelineDone.set(true);
-          data = page.data.filter(f => { const t = secs(f); return t >= period.after && t <= period.before; });
+          if (page.data.some(f => { const k = this.monthKeyOf(f); return k !== null && k < period.key; })) {
+            this.timelineDone.set(true);
+          }
+          data = page.data.filter(f => this.monthKeyOf(f) === period.key);
         }
         if (data.length > 0) {
           this.fileService.searchResults.update(r => [...(r ?? []), ...data]);

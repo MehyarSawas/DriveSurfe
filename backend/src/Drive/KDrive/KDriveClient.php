@@ -299,7 +299,9 @@ final class KDriveClient implements DriveInterface
 
     public function listMediaMonths(?int $before = null, bool $debug = false): array
     {
-        $cacheFile = self::MONTHS_CACHE_DIR . '/' . ($before === null ? 'head' : (string) $before) . '.json';
+        // Version prefix: bump when the batch schema/walk logic changes so
+        // indefinitely-cached historical batches from an older build are ignored.
+        $cacheFile = self::MONTHS_CACHE_DIR . '/v2-' . ($before === null ? 'head' : (string) $before) . '.json';
         if (!$debug && is_file($cacheFile)) {
             $fresh = $before !== null // historical batches never change
                 || (time() - (int) filemtime($cacheFile) < self::MONTHS_HEAD_TTL);
@@ -309,12 +311,12 @@ final class KDriveClient implements DriveInterface
             }
         }
 
-        $months     = [];
-        $seen       = [];
-        $cursor     = null;
-        $nextBefore = null;
-        $complete   = false;
-        $diag       = ['pages' => 0, 'rejected' => null];
+        $months        = [];
+        $seen          = [];
+        $cursor        = null;
+        $oldestOverall = null; // oldest ts seen across ALL pages in this batch
+        $complete      = false;
+        $diag          = ['pages' => 0, 'rejected' => null];
 
         for ($page = 0; $page < self::MONTHS_PAGE_CAP; $page++) {
             try {
@@ -327,11 +329,10 @@ final class KDriveClient implements DriveInterface
             }
             $diag['pages']++;
 
-            $oldestTs = null;
             foreach ($res['files'] as $f) {
                 $ts = $f['modified_at'] ? strtotime($f['modified_at']) : false;
                 if ($ts === false || $ts <= 0) continue;
-                $oldestTs = $oldestTs === null ? $ts : min($oldestTs, $ts);
+                $oldestOverall = $oldestOverall === null ? $ts : min($oldestOverall, $ts);
                 $key = date('Y-m', $ts);
                 if (isset($seen[$key])) continue;
                 $seen[$key] = true;
@@ -345,13 +346,19 @@ final class KDriveClient implements DriveInterface
 
             $cursor = $res['cursor'];
             if (!($res['has_more'] ?? false) || !$cursor) { $complete = true; break; }
-            if (count($months) >= self::MONTHS_PER_BATCH) {
-                // Resume the next batch just before this page's oldest file.
-                $nextBefore = $oldestTs !== null ? $oldestTs - 1 : null;
-                if ($nextBefore === null) $complete = true;
-                break;
-            }
+            // Stop this batch once we have enough months OR hit the page cap
+            // (the for-condition). Either way the resume point is computed
+            // below from the oldest ts seen — NOT only in the month-count
+            // branch, or a page-cap stop would drop the cursor and the walk
+            // would end prematurely.
+            if (count($months) >= self::MONTHS_PER_BATCH) break;
         }
+
+        // Resume the next batch just before the oldest file we've seen. Null
+        // only when the walk genuinely reached the end (complete) or the batch
+        // returned nothing usable.
+        $nextBefore = $oldestOverall !== null ? $oldestOverall - 1 : null;
+        if ($nextBefore === null) $complete = true;
 
         $result = [
             'months'      => array_values($months), // already newest-first
