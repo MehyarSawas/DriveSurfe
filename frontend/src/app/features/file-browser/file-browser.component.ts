@@ -63,6 +63,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly pendingMoveIds = signal<Set<string>>(new Set());
   readonly sessionLoading = signal(false);
   readonly bulkMoveToast = signal<string | null>(null);
+  /** Folders pinned to the sidebar (persisted in localStorage). */
+  readonly pinnedFolders = signal<{ id: string; name: string }[]>(FileBrowserComponent.loadPinnedFolders());
+  readonly pinnedFolderIds = computed(() => new Set(this.pinnedFolders().map(f => f.id)));
+
   /** File/folder shown in the Info dialog (null = closed). */
   readonly infoFile = signal<DriveFile | null>(null);
   readonly infoStats = signal<FolderStats | null>(null);
@@ -1046,6 +1050,38 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.router.navigate(['/folder', id]);
     this.loadCurrentFolder();
     this.closeSidebarOnMobile();
+  }
+
+  private static loadPinnedFolders(): { id: string; name: string }[] {
+    try {
+      const raw = localStorage.getItem('ds-pinned-folders');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed)
+        ? parsed.filter(f => f && typeof f.id === 'string' && typeof f.name === 'string')
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** 'Add to sidebar' / 'Remove from sidebar' context-menu action (folders only). */
+  togglePinnedFolder(folder: DriveFile): void {
+    if (!folder.is_dir) return;
+    this.pinnedFolders.update(list =>
+      list.some(f => f.id === folder.id)
+        ? list.filter(f => f.id !== folder.id)
+        : [...list, { id: folder.id, name: folder.name }]
+    );
+    try {
+      localStorage.setItem('ds-pinned-folders', JSON.stringify(this.pinnedFolders()));
+    } catch { /* storage full/blocked — pin just won't persist */ }
+  }
+
+  unpinFolder(id: string): void {
+    this.pinnedFolders.update(list => list.filter(f => f.id !== id));
+    try {
+      localStorage.setItem('ds-pinned-folders', JSON.stringify(this.pinnedFolders()));
+    } catch { /* non-critical */ }
   }
 
   /** Template helper: kDrive dates may be unix seconds — reuse the timeline

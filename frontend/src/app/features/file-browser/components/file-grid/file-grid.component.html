@@ -30,6 +30,12 @@
               Restore
             </button>
           } @else {
+            @if (file.is_dir) {
+              <button class="menu-item" (click)="pin.emit(file); openMenuId = null">
+                <svg viewBox="0 0 24 24"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/></svg>
+                {{ isPinned(file.id) ? 'Remove from sidebar' : 'Add to sidebar' }}
+              </button>
+            }
             <button class="menu-item" (click)="info.emit(file); openMenuId = null">
               <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
               Info

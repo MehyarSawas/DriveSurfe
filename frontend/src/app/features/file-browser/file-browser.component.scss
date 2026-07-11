@@ -1023,3 +1023,41 @@ ds-search-bar {
     }
   }
 }
+
+/* Pinned folders in the sidebar (below Trash) */
+.pinned-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 8px 12px;
+}
+
+.pinned-item {
+  cursor: pointer;
+  position: relative;
+
+  .pinned-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .pinned-remove {
+    opacity: 0;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+
+    svg { width: 14px; height: 14px; }
+  }
+
+  &:hover .pinned-remove,
+  &:focus-within .pinned-remove {
+    opacity: 1;
+  }
+
+  @media (hover: none) {
+    .pinned-remove { opacity: 1; } /* touch devices: always visible */
+  }
+}

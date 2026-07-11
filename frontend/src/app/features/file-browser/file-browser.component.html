@@ -35,6 +35,20 @@
         <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
         Trash
       </button>
+      @if (pinnedFolders().length > 0) {
+        <div class="pinned-divider"></div>
+        @for (pf of pinnedFolders(); track pf.id) {
+          <div class="nav-item pinned-item" role="button" tabindex="0"
+               (click)="navigateToFolder(pf.id, pf.name)"
+               (keydown.enter)="navigateToFolder(pf.id, pf.name)">
+            <svg viewBox="0 0 24 24"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/></svg>
+            <span class="pinned-name">{{ pf.name }}</span>
+            <button class="pinned-remove icon-btn" title="Remove from sidebar" (click)="$event.stopPropagation(); unpinFolder(pf.id)">
+              <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
+          </div>
+        }
+      }
     </nav>
 
     @if (fileService.sessions().length > 0) {
@@ -409,6 +423,8 @@
                     (copy)="openCopyForFile($event)"
                     (share)="openShare($event)"
           (info)="openInfo($event)"
+          [pinnedIds]="pinnedFolderIds()"
+          (pin)="togglePinnedFolder($event)"
                   />
                 </div>
               }
@@ -458,6 +474,8 @@
           (copy)="openCopyForFile($event)"
           (share)="openShare($event)"
           (info)="openInfo($event)"
+          [pinnedIds]="pinnedFolderIds()"
+          (pin)="togglePinnedFolder($event)"
         />
       } @else {
         <ds-file-list
@@ -477,6 +495,8 @@
           (copy)="openCopyForFile($event)"
           (share)="openShare($event)"
           (info)="openInfo($event)"
+          [pinnedIds]="pinnedFolderIds()"
+          (pin)="togglePinnedFolder($event)"
         />
       }
     </div>
@@ -556,6 +576,8 @@
     (copy)="openCopyForFile($event)"
     (share)="openShare($event)"
           (info)="openInfo($event)"
+          [pinnedIds]="pinnedFolderIds()"
+          (pin)="togglePinnedFolder($event)"
     (createFolder)="handleCreateFolderFromPreview($event)"
   />
 }
