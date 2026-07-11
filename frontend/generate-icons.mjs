@@ -20,7 +20,6 @@ const REQUIRED = [
   'icon-maskable-192.png',
   'icon-maskable-512.png',
   'apple-touch-icon.png',
-  'logo.png',
 ];
 
 let missing = 0;
