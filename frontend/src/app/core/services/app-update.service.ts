@@ -54,7 +54,9 @@ export class AppUpdateService {
   private async check(): Promise<void> {
     if (this.updateReady() || !this.baseline) return;
     try {
-      const res = await fetch('index.html', { cache: 'no-store' });
+      // Unique URL each time — some installed PWAs (iOS especially) serve a
+      // cached index.html even with no-store, which would hide the update.
+      const res = await fetch(`index.html?_=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) return;
       const html = await res.text();
       const srcs = Array.from(html.matchAll(/<script[^>]+src="([^"]+)"/g)).map(m => m[1]);
