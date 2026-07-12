@@ -270,62 +270,6 @@ final class KDriveClient implements DriveInterface
         ];
     }
 
-    /**
-     * TEMPORARY diagnostic: probe the search endpoint under several param
-     * combinations to find out which one actually returns historical media.
-     * Returns raw counts / errors — no caching, no filtering surprises.
-     */
-    public function diagnoseMedia(): array
-    {
-        $driveId = $this->getDriveId();
-        $now     = time();
-        $probe = function (string $label, array $extra) use ($driveId): array {
-            $params = [
-                'order_by' => 'last_modified_at',
-                'order'    => 'desc',
-                'limit'    => 5,
-                'depth'    => 'unlimited',
-                'types'    => ['image', 'video'],
-            ] + $extra;
-            try {
-                $data  = $this->get("{$driveId}/files/search", $params, self::API_V3);
-                $items = $data['data'] ?? [];
-                $first = $items[0] ?? null;
-                $last  = $items ? $items[count($items) - 1] : null;
-                return [
-                    'ok'         => true,
-                    'count'      => count($items),
-                    'has_more'   => $data['has_more'] ?? null,
-                    'first_name' => $first['name'] ?? null,
-                    'first_mod'  => $first['last_modified_at'] ?? null,
-                    'last_mod'   => $last['last_modified_at'] ?? null,
-                ];
-            } catch (\Throwable $e) {
-                return ['ok' => false, 'error' => substr($e->getMessage(), 0, 500)];
-            }
-        };
-
-        return [
-            'now'                   => $now,
-            'A_baseline'            => $probe('baseline', []),
-            'B_before_90d_custom'   => $probe('b90', ['modified_at' => 'custom', 'modified_before' => $now - 7776000]),
-            'C_before_2015'         => $probe('b2015', ['modified_at' => 'custom', 'modified_before' => 1434326400]),
-            'D_before_no_types'     => (function () use ($driveId, $now) {
-                try {
-                    $data = $this->get("{$driveId}/files/search", [
-                        'order_by' => 'last_modified_at', 'order' => 'desc', 'limit' => 5,
-                        'depth' => 'unlimited', 'type' => 'file',
-                        'modified_at' => 'custom', 'modified_before' => 1434326400,
-                    ], self::API_V3);
-                    return ['ok' => true, 'count' => count($data['data'] ?? []), 'has_more' => $data['has_more'] ?? null];
-                } catch (\Throwable $e) {
-                    return ['ok' => false, 'error' => substr($e->getMessage(), 0, 500)];
-                }
-            })(),
-            'E_last_year_preset'    => $probe('lastyear', ['modified_at' => 'last_year']),
-        ];
-    }
-
     private static function isMediaFile(array $f): bool
     {
         static $mediaExt = ['jpg','jpeg','png','gif','webp','heic','heif','avif','mp4','mov','m4v','webm','avi','mkv'];
@@ -375,7 +319,7 @@ final class KDriveClient implements DriveInterface
      * state file holds without touching the kDrive API or writing anything —
      * opening the timeline must never burn API quota or grow the cache.
      */
-    public function listMediaMonths(bool $debug = false, bool $refresh = false, bool $build = false): array
+    public function listMediaMonths(bool $refresh = false, bool $build = false): array
     {
         $stateFile = $this->monthsStateFile();
         $state = ['months' => [], 'cursor' => null, 'complete' => false, 'updated_at' => 0];
@@ -385,7 +329,6 @@ final class KDriveClient implements DriveInterface
                 $state = array_merge($state, $cached);
             }
         }
-        $diag = ['pages' => 0, 'rejected' => null];
 
         if ($build && !$state['complete']) {
             // Advance the walk under a hard TIME budget, not just a page count:
@@ -399,7 +342,6 @@ final class KDriveClient implements DriveInterface
                 for ($i = 0; $i < self::MONTHS_PAGES_PER_CALL && time() < $deadline; $i++) {
                     $pageCursor = $state['cursor'];
                     $res = $this->listMedia($pageCursor);
-                    $diag['pages']++;
                     $this->mergeMonths($state['months'], $res['files'], $pageCursor, false);
                     $state['cursor'] = $res['cursor'];
                     if (!($res['has_more'] ?? false) || !$res['cursor']) {
@@ -408,7 +350,7 @@ final class KDriveClient implements DriveInterface
                     }
                 }
             } catch (RuntimeException $e) {
-                $diag['rejected'] = substr($e->getMessage(), 0, 600);
+                // Keep partial progress; the cron loop resumes from the cursor.
             }
             $state['updated_at'] = time();
             $this->saveMonthsState($state);
@@ -418,12 +360,11 @@ final class KDriveClient implements DriveInterface
             // app's Reload action or the cron's head-refresh pass.
             try {
                 $res = $this->listMedia(null);
-                $diag['pages']++;
                 $this->mergeMonths($state['months'], $res['files'], null, true);
                 $state['updated_at'] = time();
                 $this->saveMonthsState($state);
             } catch (RuntimeException $e) {
-                $diag['rejected'] = substr($e->getMessage(), 0, 600); // serve stale
+                // Serve stale on error.
             }
         }
 
@@ -438,9 +379,6 @@ final class KDriveClient implements DriveInterface
                 'count'      => count($months),
             ],
         ];
-        if ($debug) {
-            $result['debug'] = $diag + ['cursor' => $state['cursor']];
-        }
         return $result;
     }
 
@@ -776,7 +714,6 @@ final class KDriveClient implements DriveInterface
         $contentType = $response->getHeaderLine('Content-Type') ?: '';
 
         if ($status < 200 || $status >= 300 || !str_starts_with($contentType, 'image/')) {
-            error_log("proxyFile non-image [{$type}:{$fileId}] status={$status} ct={$contentType}");
             http_response_code(404);
             exit;
         }

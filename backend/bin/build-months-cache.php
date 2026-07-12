@@ -39,7 +39,7 @@ while (time() - $start < MAX_RUNTIME) {
         // build=true — only this script (not the web app) advances the walk
         // and writes the cache. First call also forces a head refresh so new
         // uploads are picked up even when the index is already complete.
-        $res   = $client->listMediaMonths(false, $first, true);
+        $res   = $client->listMediaMonths($first, true);
         $first = false;
     } catch (Throwable $e) {
         fwrite(STDERR, sprintf("[%s] ERROR %s\n", date('c'), $e->getMessage()));
