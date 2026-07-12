@@ -798,7 +798,10 @@ final class KDriveClient implements DriveInterface
             $cmd = escapeshellarg(self::ffmpegBin())
                  . ' -nostdin -y -i ' . escapeshellarg($src)
                  . ' -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p'
-                 . ' -c:a aac -b:a 128k -movflags +faststart '
+                 . ' -c:a aac -b:a 128k -movflags +faststart'
+                 // Force the MP4 muxer: the temp file ends in .part, so ffmpeg
+                 // can't infer the container from the extension.
+                 . ' -f mp4 '
                  . escapeshellarg($tmp) . ' 2>&1';
             @set_time_limit(0);
             exec($cmd, $lines, $code);
