@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, OnDestroy, inject, signal, computed, ViewChild
+  Component, OnInit, OnDestroy, inject, signal, computed, effect, ViewChild
 } from '@angular/core';
 import { CommonModule, DatePipe, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -236,6 +236,30 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (t) files = files.filter(f => f.is_dir || f.type === 'dir' || f.mime_type?.startsWith(t + '/'));
     return files;
   });
+
+  /** DOM render window for the folder/trash/starred/shares/search grid+list.
+   *  Rendering thousands of file cards (each firing a thumbnail request) locks
+   *  the UI — trash especially, now that it lists everything. Only this many
+   *  items are in the DOM; it grows as the user scrolls near the bottom and
+   *  resets whenever the view changes. */
+  private static readonly INITIAL_DISPLAY = 200;
+  readonly displayLimit = signal(FileBrowserComponent.INITIAL_DISPLAY);
+  readonly renderedFiles = computed(() => this.displayFiles().slice(0, this.displayLimit()));
+  readonly hasMoreToRender = computed(() => this.displayLimit() < this.displayFiles().length);
+
+  /** Identity of the current view — changing it resets the render window. */
+  private readonly viewToken = computed(() =>
+    this.fileService.currentFolderId() + (this.fileService.searchResults() === null ? '|f' : '|s')
+  );
+
+  constructor() {
+    // Reset the render window on any view switch (folder nav, trash, starred,
+    // shares, search on/off) so a new view always starts light.
+    effect(() => {
+      this.viewToken();
+      this.displayLimit.set(FileBrowserComponent.INITIAL_DISPLAY);
+    }, { allowSignalWrites: true });
+  }
 
   readonly selectedCount = computed(() => this.fileService.selectedIds().size);
   readonly folderDirs = computed(() => this.displayFiles().filter(f => f.is_dir));
@@ -1003,7 +1027,16 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   /** Grow the render window as the user approaches the bottom, and top up the
    *  data buffer to stay ahead of it. */
   onContentScroll(e: Event): void {
-    if (!this.isTimeline() || this.timelineScale() !== 'all') return;
+    if (!this.isTimeline()) {
+      // Folder / trash / starred / shares / search: grow the render window as
+      // the user nears the bottom.
+      const el = e.target as HTMLElement;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 800 && this.hasMoreToRender()) {
+        this.displayLimit.update(n => n + 200);
+      }
+      return;
+    }
+    if (this.timelineScale() !== 'all') return;
     const el = e.target as HTMLElement;
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1200) {
       const total = this.fileService.searchResults()?.length ?? 0;
