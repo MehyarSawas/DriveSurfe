@@ -298,13 +298,21 @@ export class FileService {
 
   async restoreFile(fileId: string): Promise<void> {
     await firstValueFrom(this.http.post(`/api/files/${fileId}/restore`, {}));
+    this.removeFromLists(fileId);
+  }
+
+  /** Drop a file id from BOTH files() and searchResults() — the latter backs
+   *  the timeline / starred / shares / search views, so a delete that only
+   *  touched files() left those views showing the removed item. */
+  private removeFromLists(fileId: string): void {
     this.files.update(files => files.filter(f => f.id !== fileId));
+    this.searchResults.update(r => r ? r.filter(f => f.id !== fileId) : r);
   }
 
   /** Permanently remove one item from the trash (irreversible). */
   async permanentDelete(fileId: string): Promise<void> {
     await firstValueFrom(this.http.delete(`/api/trash/${fileId}`));
-    this.files.update(files => files.filter(f => f.id !== fileId));
+    this.removeFromLists(fileId);
   }
 
   /** Empty the whole trash (irreversible). */
@@ -315,7 +323,7 @@ export class FileService {
 
   async delete(file: DriveFile): Promise<void> {
     await firstValueFrom(this.http.delete(`/api/files/${file.id}`));
-    this.files.update(files => files.filter(f => f.id !== file.id));
+    this.removeFromLists(file.id);
     this.folderStats.update(s => {
       if (!s) return s;
       const isDir = file.is_dir;
