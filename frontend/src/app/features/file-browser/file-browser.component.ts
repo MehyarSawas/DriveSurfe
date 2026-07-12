@@ -708,6 +708,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   /** Server cache stats (count / size / last update) for the info popover. */
   readonly timelineCoversMeta = signal<MediaMonthsResponse['meta'] | null>(null);
   readonly timelineInfoOpen = signal(false);
+  readonly timelineReloading = signal(false);
+  readonly timelineReloadError = signal<string | null>(null);
   private timelineCoversComplete = false;
   private coversGen = 0;
   /** Remembered scroll offsets for the cover scales, restored on return. */
@@ -1034,6 +1036,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   /** Info-popover reload action: force a head rescan of the month index. */
   async reloadTimelineCache(): Promise<void> {
+    if (this.timelineReloading()) return;
+    this.timelineReloading.set(true);
+    this.timelineReloadError.set(null);
     try {
       const res = await this.fileService.loadMediaMonths(true);
       this.timelineCovers.set(res.months);
@@ -1042,6 +1047,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       if (!res.complete) this.ensureTimelineCovers(); // resume the walk
     } catch (err) {
       console.error('timeline cache reload error:', err);
+      this.timelineReloadError.set((err as any)?.error?.error ?? 'Reload failed');
+    } finally {
+      this.timelineReloading.set(false);
     }
   }
 

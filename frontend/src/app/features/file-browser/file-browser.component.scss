@@ -941,7 +941,20 @@ ds-search-bar {
       cursor: pointer;
 
       svg { width: 15px; height: 15px; fill: currentColor; }
-      &:hover { background: rgba(20, 164, 221, 0.08); }
+      &:hover:not(:disabled) { background: rgba(20, 164, 221, 0.08); }
+      &:disabled { opacity: 0.7; cursor: default; }
+
+      .spinner-sm {
+        width: 14px;
+        height: 14px;
+        border-width: 2px;
+      }
+    }
+
+    .info-reload-error {
+      color: var(--color-danger, #d93025);
+      justify-content: flex-start;
+      font-size: 12px;
     }
   }
 }
