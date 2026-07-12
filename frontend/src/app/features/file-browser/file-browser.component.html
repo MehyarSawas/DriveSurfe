@@ -594,7 +594,7 @@
           (pin)="togglePinnedFolder($event)"
         />
       }
-      @if (!isTimeline() && hasMoreToRender()) {
+      @if (!isTimeline() && hasMoreToRender() && !fileService.loading() && !fileService.searchLoading()) {
         <div class="loading timeline-loading"><div class="spinner"></div></div>
       }
     </div>
