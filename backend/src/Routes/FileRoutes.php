@@ -114,6 +114,11 @@ final class FileRoutes
             return $res;
         })->add($auth);
 
+        // Diagnostic: is the transcode toolchain available on this host?
+        $group->get('/transcode-diag', function (Request $req, Response $res) use ($drive): Response {
+            return self::json($res, ['data' => $drive->transcodeDiag()]);
+        })->add($auth);
+
         $group->get('/folder-tree', function (Request $req, Response $res) use ($drive): Response {
             try {
                 return self::json($res, ['data' => $drive->getFolderTree()]);

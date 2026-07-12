@@ -802,6 +802,31 @@ final class KDriveClient implements DriveInterface
         }
     }
 
+    /** Report why transcoding may be unavailable on this host. */
+    public function transcodeDiag(): array
+    {
+        $disabled = array_filter(array_map('trim', explode(',', (string) ini_get('disable_functions'))));
+        $execDisabled = array_values(array_intersect(['exec', 'shell_exec', 'proc_open'], $disabled));
+        $bin     = self::ffmpegBin();
+        $version = null;
+        if ($bin && function_exists('exec')) {
+            @exec(escapeshellarg($bin) . ' -version 2>&1', $out, $code);
+            $version = $out[0] ?? null;
+        }
+        $dir = self::TRANSCODE_CACHE_DIR;
+        return [
+            'ffmpeg_found'         => $bin !== null,
+            'ffmpeg_path'          => $bin,
+            'ffmpeg_version'       => $version,
+            'env_FFMPEG_BIN'       => $_ENV['FFMPEG_BIN'] ?? null,
+            'exec_disabled'        => $execDisabled,          // e.g. ["exec","shell_exec"]
+            'path_env'             => getenv('PATH'),
+            'cache_dir'            => $dir,
+            'cache_dir_exists'     => is_dir($dir),
+            'cache_dir_writable'   => is_dir($dir) ? is_writable($dir) : is_writable(dirname($dir)),
+        ];
+    }
+
     /** Locate the ffmpeg binary (FFMPEG_BIN override, else PATH). Null if none. */
     private static function ffmpegBin(): ?string
     {
