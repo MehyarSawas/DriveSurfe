@@ -426,14 +426,39 @@ export class FileService {
     return res.data;
   }
 
-  downloadFile(fileId: string, name: string): void {
-    // ?dl=1 makes the server send Content-Disposition: attachment (a real
-    // download). target=_blank opens it outside the standalone PWA webview so
-    // iOS shows its share/save controls instead of trapping the file inline.
+  async downloadFile(fileId: string, name: string, allowShare = true): Promise<void> {
+    const url = `/api/files/${fileId}/download?dl=1`;
+
+    // iOS standalone PWAs (WKWebView) can't trigger a normal file download, but
+    // they DO support the Web Share API — fetch the file and hand it to the OS
+    // share sheet so the user gets "Save to Files" / share options.
+    // (Skipped for bulk downloads — one share sheet per file would be unusable.)
+    const nav = navigator as Navigator & {
+      share?: (d: ShareData) => Promise<void>;
+      canShare?: (d: ShareData) => boolean;
+    };
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (allowShare && isIOS && nav.share) {
+      try {
+        const res = await firstValueFrom(
+          this.http.get(url, { responseType: 'blob' })
+        );
+        const file = new File([res], name, { type: res.type || 'application/octet-stream' });
+        if (!nav.canShare || nav.canShare({ files: [file] })) {
+          await nav.share({ files: [file] });
+          return;
+        }
+      } catch {
+        /* user cancelled the sheet, or share unsupported — fall through */
+      }
+    }
+
+    // Everywhere else: a plain attachment download (no _blank — the attachment
+    // disposition downloads without navigating, so nothing gets trapped).
     const a = document.createElement('a');
-    a.href = `/api/files/${fileId}/download?dl=1`;
+    a.href = url;
     a.download = name;
-    a.target = '_blank';
     a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();

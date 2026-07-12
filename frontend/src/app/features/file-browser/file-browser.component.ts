@@ -1556,9 +1556,11 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   bulkDownload(): void {
+    // allowShare=false: never route bulk through the iOS share sheet, which
+    // would pop one modal per file. Each triggers a plain attachment download.
     this.fileService.selectedIds().forEach(id => {
       const file = this.displayFiles().find(f => f.id === id);
-      if (file) this.fileService.downloadFile(file.id, file.name);
+      if (file) this.fileService.downloadFile(file.id, file.name, false);
     });
   }
 
