@@ -640,11 +640,29 @@ final class KDriveClient implements DriveInterface
         $rawName = $meta['data']['name'] ?? 'download';
         $name    = rawurlencode($rawName);
         $mime    = $meta['data']['mime_type'] ?? 'application/octet-stream';
+        $metaSize = (int) ($meta['data']['size'] ?? 0);
 
+        // Parse the client's byte-range (if any). iOS Safari REQUIRES a proper
+        // 206 response to play <video> — it probes with a Range request and
+        // won't play (especially larger files it needs to seek) unless the
+        // server honours it. We forward the Range to kDrive, but kDrive ignores
+        // it for some files and returns the full 200 body — which is exactly why
+        // "some mp4s" don't render. So we also synthesise the 206 ourselves when
+        // upstream doesn't, guaranteeing correct range semantics either way.
+        $reqStart = null; // inclusive
+        $reqEnd   = null; // inclusive, null = through end
+        $isSuffix = false; // "bytes=-N" (last N bytes)
+        $rangeHeader = $_SERVER['HTTP_RANGE'] ?? null;
         $requestHeaders = ['Authorization' => "Bearer {$token}"];
-        $rangeHeader    = $_SERVER['HTTP_RANGE'] ?? null;
-        if ($rangeHeader && preg_match('/^bytes=\d*-\d*$/', $rangeHeader)) {
+        if ($rangeHeader && preg_match('/^bytes=(\d*)-(\d*)$/', $rangeHeader, $m) && ($m[1] !== '' || $m[2] !== '')) {
             $requestHeaders['Range'] = $rangeHeader;
+            if ($m[1] === '') {           // suffix range: last N bytes
+                $isSuffix = true;
+                $reqEnd   = (int) $m[2];  // holds N until we know the total size
+            } else {
+                $reqStart = (int) $m[1];
+                $reqEnd   = $m[2] === '' ? null : (int) $m[2];
+            }
         }
 
         try {
@@ -658,7 +676,6 @@ final class KDriveClient implements DriveInterface
         }
 
         $status = $response->getStatusCode();
-        http_response_code($status);
 
         $safeMime = self::safeMimeType($mime);
         // kDrive sometimes reports a generic/empty MIME (→ octet-stream), which
@@ -676,16 +693,81 @@ final class KDriveClient implements DriveInterface
         header("Accept-Ranges: bytes");
         header("Cache-Control: private, max-age=3600");
 
-        if ($len = $response->getHeaderLine('Content-Length')) {
-            header("Content-Length: {$len}");
-        }
-        if ($range = $response->getHeaderLine('Content-Range')) {
-            header("Content-Range: {$range}");
+        $body = $response->getBody();
+
+        $haveRange = $isSuffix || $reqStart !== null || $reqEnd !== null;
+
+        // Case 1: pass the upstream response straight through when there's
+        // nothing to synthesise — no valid client range, upstream already
+        // answered 206, or upstream returned a non-200 status (error/redirect
+        // we shouldn't rewrite).
+        if (!$haveRange || $status !== 200) {
+            http_response_code($status);
+            if ($len = $response->getHeaderLine('Content-Length')) {
+                header("Content-Length: {$len}");
+            }
+            if ($cr = $response->getHeaderLine('Content-Range')) {
+                header("Content-Range: {$cr}");
+            }
+            while (!$body->eof()) {
+                echo $body->read(65536);
+                if (connection_aborted()) break;
+            }
+            return;
         }
 
-        $body = $response->getBody();
-        while (!$body->eof()) {
-            echo $body->read(65536);
+        // Case 2: a range was requested but upstream returned the full 200 body.
+        // Synthesise the 206 by streaming only the requested slice. Total size
+        // comes from upstream Content-Length, falling back to the file metadata
+        // (e.g. when upstream uses chunked transfer with no Content-Length).
+        $total = (int) ($response->getHeaderLine('Content-Length') ?: $metaSize);
+        if ($total <= 0) {
+            // Can't determine size → can't do partial content correctly; send
+            // the whole body as 200 so playback still has the bytes.
+            http_response_code(200);
+            header("Content-Length: {$total}");
+            while (!$body->eof()) {
+                echo $body->read(65536);
+                if (connection_aborted()) break;
+            }
+            return;
+        }
+
+        if ($isSuffix) {
+            $n     = min($reqEnd, $total);
+            $start = $total - $n;
+            $end   = $total - 1;
+        } else {
+            $start = $reqStart;
+            $end   = $reqEnd ?? ($total - 1);
+        }
+        // Clamp and validate; an unsatisfiable range gets a proper 416.
+        $end = min($end, $total - 1);
+        if ($start > $end || $start < 0) {
+            http_response_code(416);
+            header("Content-Range: bytes */{$total}");
+            return;
+        }
+
+        $length = $end - $start + 1;
+        http_response_code(206);
+        header("Content-Range: bytes {$start}-{$end}/{$total}");
+        header("Content-Length: {$length}");
+
+        // Upstream streams from byte 0 (it ignored our Range), so discard up to
+        // $start, then emit exactly $length bytes.
+        $skip = $start;
+        while ($skip > 0 && !$body->eof()) {
+            $chunk = $body->read((int) min(65536, $skip));
+            if ($chunk === '') break;
+            $skip -= strlen($chunk);
+        }
+        $remaining = $length;
+        while ($remaining > 0 && !$body->eof()) {
+            $chunk = $body->read((int) min(65536, $remaining));
+            if ($chunk === '') break;
+            echo $chunk;
+            $remaining -= strlen($chunk);
             if (connection_aborted()) break;
         }
     }
