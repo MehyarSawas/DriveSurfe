@@ -722,8 +722,12 @@ final class KDriveClient implements DriveInterface
         http_response_code($status);
 
         $safeMime = self::safeMimeType($mime);
+        // ?dl=1 forces a real download (attachment) instead of inline display —
+        // inline traps PDFs/files in the iOS PWA webview with no save control.
+        // Plain requests (e.g. video streaming with Range) stay inline.
+        $disposition = (($_GET['dl'] ?? '') === '1') ? 'attachment' : 'inline';
         header("Content-Type: {$safeMime}");
-        header("Content-Disposition: inline; filename*=UTF-8''{$name}");
+        header("Content-Disposition: {$disposition}; filename*=UTF-8''{$name}");
         header("Accept-Ranges: bytes");
         header("Cache-Control: private, max-age=3600");
 

@@ -55,7 +55,9 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (isPreviewRequest(req.url)) {
     event.respondWith(serve(req));
-  } else if (req.mode === 'navigate') {
+  } else if (req.mode === 'navigate' && !url.pathname.startsWith('/api/')) {
+    // App routes only. Never intercept /api navigations (e.g. file downloads
+    // opened in a new context) — they must reach the network as-is.
     event.respondWith(navigate(req));
   } else if (isHashedAsset(url)) {
     event.respondWith(asset(req));

@@ -427,10 +427,17 @@ export class FileService {
   }
 
   downloadFile(fileId: string, name: string): void {
+    // ?dl=1 makes the server send Content-Disposition: attachment (a real
+    // download). target=_blank opens it outside the standalone PWA webview so
+    // iOS shows its share/save controls instead of trapping the file inline.
     const a = document.createElement('a');
-    a.href = `/api/files/${fileId}/download`;
+    a.href = `/api/files/${fileId}/download?dl=1`;
     a.download = name;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
     a.click();
+    a.remove();
   }
 
   navigateToFolder(id: string, name: string): void {
