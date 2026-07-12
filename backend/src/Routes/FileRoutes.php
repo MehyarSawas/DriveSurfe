@@ -154,6 +154,17 @@ final class FileRoutes
             return self::json($res, ['data' => $drive->listTrash()]);
         })->add($auth);
 
+        $group->delete('/trash', function (Request $req, Response $res) use ($drive): Response {
+            $drive->emptyTrash();
+            return self::json($res, ['ok' => true]);
+        })->add($auth);
+
+        $group->delete('/trash/{id}', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
+            $drive->deleteTrashFile($args['id']);
+            return self::json($res, ['ok' => true]);
+        })->add($auth);
+
         $group->get('/favorites', function (Request $req, Response $res) use ($drive): Response {
             return self::json($res, ['data' => $drive->listFavorites()]);
         })->add($auth);

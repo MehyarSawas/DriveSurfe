@@ -301,6 +301,18 @@ export class FileService {
     this.files.update(files => files.filter(f => f.id !== fileId));
   }
 
+  /** Permanently remove one item from the trash (irreversible). */
+  async permanentDelete(fileId: string): Promise<void> {
+    await firstValueFrom(this.http.delete(`/api/trash/${fileId}`));
+    this.files.update(files => files.filter(f => f.id !== fileId));
+  }
+
+  /** Empty the whole trash (irreversible). */
+  async emptyTrash(): Promise<void> {
+    await firstValueFrom(this.http.delete('/api/trash'));
+    this.files.set([]);
+  }
+
   async delete(file: DriveFile): Promise<void> {
     await firstValueFrom(this.http.delete(`/api/files/${file.id}`));
     this.files.update(files => files.filter(f => f.id !== file.id));

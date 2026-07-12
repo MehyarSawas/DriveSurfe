@@ -21,6 +21,7 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   readonly fileDblClick = output<DriveFile>();
   readonly selectToggle = output<DriveFile>();
   readonly restore = output<DriveFile>();
+  readonly permanentDelete = output<DriveFile>();
   readonly rename = output<DriveFile>();
   readonly move = output<DriveFile>();
   readonly copy = output<DriveFile>();

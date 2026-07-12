@@ -577,11 +577,42 @@ final class KDriveClient implements DriveInterface
         return $this->normalizeFiles($files);
     }
 
+    /**
+     * ALL items in the trash (V2 is page-paginated, not cursor). The effective
+     * page size is discovered from the first response (the server may cap
+     * per_page), then we keep fetching while full pages come back — so trash
+     * larger than one page is no longer silently truncated at 100.
+     */
     public function listTrash(): array
     {
+        $driveId  = $this->getDriveId();
+        $all      = [];
+        $page     = 1;
+        $pageSize = null;
+
+        do {
+            $data  = $this->get("{$driveId}/trash", ['per_page' => 500, 'page' => $page, 'with' => 'is_favorite']);
+            $batch = $data['data'] ?? [];
+            $all   = array_merge($all, $batch);
+            if ($pageSize === null) $pageSize = count($batch); // effective per_page
+            $page++;
+        } while ($pageSize > 0 && count($batch) === $pageSize && $page <= 500);
+
+        return $this->normalizeFiles($all, true);
+    }
+
+    /** Permanently remove one item from the trash (irreversible). */
+    public function deleteTrashFile(string $fileId): void
+    {
         $driveId = $this->getDriveId();
-        $data = $this->get("{$driveId}/trash", ['per_page' => 100, 'with' => 'is_favorite']);
-        return $this->normalizeFiles($data['data'] ?? [], true);
+        $this->deleteReq("{$driveId}/trash/{$fileId}");
+    }
+
+    /** Empty the whole trash (irreversible). */
+    public function emptyTrash(): void
+    {
+        $driveId = $this->getDriveId();
+        $this->deleteReq("{$driveId}/trash");
     }
 
     public function getUsage(): array
