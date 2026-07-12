@@ -746,13 +746,16 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
    *  preview-SW caches so covers re-fetch fresh after the index rebuilds. */
   private readonly coverCacheBust = signal(0);
 
-  /** The src to use for a cover tile, or null to render the placeholder. */
+  /** The src to use for a cover tile, or null to render the placeholder.
+   *  Fallback is the PREVIEW endpoint WITH dimensions — kDrive's preview 404s
+   *  without width/height (the viewer always sends them), which is why a
+   *  dimensionless fallback failed even for files that render fine. */
   coverSrc(f: DriveFile): string | null {
     const st = this.coverImgState().get(f.id);
     let url: string | null;
     if (st === 'failed') return null;
-    else if (st === 'preview') url = f.preview_url ?? `/api/files/${f.id}/preview`;
-    else url = f.thumbnail_url ?? f.preview_url ?? null;
+    else if (st === 'preview') url = `/api/files/${f.id}/preview?width=400&height=400`;
+    else url = f.thumbnail_url ?? `/api/files/${f.id}/preview?width=400&height=400`;
     if (!url) return null;
     const bust = this.coverCacheBust();
     return bust ? url + (url.includes('?') ? '&' : '?') + 'cb=' + bust : url;
