@@ -8,7 +8,6 @@ import { Subscription, skip } from 'rxjs';
 import { FileService, FolderStats } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PreviewCacheService } from '../../core/services/preview-cache.service';
-import { OfflineService } from '../../core/services/offline.service';
 import { DriveFile, SortBy, SortDir, ViewMode, HOME_FOLDER_ID, PreviewSession, BreadcrumbItem, MonthCover, MediaMonthsResponse } from '../../core/models/drive-file.model';
 import { FileGridComponent } from './components/file-grid/file-grid.component';
 import { FileListComponent } from './components/file-list/file-list.component';
@@ -47,7 +46,6 @@ import { ScannerComponent } from '../scanner/scanner.component';
 export class FileBrowserComponent implements OnInit, OnDestroy {
   protected fileService = inject(FileService);
   protected auth = inject(AuthService);
-  protected offline = inject(OfflineService);
   private previewCache = inject(PreviewCacheService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
@@ -354,7 +352,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       case '__trash__':    await this.showTrash();    return;
       case '__starred__':  await this.showStarred();  return;
       case '__shares__':   await this.showShares();   return;
-      case '__offline__':  this.showOffline();        return;
       case '__timeline__': await this.showTimeline(); return;
     }
     this.cancelTimelineStream();
@@ -1261,23 +1258,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.breadcrumb.set([{ id: '__shares__', name: 'My Shares' }]);
     this.fileService.currentFolderId.set('__shares__');
     this.router.navigate(['/folder', '__shares__']); // push — back returns to the previous folder
-  }
-
-  /** Files the user marked "available offline" (kept in device cache). */
-  showOffline(): void {
-    this.closeSidebarOnMobile();
-    this.fileService.searchResults.set(this.offline.items());
-    this.fileService.breadcrumb.set([{ id: '__offline__', name: 'Available offline' }]);
-    this.fileService.currentFolderId.set('__offline__');
-    this.router.navigate(['/folder', '__offline__']); // push — back returns to the previous folder
-  }
-
-  /** Toggle a file's offline availability; refresh the Offline view if open. */
-  async toggleOffline(file: DriveFile): Promise<void> {
-    await this.offline.toggle(file);
-    if (this.fileService.currentFolderId() === '__offline__') {
-      this.fileService.searchResults.set(this.offline.items());
-    }
   }
 
   openShare(file: DriveFile): void {

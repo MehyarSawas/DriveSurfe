@@ -28,10 +28,6 @@
         <svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
         My Shares
       </button>
-      <button class="nav-item" (click)="showOffline()">
-        <svg viewBox="0 0 24 24"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
-        Available offline
-      </button>
       <button class="nav-item" (click)="showTrash()">
         <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
         Trash
@@ -286,9 +282,6 @@
         } @else if (fileService.currentFolderId() === '__starred__') {
           <svg class="search-context-icon" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
           <span class="search-context-label">{{ fileService.breadcrumb()[0]?.name ?? 'Favorites' }}</span>
-        } @else if (fileService.currentFolderId() === '__offline__') {
-          <svg class="search-context-icon" viewBox="0 0 24 24"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
-          <span class="search-context-label">{{ fileService.breadcrumb()[0]?.name ?? 'Available offline' }}</span>
         } @else {
           <svg class="search-context-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
           <span class="search-context-label">{{ fileService.breadcrumb()[0]?.name ?? 'Search' }}</span>
@@ -528,8 +521,6 @@
           (info)="openInfo($event)"
           [pinnedIds]="pinnedFolderIds()"
           (pin)="togglePinnedFolder($event)"
-="offline.ids()"
-          (offline)="toggleOffline($event)"
                   />
                 </div>
               }
@@ -582,8 +573,6 @@
           (info)="openInfo($event)"
           [pinnedIds]="pinnedFolderIds()"
           (pin)="togglePinnedFolder($event)"
-="offline.ids()"
-          (offline)="toggleOffline($event)"
         />
       } @else {
         <ds-file-list
@@ -606,8 +595,6 @@
           (info)="openInfo($event)"
           [pinnedIds]="pinnedFolderIds()"
           (pin)="togglePinnedFolder($event)"
-="offline.ids()"
-          (offline)="toggleOffline($event)"
         />
       }
       @if (!isTimeline() && hasMoreToRender() && !fileService.loading() && !fileService.searchLoading()) {
