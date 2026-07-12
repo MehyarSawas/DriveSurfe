@@ -249,7 +249,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   /** Identity of the current view — changing it resets the render window. */
   private readonly viewToken = computed(() =>
-    this.fileService.currentFolderId() + (this.fileService.searchResults() === null ? '|f' : '|s')
+    this.fileService.currentFolderId()
+    + (this.fileService.searchResults() === null ? '|f' : '|s')
+    + '|' + (this.trashFolderId() ?? '')
   );
 
   constructor() {
@@ -451,7 +453,11 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   async openPreview(file: DriveFile): Promise<void> {
     if (file.is_dir) {
-      this.navigateToFolder(file.id, file.name);
+      if (this.isTrash()) {
+        this.openTrashFolder(file); // browse the trashed folder's contents
+      } else {
+        this.navigateToFolder(file.id, file.name);
+      }
       if (window.innerWidth <= 768) this.sidebarOpen.set(false);
       return;
     }
@@ -670,9 +676,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     }
     if (this.isTrash()) {
       // Trash sorts SERVER-side (kDrive's V2 trash endpoint has no order
-      // param, so the backend sorts the fully-fetched list) — re-fetch.
+      // param, so the backend sorts the fully-fetched list) — re-fetch the
+      // current level (root or the open trashed subfolder).
       this.trashSortActive.set(true);
-      this.fileService.loadTrash(this.sortBy(), this.sortDir());
+      this.fileService.loadTrash(this.sortBy(), this.sortDir(), this.trashFolderId());
       return;
     }
     if (this.fileService.searchResults() !== null) {
@@ -696,15 +703,58 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   /** False until the user picks a sort in trash — until then the default
    *  order (deleted_at desc) is used and no sort-bar arrow is shown. */
   readonly trashSortActive = signal(false);
+  /** Current trashed subfolder id (null = trash root). */
+  private readonly trashFolderId = signal<string | null>(null);
+  /** Trash breadcrumb below the root "Trash" (subfolder path). */
+  private readonly trashPath = signal<{ id: string; name: string }[]>([]);
 
   async showTrash(): Promise<void> {
     this.closeSidebarOnMobile();
+    this.trashSortActive.set(false);
+    this.trashFolderId.set(null);
+    this.trashPath.set([]);
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
     this.fileService.currentFolderId.set('__trash__');
     this.fileService.searchResults.set(null);
-    this.trashSortActive.set(false);
     await this.fileService.loadTrash(); // backend default: deleted_at desc
     this.router.navigate(['/folder', '__trash__']); // push — back returns to the previous folder
+  }
+
+  /** Current sort to send when re-loading trash — undefined until the user
+   *  actively picks one, so the backend default (deleted_at desc) is kept. */
+  private trashSortArgs(): [string, string] | [] {
+    return this.trashSortActive() ? [this.sortBy(), this.sortDir()] : [];
+  }
+
+  /** Open a trashed subfolder (its trashed contents, not the live folder). */
+  openTrashFolder(file: DriveFile): void {
+    const path = [...this.trashPath(), { id: file.id, name: file.name }];
+    this.trashPath.set(path);
+    this.trashFolderId.set(file.id);
+    this.fileService.clearSelection();
+    this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }, ...path]);
+    this.fileService.loadTrash(...this.trashSortArgs(), file.id);
+    this.scrollContentTop();
+  }
+
+  /** Breadcrumb navigation inside trash (root or a level of the trashed path). */
+  navigateTrashTo(item: { id: string; name: string }): void {
+    this.fileService.clearSelection();
+    if (item.id === '__trash__') {
+      this.trashPath.set([]);
+      this.trashFolderId.set(null);
+      this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
+      this.fileService.loadTrash(...this.trashSortArgs());
+    } else {
+      const path = this.trashPath();
+      const idx = path.findIndex(p => p.id === item.id);
+      const newPath = idx >= 0 ? path.slice(0, idx + 1) : path;
+      this.trashPath.set(newPath);
+      this.trashFolderId.set(item.id);
+      this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }, ...newPath]);
+      this.fileService.loadTrash(...this.trashSortArgs(), item.id);
+    }
+    this.scrollContentTop();
   }
 
   async showStarred(): Promise<void> {

@@ -153,15 +153,16 @@ export class FileService {
     }
   }
 
-  /** Load the trash. With no sort args the backend default applies
-   *  (deleted_at desc — most recently deleted first). */
-  async loadTrash(sortBy?: string, sortDir?: string): Promise<void> {
+  /** Load the trash root, or a trashed subfolder's contents. With no sort
+   *  args the backend default applies (deleted_at desc). */
+  async loadTrash(sortBy?: string, sortDir?: string, folderId?: string | null): Promise<void> {
     this.loading.set(true);
     try {
       const params: Record<string, string> = {};
       if (sortBy && sortDir) { params['sortBy'] = sortBy; params['sortDir'] = sortDir; }
+      const url = folderId ? `/api/trash/${folderId}/files` : '/api/trash';
       const res = await firstValueFrom(
-        this.http.get<ApiResponse<DriveFile[]>>('/api/trash', { params })
+        this.http.get<ApiResponse<DriveFile[]>>(url, { params })
       );
       this.files.set(res.data);
     } finally {

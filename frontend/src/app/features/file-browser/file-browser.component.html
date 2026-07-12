@@ -288,7 +288,7 @@
       <div class="trash-header">
         <ds-breadcrumb
           [items]="fileService.breadcrumb()"
-          (navigate)="navigateToFolder($event.id, $event.name)"
+          (navigate)="navigateTrashTo($event)"
         />
         @if (fileService.files().length > 0) {
           <button class="empty-trash-btn" (click)="emptyTrash()">

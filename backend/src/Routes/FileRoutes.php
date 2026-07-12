@@ -163,6 +163,14 @@ final class FileRoutes
             return self::json($res, ['ok' => true]);
         })->add($auth);
 
+        $group->get('/trash/{id}/files', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
+            $params  = $req->getQueryParams();
+            $sortBy  = in_array($params['sortBy']  ?? '', ['name', 'size', 'last_modified_at', 'deleted_at'], true) ? $params['sortBy']  : 'deleted_at';
+            $sortDir = in_array($params['sortDir'] ?? '', ['asc', 'desc'], true) ? $params['sortDir'] : 'desc';
+            return self::json($res, ['data' => $drive->listTrashFolder($args['id'], $sortBy, $sortDir)]);
+        })->add($auth);
+
         $group->delete('/trash/{id}', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $drive->deleteTrashFile($args['id']);

@@ -632,6 +632,28 @@ final class KDriveClient implements DriveInterface
         return $files;
     }
 
+    /**
+     * Contents of a TRASHED directory (V3 GET /trash/{id}/files, cursor
+     * paginated), fully fetched then sorted server-side — so trashed folders
+     * are browsable instead of falling through to the live /files endpoint.
+     */
+    public function listTrashFolder(string $folderId, string $sortBy = 'deleted_at', string $sortDir = 'desc'): array
+    {
+        $driveId = $this->getDriveId();
+        $all     = [];
+        $cursor  = null;
+
+        do {
+            $params = ['limit' => 200, 'with' => 'is_favorite'];
+            if ($cursor) $params['cursor'] = $cursor;
+            $data   = $this->get("{$driveId}/trash/{$folderId}/files", $params, self::API_V3);
+            $all    = array_merge($all, $data['data'] ?? []);
+            $cursor = ($data['has_more'] ?? false) ? ($data['cursor'] ?? null) : null;
+        } while ($cursor);
+
+        return self::sortFiles($this->normalizeFiles($all, true), $sortBy, $sortDir);
+    }
+
     /** Permanently remove one item from the trash (irreversible). */
     public function deleteTrashFile(string $fileId): void
     {
