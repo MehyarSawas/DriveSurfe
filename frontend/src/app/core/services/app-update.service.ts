@@ -24,6 +24,9 @@ export class AppUpdateService {
     });
     window.addEventListener('focus', check);
     window.addEventListener('online', check);
+    // pageshow fires when the app is shown/resumed — the most reliable resume
+    // signal on iOS standalone PWAs, where focus/visibility can be flaky.
+    window.addEventListener('pageshow', check);
     setInterval(check, 5 * 60 * 1000);   // every 5 min while open
     setTimeout(check, 5000);             // first check shortly after load
   }
