@@ -4,9 +4,10 @@ import { Injectable, signal } from '@angular/core';
  * Detects when a newer build has been deployed and lets the app refresh into
  * it — without a reinstall. index.html is served no-cache and its entry
  * bundles are content-hashed, so a new deploy changes those filenames. We
- * snapshot the current ones at startup and, on focus + a slow interval,
- * fetch index.html and compare. A change flips `updateReady`; the app shows a
- * one-tap pill that reloads into the fresh code.
+ * snapshot the current ones at startup and re-check on several triggers
+ * (shortly after load, on focus/visibility, when coming online, and on an
+ * interval). A change flips `updateReady`; the app shows a one-tap pill that
+ * reloads into the fresh code.
  */
 @Injectable({ providedIn: 'root' })
 export class AppUpdateService {
@@ -16,17 +17,22 @@ export class AppUpdateService {
   start(): void {
     if (this.baseline !== null) return; // start once
     this.baseline = this.currentSignature();
+
+    const check = () => this.check();
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') this.check();
+      if (document.visibilityState === 'visible') check();
     });
-    setInterval(() => this.check(), 10 * 60 * 1000);
+    window.addEventListener('focus', check);
+    window.addEventListener('online', check);
+    setInterval(check, 5 * 60 * 1000);   // every 5 min while open
+    setTimeout(check, 5000);             // first check shortly after load
   }
 
   reload(): void {
     location.reload();
   }
 
-  /** Signature of the hashed entry bundles loaded in the current document. */
+  /** Signature of the entry bundle filenames loaded in the current document. */
   private currentSignature(): string {
     return this.sig(
       Array.from(document.querySelectorAll('script[src]'))
@@ -34,10 +40,13 @@ export class AppUpdateService {
     );
   }
 
+  /** All same-origin .js bundle filenames, sorted — any hash change (from a
+   *  new deploy) changes this string. Broad on purpose so it doesn't depend on
+   *  a specific Angular bundle-naming scheme. */
   private sig(srcs: string[]): string {
     return srcs
-      .map(s => s.split('/').pop() ?? s)
-      .filter(f => /^(main|polyfills|chunk|scripts)[.-].*\.js$/.test(f))
+      .map(s => (s.split('?')[0].split('/').pop() ?? ''))
+      .filter(f => f.endsWith('.js'))
       .sort()
       .join('|');
   }
