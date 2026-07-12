@@ -1,21 +1,92 @@
 const CACHE_PREFIX = 'preview-';
 const GENERAL_CACHE = 'preview-general';
+const SHELL_CACHE   = 'app-shell-v1'; // index.html + hashed bundles for offline open
 
 // Take control of open clients as soon as an updated worker is deployed, so
 // fixes (and cache purges) reach the installed PWA without waiting for every
 // tab to close.
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+self.addEventListener('install', event => {
+  self.skipWaiting();
+  event.waitUntil(precacheShell());
+});
+
+self.addEventListener('activate', event => event.waitUntil((async () => {
+  // Drop old shell cache versions.
+  const keys = await caches.keys();
+  await Promise.all(
+    keys.filter(k => k.startsWith('app-shell-') && k !== SHELL_CACHE).map(k => caches.delete(k))
+  );
+  await self.clients.claim();
+})()));
+
+/** Cache index.html + the JS/CSS bundles it references, so the app can open
+ *  offline. Best-effort: if we're offline during install there's nothing to
+ *  precache yet — it'll fill in on the next online asset fetch. */
+async function precacheShell() {
+  try {
+    const cache = await caches.open(SHELL_CACHE);
+    const res = await fetch('index.html', { cache: 'no-store' });
+    if (!res.ok) return;
+    await cache.put('/index.html', res.clone());
+    const html = await res.text();
+    const assets = Array.from(html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))(?:\?[^"]*)?"/g))
+      .map(m => m[1])
+      .filter(u => !/^https?:/.test(u)); // same-origin only
+    await Promise.allSettled(assets.map(a => cache.add(a)));
+  } catch { /* offline — skip */ }
+}
 
 const isPreviewRequest = url =>
   /\/api\/files\/[^/]+\/(thumbnail|preview)/.test(new URL(url).pathname);
 
-// Intercept thumbnail and preview requests only
+// Immutable, content-hashed bundles (safe to serve cache-first — the filename
+// changes on every deploy, so a cached copy is never stale).
+const isHashedAsset = url =>
+  url.origin === self.location.origin &&
+  !url.pathname.startsWith('/api/') &&
+  /\.(js|css)$/.test(url.pathname);
+
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
-  if (!isPreviewRequest(event.request.url)) return;
-  event.respondWith(serve(event.request));
+  const req = event.request;
+  const url = new URL(req.url);
+  if (isPreviewRequest(req.url)) {
+    event.respondWith(serve(req));
+  } else if (req.mode === 'navigate') {
+    event.respondWith(navigate(req));
+  } else if (isHashedAsset(url)) {
+    event.respondWith(asset(req));
+  }
+  // Everything else (API calls, fonts, images) is left untouched.
 });
+
+// Navigations: pure network when online (identical to no-SW behaviour, so it
+// can't break normal loading), falling back to the cached shell only when the
+// network genuinely fails. The nav response itself is never cached (avoids
+// navigate-mode caching pitfalls); the offline shell comes from precache.
+async function navigate(request) {
+  try {
+    return await fetch(request);
+  } catch {
+    const cache = await caches.open(SHELL_CACHE);
+    return (await cache.match('/index.html')) || Response.error();
+  }
+}
+
+// Hashed JS/CSS: cache-first, fetch + cache on miss. Refreshes the precache as
+// new bundles appear online, so the offline snapshot stays consistent.
+async function asset(request) {
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  } catch (err) {
+    return cached || Response.error();
+  }
+}
 
 async function serve(request) {
   // Check all session caches first (most recently saved files are prioritised)
@@ -36,9 +107,13 @@ async function serve(request) {
   if (hit) return hit;
 
   // Cache miss — fetch and store in general cache
-  const response = await fetch(request);
-  if (response.ok) general.put(request, response.clone());
-  return response;
+  try {
+    const response = await fetch(request);
+    if (response.ok) general.put(request, response.clone());
+    return response;
+  } catch (err) {
+    return hit || Response.error();
+  }
 }
 
 // Message API
