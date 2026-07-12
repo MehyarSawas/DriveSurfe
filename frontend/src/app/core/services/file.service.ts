@@ -153,11 +153,11 @@ export class FileService {
     }
   }
 
-  async loadTrash(): Promise<void> {
+  async loadTrash(sortBy = 'name', sortDir = 'asc'): Promise<void> {
     this.loading.set(true);
     try {
       const res = await firstValueFrom(
-        this.http.get<ApiResponse<DriveFile[]>>('/api/trash')
+        this.http.get<ApiResponse<DriveFile[]>>('/api/trash', { params: { sortBy, sortDir } })
       );
       this.files.set(res.data);
     } finally {

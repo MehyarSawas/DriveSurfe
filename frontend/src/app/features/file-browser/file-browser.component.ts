@@ -669,9 +669,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       return;
     }
     if (this.isTrash()) {
-      // Trash is fully loaded in files() — sort it client-side (the kDrive
-      // trash endpoint has no reliable order param). Instant, no re-fetch.
-      this.sortTrashInPlace();
+      // Trash sorts SERVER-side (kDrive's V2 trash endpoint has no order
+      // param, so the backend sorts the fully-fetched list) — re-fetch.
+      this.fileService.loadTrash(this.sortBy(), this.sortDir());
       return;
     }
     if (this.fileService.searchResults() !== null) {
@@ -694,10 +694,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   async showTrash(): Promise<void> {
     this.closeSidebarOnMobile();
-    await this.fileService.loadTrash();
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
     this.fileService.currentFolderId.set('__trash__');
     this.fileService.searchResults.set(null);
+    await this.fileService.loadTrash(this.sortBy(), this.sortDir());
     this.router.navigate(['/folder', '__trash__']); // push — back returns to the previous folder
   }
 
@@ -1435,25 +1435,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   async handleRestore(file: DriveFile): Promise<void> {
     await this.fileService.restoreFile(file.id);
-  }
-
-  /** Re-sort the loaded trash list in place by the current sort field/dir. */
-  private sortTrashInPlace(): void {
-    const by = this.sortBy();
-    const dir = this.sortDir();
-    const factor = dir === 'asc' ? 1 : -1;
-    this.fileService.files.update(files => [...files].sort((a, b) => {
-      let cmp: number;
-      if (by === 'size') {
-        cmp = (a.size ?? 0) - (b.size ?? 0);
-      } else if (by === 'last_modified_at') {
-        cmp = (this.parseFileDate(a.modified_at)?.getTime() ?? 0)
-            - (this.parseFileDate(b.modified_at)?.getTime() ?? 0);
-      } else {
-        cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-      }
-      return cmp * factor;
-    }));
   }
 
   /** Permanently delete one trashed item (with confirmation). */

@@ -348,7 +348,13 @@
           }
         </span>
       }
-      @if (!fileService.searchResults() && fileService.folderStats(); as stats) {
+      @if (isTrash()) {
+        <span class="search-results-count">
+          @if (fileService.loading()) { Loading… }
+          @else { {{ fileService.files().length }} items }
+        </span>
+      }
+      @if (!fileService.searchResults() && !isTrash() && fileService.folderStats(); as stats) {
         <div class="folder-stats">
           <button class="stats-count" (click)="$event.stopPropagation(); statsPopoverOpen.set(!statsPopoverOpen())">
             @if (fileService.loadingMore()) {

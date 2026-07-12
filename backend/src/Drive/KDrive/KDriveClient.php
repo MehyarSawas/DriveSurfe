@@ -585,7 +585,7 @@ final class KDriveClient implements DriveInterface
      * page size is discovered from the first response; a hard page cap bounds
      * the worst case.
      */
-    public function listTrash(): array
+    public function listTrash(string $sortBy = 'name', string $sortDir = 'asc'): array
     {
         $driveId  = $this->getDriveId();
         $all      = [];
@@ -611,7 +611,24 @@ final class KDriveClient implements DriveInterface
             // a partial page (last page), or the safety cap.
         } while ($added > 0 && $pageSize > 0 && count($batch) === $pageSize && $page <= 60);
 
-        return $this->normalizeFiles($all, true);
+        $files = $this->normalizeFiles($all, true);
+        return self::sortFiles($files, $sortBy, $sortDir);
+    }
+
+    /** Server-side sort for the fully-fetched trash list (the V2 trash
+     *  endpoint has no reliable order param). */
+    private static function sortFiles(array $files, string $sortBy, string $sortDir): array
+    {
+        $dir = $sortDir === 'desc' ? -1 : 1;
+        usort($files, function (array $a, array $b) use ($sortBy, $dir): int {
+            $cmp = match ($sortBy) {
+                'size'             => ($a['size'] ?? 0) <=> ($b['size'] ?? 0),
+                'last_modified_at' => (strtotime($a['modified_at'] ?? '') ?: 0) <=> (strtotime($b['modified_at'] ?? '') ?: 0),
+                default            => strnatcasecmp($a['name'] ?? '', $b['name'] ?? ''),
+            };
+            return $cmp * $dir;
+        });
+        return $files;
     }
 
     /** Permanently remove one item from the trash (irreversible). */

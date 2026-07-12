@@ -151,7 +151,10 @@ final class FileRoutes
         })->add($auth);
 
         $group->get('/trash', function (Request $req, Response $res) use ($drive): Response {
-            return self::json($res, ['data' => $drive->listTrash()]);
+            $params  = $req->getQueryParams();
+            $sortBy  = in_array($params['sortBy']  ?? '', ['name', 'size', 'last_modified_at'], true) ? $params['sortBy']  : 'name';
+            $sortDir = in_array($params['sortDir'] ?? '', ['asc', 'desc'], true) ? $params['sortDir'] : 'asc';
+            return self::json($res, ['data' => $drive->listTrash($sortBy, $sortDir)]);
         })->add($auth);
 
         $group->delete('/trash', function (Request $req, Response $res) use ($drive): Response {
