@@ -578,25 +578,38 @@ final class KDriveClient implements DriveInterface
     }
 
     /**
-     * ALL items in the trash (V2 is page-paginated, not cursor). The effective
-     * page size is discovered from the first response (the server may cap
-     * per_page), then we keep fetching while full pages come back — so trash
-     * larger than one page is no longer silently truncated at 100.
+     * ALL items in the trash. V2 is page-paginated (not cursor). We dedupe by
+     * id and STOP as soon as a page adds no new items — critical because if
+     * the endpoint ignores the `page` param it would otherwise return the same
+     * page forever (hundreds of requests + massive duplicate data). Effective
+     * page size is discovered from the first response; a hard page cap bounds
+     * the worst case.
      */
     public function listTrash(): array
     {
         $driveId  = $this->getDriveId();
         $all      = [];
+        $seen     = [];
         $page     = 1;
         $pageSize = null;
 
         do {
-            $data  = $this->get("{$driveId}/trash", ['per_page' => 500, 'page' => $page, 'with' => 'is_favorite']);
+            $data  = $this->get("{$driveId}/trash", ['per_page' => 200, 'page' => $page, 'with' => 'is_favorite']);
             $batch = $data['data'] ?? [];
-            $all   = array_merge($all, $batch);
             if ($pageSize === null) $pageSize = count($batch); // effective per_page
+
+            $added = 0;
+            foreach ($batch as $item) {
+                $id = (string) ($item['id'] ?? '');
+                if ($id === '' || isset($seen[$id])) continue;
+                $seen[$id] = true;
+                $all[]     = $item;
+                $added++;
+            }
             $page++;
-        } while ($pageSize > 0 && count($batch) === $pageSize && $page <= 500);
+            // Stop on: no new items (last page, or server ignored `page`),
+            // a partial page (last page), or the safety cap.
+        } while ($added > 0 && $pageSize > 0 && count($batch) === $pageSize && $page <= 60);
 
         return $this->normalizeFiles($all, true);
     }

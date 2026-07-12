@@ -1106,3 +1106,32 @@ ds-search-bar {
     .folder-menu-loading { color: var(--color-text-secondary); cursor: default; }
   }
 }
+
+/* Trash header — breadcrumb row with an Empty-trash text button */
+.trash-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  ds-breadcrumb { flex: 1; min-width: 0; }
+
+  .empty-trash-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 12px;
+    padding: 6px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-danger, #d93025);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+
+    svg { width: 16px; height: 16px; fill: currentColor; }
+    &:hover { background: rgba(217, 48, 37, 0.08); }
+  }
+}

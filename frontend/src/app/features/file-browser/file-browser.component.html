@@ -110,11 +110,6 @@
         />
 
         <div class="toolbar-actions">
-          @if (isTrash() && fileService.files().length > 0) {
-            <button class="icon-btn danger" (click)="emptyTrash()" title="Empty trash">
-              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-            </button>
-          }
           <!-- Filter icon button -->
           <div class="filter-wrapper" (click)="$event.stopPropagation()">
             <button class="icon-btn filter-btn" [class.active]="filterType()" (click)="toggleFilterMenu($event)" title="Filter">
@@ -287,6 +282,19 @@
         } @else {
           <svg class="search-context-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
           <span class="search-context-label">{{ fileService.breadcrumb()[0]?.name ?? 'Search' }}</span>
+        }
+      </div>
+    } @else if (isTrash()) {
+      <div class="trash-header">
+        <ds-breadcrumb
+          [items]="fileService.breadcrumb()"
+          (navigate)="navigateToFolder($event.id, $event.name)"
+        />
+        @if (fileService.files().length > 0) {
+          <button class="empty-trash-btn" (click)="emptyTrash()">
+            <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            Empty trash
+          </button>
         }
       </div>
     } @else {
