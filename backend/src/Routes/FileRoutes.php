@@ -152,8 +152,9 @@ final class FileRoutes
 
         $group->get('/trash', function (Request $req, Response $res) use ($drive): Response {
             $params  = $req->getQueryParams();
-            $sortBy  = in_array($params['sortBy']  ?? '', ['name', 'size', 'last_modified_at'], true) ? $params['sortBy']  : 'name';
-            $sortDir = in_array($params['sortDir'] ?? '', ['asc', 'desc'], true) ? $params['sortDir'] : 'asc';
+            // Default: most-recently-deleted first (kDrive-style).
+            $sortBy  = in_array($params['sortBy']  ?? '', ['name', 'size', 'last_modified_at', 'deleted_at'], true) ? $params['sortBy']  : 'deleted_at';
+            $sortDir = in_array($params['sortDir'] ?? '', ['asc', 'desc'], true) ? $params['sortDir'] : 'desc';
             return self::json($res, ['data' => $drive->listTrash($sortBy, $sortDir)]);
         })->add($auth);
 

@@ -323,19 +323,19 @@
     <div class="sort-bar">
       <button class="sort-btn" (click)="toggleSort('name')">
         Name
-        @if (sortBy() === 'name') {
+        @if (sortBy() === 'name' && (!isTrash() || trashSortActive())) {
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>
       <button class="sort-btn" (click)="toggleSort('last_modified_at')">
         Modified
-        @if (sortBy() === 'last_modified_at') {
+        @if (sortBy() === 'last_modified_at' && (!isTrash() || trashSortActive())) {
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>
       <button class="sort-btn" (click)="toggleSort('size')">
         Size
-        @if (sortBy() === 'size') {
+        @if (sortBy() === 'size' && (!isTrash() || trashSortActive())) {
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>

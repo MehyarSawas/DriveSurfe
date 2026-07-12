@@ -585,7 +585,7 @@ final class KDriveClient implements DriveInterface
      * page size is discovered from the first response; a hard page cap bounds
      * the worst case.
      */
-    public function listTrash(string $sortBy = 'name', string $sortDir = 'asc'): array
+    public function listTrash(string $sortBy = 'deleted_at', string $sortDir = 'desc'): array
     {
         $driveId  = $this->getDriveId();
         $all      = [];
@@ -624,6 +624,7 @@ final class KDriveClient implements DriveInterface
             $cmp = match ($sortBy) {
                 'size'             => ($a['size'] ?? 0) <=> ($b['size'] ?? 0),
                 'last_modified_at' => (strtotime($a['modified_at'] ?? '') ?: 0) <=> (strtotime($b['modified_at'] ?? '') ?: 0),
+                'deleted_at'       => (strtotime($a['deleted_at'] ?? '') ?: 0) <=> (strtotime($b['deleted_at'] ?? '') ?: 0),
                 default            => strnatcasecmp($a['name'] ?? '', $b['name'] ?? ''),
             };
             return $cmp * $dir;
@@ -938,6 +939,7 @@ final class KDriveClient implements DriveInterface
             // as milliseconds and land in January 1970).
             'modified_at' => self::toIso($f['last_modified_at'] ?? $f['created_at'] ?? null),
             'created_at' => self::toIso($f['created_at'] ?? null),
+            'deleted_at' => self::toIso($f['deleted_at'] ?? null),
             'is_dir' => ($f['type'] ?? '') === 'dir',
             'is_favorite' => $f['is_favorite'] ?? false,
             'parent_id' => (string) ($f['parent_id'] ?? '1'),

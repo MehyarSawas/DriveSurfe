@@ -671,6 +671,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     if (this.isTrash()) {
       // Trash sorts SERVER-side (kDrive's V2 trash endpoint has no order
       // param, so the backend sorts the fully-fetched list) — re-fetch.
+      this.trashSortActive.set(true);
       this.fileService.loadTrash(this.sortBy(), this.sortDir());
       return;
     }
@@ -692,12 +693,17 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.filterMenuOpen.update(v => !v);
   }
 
+  /** False until the user picks a sort in trash — until then the default
+   *  order (deleted_at desc) is used and no sort-bar arrow is shown. */
+  readonly trashSortActive = signal(false);
+
   async showTrash(): Promise<void> {
     this.closeSidebarOnMobile();
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
     this.fileService.currentFolderId.set('__trash__');
     this.fileService.searchResults.set(null);
-    await this.fileService.loadTrash(this.sortBy(), this.sortDir());
+    this.trashSortActive.set(false);
+    await this.fileService.loadTrash(); // backend default: deleted_at desc
     this.router.navigate(['/folder', '__trash__']); // push — back returns to the previous folder
   }
 
