@@ -446,11 +446,20 @@ export class FileService {
         );
         const file = new File([res], name, { type: res.type || 'application/octet-stream' });
         if (!nav.canShare || nav.canShare({ files: [file] })) {
-          await nav.share({ files: [file] });
+          // Once the OS share sheet is presented, this handoff is done — do NOT
+          // fall through to the anchor. If share() rejects it's a user cancel
+          // (AbortError), which is a completed action, not a retry: the anchor
+          // fallback would navigate the PWA webview to the download URL and
+          // trap the user on a dead "open in preview" page.
+          try {
+            await nav.share({ files: [file] });
+          } catch {
+            /* user dismissed the sheet — nothing more to do */
+          }
           return;
         }
       } catch {
-        /* user cancelled the sheet, or share unsupported — fall through */
+        /* couldn't fetch the blob or build the file — fall through to anchor */
       }
     }
 
