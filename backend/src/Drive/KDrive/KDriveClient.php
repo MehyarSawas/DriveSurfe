@@ -698,9 +698,10 @@ final class KDriveClient implements DriveInterface
         $driveId = $this->getDriveId();
         $token   = $this->getToken();
 
-        $meta = $this->get("{$driveId}/files/{$fileId}");
-        $name = rawurlencode($meta['data']['name'] ?? 'download');
-        $mime = $meta['data']['mime_type'] ?? 'application/octet-stream';
+        $meta    = $this->get("{$driveId}/files/{$fileId}");
+        $rawName = $meta['data']['name'] ?? 'download';
+        $name    = rawurlencode($rawName);
+        $mime    = $meta['data']['mime_type'] ?? 'application/octet-stream';
 
         $requestHeaders = ['Authorization' => "Bearer {$token}"];
         $rangeHeader    = $_SERVER['HTTP_RANGE'] ?? null;
@@ -722,6 +723,12 @@ final class KDriveClient implements DriveInterface
         http_response_code($status);
 
         $safeMime = self::safeMimeType($mime);
+        // kDrive sometimes reports a generic/empty MIME (→ octet-stream), which
+        // <video>/<img> refuse to play. Fall back to the file extension so
+        // those mp4s (and other media) load in the preview.
+        if ($safeMime === 'application/octet-stream') {
+            $safeMime = self::mimeFromExtension(strtolower(pathinfo($rawName, PATHINFO_EXTENSION))) ?? $safeMime;
+        }
         // ?dl=1 forces a real download (attachment) instead of inline display —
         // inline traps PDFs/files in the iOS PWA webview with no save control.
         // Plain requests (e.g. video streaming with Range) stay inline.
@@ -811,6 +818,22 @@ final class KDriveClient implements DriveInterface
         ];
         $base = strtolower(explode(';', $mime)[0]);
         return in_array($base, $allowed, true) ? $base : 'application/octet-stream';
+    }
+
+    /** MIME for a file extension — used when the upstream MIME is missing or
+     *  generic, so media still plays/renders. Null for unknown extensions. */
+    private static function mimeFromExtension(string $ext): ?string
+    {
+        static $map = [
+            'mp4' => 'video/mp4', 'm4v' => 'video/x-m4v', 'mov' => 'video/quicktime',
+            'webm' => 'video/webm',
+            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+            'gif' => 'image/gif', 'webp' => 'image/webp', 'svg' => 'image/svg+xml',
+            'heic' => 'image/heic', 'heif' => 'image/heif', 'avif' => 'image/avif',
+            'mp3' => 'audio/mpeg', 'm4a' => 'audio/mp4', 'ogg' => 'audio/ogg',
+            'pdf' => 'application/pdf',
+        ];
+        return $map[$ext] ?? null;
     }
 
     private function getDriveId(): string
