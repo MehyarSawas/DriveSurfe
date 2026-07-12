@@ -25,4 +25,20 @@ export class PreviewCacheService {
     if (!this.sw) return;
     this.sw.postMessage({ type: 'DELETE_SESSION', sessionId });
   }
+
+  /** Purge every preview/thumbnail cache (general + all sessions) directly via
+   *  the Cache Storage API — works from the page regardless of whether a
+   *  service worker is currently controlling it. Used by the timeline "Reload"
+   *  so stale/failed cover thumbnails are re-fetched from the network. */
+  async clearAll(): Promise<void> {
+    if (typeof caches === 'undefined') return;
+    try {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.filter(k => k.startsWith('preview-')).map(k => caches.delete(k))
+      );
+    } catch {
+      /* cache storage unavailable — nothing to clear */
+    }
+  }
 }

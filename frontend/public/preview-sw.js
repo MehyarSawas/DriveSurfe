@@ -1,6 +1,12 @@
 const CACHE_PREFIX = 'preview-';
 const GENERAL_CACHE = 'preview-general';
 
+// Take control of open clients as soon as an updated worker is deployed, so
+// fixes (and cache purges) reach the installed PWA without waiting for every
+// tab to close.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+
 const isPreviewRequest = url =>
   /\/api\/files\/[^/]+\/(thumbnail|preview)/.test(new URL(url).pathname);
 

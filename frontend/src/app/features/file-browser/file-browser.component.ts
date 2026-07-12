@@ -1069,6 +1069,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.timelineReloading.set(true);
     this.timelineReloadError.set(null);
     try {
+      // Purge the preview SW/browser cache first so covers can't be served
+      // stale (the installed PWA in particular keeps thumbnails cached).
+      await this.previewCache.clearAll();
       const res = await this.fileService.loadMediaMonths(true);
       this.timelineCovers.set(res.months);
       this.timelineCoversMeta.set(res.meta);
