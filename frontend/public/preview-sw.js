@@ -1,5 +1,7 @@
 const CACHE_PREFIX = 'preview-';
 const GENERAL_CACHE = 'preview-general';
+const OFFLINE_CACHE = 'offline-media'; // "available offline" items — never evicted
+const SHELL_CACHE   = 'app-shell';     // index.html + hashed bundles for offline app-open
 
 // Take control of open clients as soon as an updated worker is deployed, so
 // fixes (and cache purges) reach the installed PWA without waiting for every
@@ -10,19 +12,35 @@ self.addEventListener('activate', event => event.waitUntil(self.clients.claim())
 const isPreviewRequest = url =>
   /\/api\/files\/[^/]+\/(thumbnail|preview)/.test(new URL(url).pathname);
 
-// Intercept thumbnail and preview requests only
+// True for the app shell: navigations and same-origin static assets (JS/CSS/
+// manifest/icons). NOT /api (needs fresh, authenticated data).
+const isShellRequest = (request, url) =>
+  request.mode === 'navigate' ||
+  (url.origin === self.location.origin &&
+    !url.pathname.startsWith('/api/') &&
+    /\.(js|css|webmanifest|ico|png|svg|woff2?)$/.test(url.pathname));
+
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
-  if (!isPreviewRequest(event.request.url)) return;
-  event.respondWith(serve(event.request));
+  const url = new URL(event.request.url);
+  if (isPreviewRequest(event.request.url)) {
+    event.respondWith(serve(event.request));
+  } else if (isShellRequest(event.request, url)) {
+    event.respondWith(shell(event.request));
+  }
 });
 
 async function serve(request) {
-  // Check all session caches first (most recently saved files are prioritised)
+  // Offline ("available offline") items first — they must survive eviction.
+  const offline = await caches.open(OFFLINE_CACHE);
+  const offlineHit = await offline.match(request);
+  if (offlineHit) return offlineHit;
+
+  // Then per-session caches (most recently saved first)
   const allCaches = await caches.keys();
   const sessionCaches = allCaches
     .filter(n => n.startsWith(CACHE_PREFIX) && n !== GENERAL_CACHE)
-    .reverse(); // newest sessions first
+    .reverse();
 
   for (const name of sessionCaches) {
     const c = await caches.open(name);
@@ -36,9 +54,33 @@ async function serve(request) {
   if (hit) return hit;
 
   // Cache miss — fetch and store in general cache
-  const response = await fetch(request);
-  if (response.ok) general.put(request, response.clone());
-  return response;
+  try {
+    const response = await fetch(request);
+    if (response.ok) general.put(request, response.clone());
+    return response;
+  } catch (err) {
+    return hit || Response.error();
+  }
+}
+
+// App shell: network-first (so online always gets the latest deploy — the
+// in-app update check still works), falling back to cache when offline.
+async function shell(request) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  } catch (err) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    // Navigation offline with no cached page → fall back to the cached shell.
+    if (request.mode === 'navigate') {
+      const index = await cache.match('/index.html') || await cache.match('/');
+      if (index) return index;
+    }
+    return Response.error();
+  }
 }
 
 // Message API
