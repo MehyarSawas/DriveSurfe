@@ -742,13 +742,20 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
    *  thumbnail (the /thumbnail endpoint 404s), so the tile showed a broken
    *  image. Fall back thumbnail → full preview → coloured placeholder. */
   private readonly coverImgState = signal<Map<string, 'preview' | 'failed'>>(new Map());
+  /** Bumped on cache Reload — appended to cover URLs to bypass the browser +
+   *  preview-SW caches so covers re-fetch fresh after the index rebuilds. */
+  private readonly coverCacheBust = signal(0);
 
   /** The src to use for a cover tile, or null to render the placeholder. */
   coverSrc(f: DriveFile): string | null {
     const st = this.coverImgState().get(f.id);
+    let url: string | null;
     if (st === 'failed') return null;
-    if (st === 'preview') return f.preview_url ?? `/api/files/${f.id}/preview`;
-    return f.thumbnail_url ?? f.preview_url ?? null;
+    else if (st === 'preview') url = f.preview_url ?? `/api/files/${f.id}/preview`;
+    else url = f.thumbnail_url ?? f.preview_url ?? null;
+    if (!url) return null;
+    const bust = this.coverCacheBust();
+    return bust ? url + (url.includes('?') ? '&' : '?') + 'cb=' + bust : url;
   }
 
   /** On image load error, advance the fallback: thumbnail → preview → give up. */
@@ -1066,6 +1073,11 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.timelineCovers.set(res.months);
       this.timelineCoversMeta.set(res.meta);
       this.timelineCoversComplete = res.complete;
+      // Re-fetch every cover fresh: clear per-cover fallback state and bump the
+      // cache-buster so the browser + preview service worker don't serve stale
+      // (or previously-failed) thumbnails.
+      this.coverImgState.set(new Map());
+      this.coverCacheBust.update(n => n + 1);
       if (!res.complete) this.ensureTimelineCovers(); // resume the walk
     } catch (err) {
       console.error('timeline cache reload error:', err);
