@@ -123,6 +123,20 @@ export class FileService {
     this.loadingMore.set(false);
   }
 
+  /** Cancel EVERY in-flight view load — folder pagination, trash, favorites,
+   *  shares (via the load generation) and search (via its abort subject) — so
+   *  switching views (My Drive ↔ Trash ↔ Favorites ↔ Shares ↔ Timeline ↔ …)
+   *  can't have a late response from the view being left land in the new one.
+   *  Called at the start of every view switch. */
+  cancelAllLoads(): void {
+    ++this.loadGeneration;
+    this.searchAbort$.next();
+    ++this.searchGen;
+    this.loading.set(false);
+    this.loadingMore.set(false);
+    this.searchLoading.set(false);
+  }
+
   /** Seed a file list and cancel any in-progress loadFiles so it won't overwrite the seeded data. */
   seedFiles(files: DriveFile[]): void {
     ++this.loadGeneration;
@@ -156,6 +170,7 @@ export class FileService {
   /** Load the trash root, or a trashed subfolder's contents. With no sort
    *  args the backend default applies (deleted_at desc). */
   async loadTrash(sortBy?: string, sortDir?: string, folderId?: string | null): Promise<void> {
+    const generation = ++this.loadGeneration;
     this.loading.set(true);
     try {
       const params: Record<string, string> = {};
@@ -164,9 +179,10 @@ export class FileService {
       const res = await firstValueFrom(
         this.http.get<ApiResponse<DriveFile[]>>(url, { params })
       );
+      if (generation !== this.loadGeneration) return; // superseded by a newer load / view switch
       this.files.set(res.data);
     } finally {
-      this.loading.set(false);
+      if (generation === this.loadGeneration) this.loading.set(false);
     }
   }
 
@@ -258,10 +274,12 @@ export class FileService {
   }
 
   async loadShares(): Promise<void> {
+    const generation = this.loadGeneration;
     try {
       const res = await firstValueFrom(
         this.http.get<ApiResponse<DriveFile[]>>('/api/shares')
       );
+      if (generation !== this.loadGeneration) return; // superseded by a view switch
       this.sharedFiles.set(res.data);
       this.sharedFileIds.set(new Set(res.data.map(f => f.id)));
     } catch (err) {

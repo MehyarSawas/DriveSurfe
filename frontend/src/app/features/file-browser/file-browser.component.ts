@@ -346,6 +346,22 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.loadFolderTree();
   }
 
+  /** Monotonic view token — bumped on every view switch so an async load that
+   *  resolves after the user has moved on can detect it's stale and bail. */
+  private viewSeq = 0;
+
+  /** Enter a new view: cancel every pending request/stream from the view being
+   *  left (folder pagination, trash, favorites, shares, search, timeline) so a
+   *  late response can't land in the new view. Returns a token the caller
+   *  re-checks after each await before mutating shared view state. */
+  private beginView(): number {
+    this.fileService.cancelAllLoads();
+    this.cancelTimelineStream();
+    ++this.coversGen;                       // stop any timeline cover polling
+    this.timelineCoversLoading.set(false);
+    return ++this.viewSeq;
+  }
+
   /** Dispatch a folderId route param: virtual views or a real folder load
    *  (with full breadcrumb resolution). Clears leftover search state so a
    *  back-navigation out of Starred/Shares doesn't strand searchResults. */
@@ -357,14 +373,16 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       case '__offline__':  this.showOffline();        return;
       case '__timeline__': await this.showTimeline(); return;
     }
-    this.cancelTimelineStream();
+    const seq = this.beginView();
     this.fileService.searchResults.set(null);
     this._lastSearchEvent = null;
     this.preSearchBreadcrumb.set([]);
     this.fileService.currentFolderId.set(folderId);
     this.applySavedSort(folderId);
     if (folderId !== HOME_FOLDER_ID) {
-      this.resolveBreadcrumb(folderId).then(crumbs => this.fileService.breadcrumb.set(crumbs));
+      this.resolveBreadcrumb(folderId).then(crumbs => {
+        if (seq === this.viewSeq) this.fileService.breadcrumb.set(crumbs);
+      });
     } else {
       this.fileService.breadcrumb.set([{ id: HOME_FOLDER_ID, name: 'My Drive' }]);
     }
@@ -710,6 +728,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   private readonly trashPath = signal<{ id: string; name: string }[]>([]);
 
   async showTrash(): Promise<void> {
+    const seq = this.beginView();
     this.closeSidebarOnMobile();
     this.trashFolderId.set(null);
     this.trashPath.set([]);
@@ -720,6 +739,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.currentFolderId.set('__trash__');
     this.fileService.searchResults.set(null);
     await this.fileService.loadTrash(this.sortBy(), this.sortDir());
+    if (seq !== this.viewSeq) return; // switched away while loading
     this.router.navigate(['/folder', '__trash__']); // push — back returns to the previous folder
   }
 
@@ -755,8 +775,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   async showStarred(): Promise<void> {
+    const seq = this.beginView();
     this.closeSidebarOnMobile();
     const results = await this.fileService.loadFavorites();
+    if (seq !== this.viewSeq) return; // switched away while loading
     this.fileService.searchResults.set(results);
     this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Favorites' }]);
     this.fileService.currentFolderId.set('__starred__');
@@ -1048,6 +1070,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   });
 
   async showTimeline(): Promise<void> {
+    this.beginView();
     this.closeSidebarOnMobile();
     this.fileService.clearSelection();
     this.fileService.breadcrumb.set([{ id: '__timeline__', name: 'Timeline' }]);
@@ -1255,8 +1278,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   async showShares(): Promise<void> {
+    const seq = this.beginView();
     this.closeSidebarOnMobile();
     await this.fileService.loadShares();
+    if (seq !== this.viewSeq) return; // switched away while loading
     this.fileService.searchResults.set(this.fileService.sharedFiles());
     this.fileService.breadcrumb.set([{ id: '__shares__', name: 'My Shares' }]);
     this.fileService.currentFolderId.set('__shares__');
@@ -1265,6 +1290,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   /** Files the user marked "available offline" (kept in device cache). */
   showOffline(): void {
+    this.beginView();
     this.closeSidebarOnMobile();
     this.fileService.searchResults.set(this.offline.items());
     this.fileService.breadcrumb.set([{ id: '__offline__', name: 'Available offline' }]);
@@ -1300,6 +1326,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   navigateToFolder(id: string, name: string): void {
+    this.beginView();
     this.fileService.clearSelection();
     this.applySavedSort(id);
     this.fileService.navigateToFolder(id, name);
