@@ -678,7 +678,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       // Trash sorts SERVER-side (kDrive's V2 trash endpoint has no order
       // param, so the backend sorts the fully-fetched list) — re-fetch the
       // current level (root or the open trashed subfolder).
-      this.trashSortActive.set(true);
       this.fileService.loadTrash(this.sortBy(), this.sortDir(), this.trashFolderId());
       return;
     }
@@ -700,9 +699,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.filterMenuOpen.update(v => !v);
   }
 
-  /** False until the user picks a sort in trash — until then the default
-   *  order (deleted_at desc) is used and no sort-bar arrow is shown. */
-  readonly trashSortActive = signal(false);
   /** Current trashed subfolder id (null = trash root). */
   private readonly trashFolderId = signal<string | null>(null);
   /** Trash breadcrumb below the root "Trash" (subfolder path). */
@@ -710,20 +706,16 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   async showTrash(): Promise<void> {
     this.closeSidebarOnMobile();
-    this.trashSortActive.set(false);
     this.trashFolderId.set(null);
     this.trashPath.set([]);
+    // Trash defaults to "Date deleted" descending (most recently deleted first).
+    this.sortBy.set('deleted_at');
+    this.sortDir.set('desc');
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
     this.fileService.currentFolderId.set('__trash__');
     this.fileService.searchResults.set(null);
-    await this.fileService.loadTrash(); // backend default: deleted_at desc
+    await this.fileService.loadTrash(this.sortBy(), this.sortDir());
     this.router.navigate(['/folder', '__trash__']); // push — back returns to the previous folder
-  }
-
-  /** Current sort to send when re-loading trash — undefined until the user
-   *  actively picks one, so the backend default (deleted_at desc) is kept. */
-  private trashSortArgs(): [string, string] | [] {
-    return this.trashSortActive() ? [this.sortBy(), this.sortDir()] : [];
   }
 
   /** Open a trashed subfolder (its trashed contents, not the live folder). */
@@ -733,7 +725,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.trashFolderId.set(file.id);
     this.fileService.clearSelection();
     this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }, ...path]);
-    this.fileService.loadTrash(...this.trashSortArgs(), file.id);
+    this.fileService.loadTrash(this.sortBy(), this.sortDir(), file.id);
     this.scrollContentTop();
   }
 
@@ -744,7 +736,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.trashPath.set([]);
       this.trashFolderId.set(null);
       this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }]);
-      this.fileService.loadTrash(...this.trashSortArgs());
+      this.fileService.loadTrash(this.sortBy(), this.sortDir());
     } else {
       const path = this.trashPath();
       const idx = path.findIndex(p => p.id === item.id);
@@ -752,7 +744,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.trashPath.set(newPath);
       this.trashFolderId.set(item.id);
       this.fileService.breadcrumb.set([{ id: '__trash__', name: 'Trash' }, ...newPath]);
-      this.fileService.loadTrash(...this.trashSortArgs(), item.id);
+      this.fileService.loadTrash(this.sortBy(), this.sortDir(), item.id);
     }
     this.scrollContentTop();
   }

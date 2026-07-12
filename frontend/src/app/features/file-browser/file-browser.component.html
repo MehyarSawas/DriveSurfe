@@ -321,21 +321,29 @@
 
     <!-- Sort bar -->
     <div class="sort-bar">
+      @if (isTrash()) {
+        <button class="sort-btn" (click)="toggleSort('deleted_at')">
+          Date deleted
+          @if (sortBy() === 'deleted_at') {
+            <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+          }
+        </button>
+      }
       <button class="sort-btn" (click)="toggleSort('name')">
         Name
-        @if (sortBy() === 'name' && (!isTrash() || trashSortActive())) {
+        @if (sortBy() === 'name') {
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>
       <button class="sort-btn" (click)="toggleSort('last_modified_at')">
         Modified
-        @if (sortBy() === 'last_modified_at' && (!isTrash() || trashSortActive())) {
+        @if (sortBy() === 'last_modified_at') {
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>
       <button class="sort-btn" (click)="toggleSort('size')">
         Size
-        @if (sortBy() === 'size' && (!isTrash() || trashSortActive())) {
+        @if (sortBy() === 'size') {
           <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
         }
       </button>
