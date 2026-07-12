@@ -110,14 +110,8 @@ final class FileRoutes
         // can't decode). Result is cached on disk, so it transcodes once.
         $group->get('/files/{id}/transcode', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
-            $debug = ($req->getQueryParams()['debug'] ?? '') === '1';
-            $drive->proxyTranscode($args['id'], $debug);
+            $drive->proxyTranscode($args['id']);
             return $res;
-        })->add($auth);
-
-        // Diagnostic: is the transcode toolchain available on this host?
-        $group->get('/transcode-diag', function (Request $req, Response $res) use ($drive): Response {
-            return self::json($res, ['data' => $drive->transcodeDiag()]);
         })->add($auth);
 
         $group->get('/folder-tree', function (Request $req, Response $res) use ($drive): Response {

@@ -737,31 +737,16 @@ final class KDriveClient implements DriveInterface
      * only when the browser's native <video> can't decode the source (e.g. old
      * MPEG-4 Visual / DivX-era files). Emits directly like proxyDownload.
      */
-    public function proxyTranscode(string $fileId, bool $debug = false): void
+    public function proxyTranscode(string $fileId): void
     {
         $out = self::TRANSCODE_CACHE_DIR . "/{$fileId}.mp4";
 
         if (!is_file($out) || filesize($out) === 0) {
-            if (!self::ffmpegBin()) {
-                if ($debug) { self::emitJson(['ok' => false, 'stage' => 'ffmpeg-missing']); }
-                http_response_code(501); exit;
-            }
-            $result = $this->buildTranscode($fileId, $out);
-            if ($debug) { self::emitJson($result); }
-            if (!$result['ok']) { http_response_code(500); exit; }
-        } elseif ($debug) {
-            self::emitJson(['ok' => true, 'stage' => 'cached', 'size' => filesize($out)]);
+            if (!self::ffmpegBin()) { http_response_code(501); exit; }   // no ffmpeg
+            if (!$this->buildTranscode($fileId, $out)['ok']) { http_response_code(500); exit; }
         }
         @touch($out); // mark as recently used for the LRU sweep
         self::serveLocalFile($out, 'video/mp4');
-    }
-
-    private static function emitJson(array $data): never
-    {
-        http_response_code($data['ok'] ? 200 : 500);
-        header('Content-Type: application/json');
-        echo json_encode($data);
-        exit;
     }
 
     /** Download the source from kDrive and transcode it to H.264/AAC MP4.
@@ -826,31 +811,6 @@ final class KDriveClient implements DriveInterface
             if ($lock) { flock($lock, LOCK_UN); fclose($lock); }
             @unlink($lockFile);
         }
-    }
-
-    /** Report why transcoding may be unavailable on this host. */
-    public function transcodeDiag(): array
-    {
-        $disabled = array_filter(array_map('trim', explode(',', (string) ini_get('disable_functions'))));
-        $execDisabled = array_values(array_intersect(['exec', 'shell_exec', 'proc_open'], $disabled));
-        $bin     = self::ffmpegBin();
-        $version = null;
-        if ($bin && function_exists('exec')) {
-            @exec(escapeshellarg($bin) . ' -version 2>&1', $out, $code);
-            $version = $out[0] ?? null;
-        }
-        $dir = self::TRANSCODE_CACHE_DIR;
-        return [
-            'ffmpeg_found'         => $bin !== null,
-            'ffmpeg_path'          => $bin,
-            'ffmpeg_version'       => $version,
-            'env_FFMPEG_BIN'       => $_ENV['FFMPEG_BIN'] ?? null,
-            'exec_disabled'        => $execDisabled,          // e.g. ["exec","shell_exec"]
-            'path_env'             => getenv('PATH'),
-            'cache_dir'            => $dir,
-            'cache_dir_exists'     => is_dir($dir),
-            'cache_dir_writable'   => is_dir($dir) ? is_writable($dir) : is_writable(dirname($dir)),
-        ];
     }
 
     /** Locate the ffmpeg binary (FFMPEG_BIN override, else PATH). Null if none. */
