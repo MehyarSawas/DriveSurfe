@@ -755,7 +755,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.closeSidebarOnMobile();
     const results = await this.fileService.loadFavorites();
     this.fileService.searchResults.set(results);
-    this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Starred' }]);
+    this.fileService.breadcrumb.set([{ id: '__starred__', name: 'Favorites' }]);
     this.fileService.currentFolderId.set('__starred__');
     this.router.navigate(['/folder', '__starred__']); // push — back returns to the previous folder
   }

@@ -22,7 +22,7 @@
       </button>
       <button class="nav-item" (click)="showStarred()">
         <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
-        Starred
+        Favorites
       </button>
       <button class="nav-item" (click)="showShares()">
         <svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
@@ -279,6 +279,9 @@
               </div>
             }
           </div>
+        } @else if (fileService.currentFolderId() === '__starred__') {
+          <svg class="search-context-icon" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+          <span class="search-context-label">{{ fileService.breadcrumb()[0]?.name ?? 'Favorites' }}</span>
         } @else {
           <svg class="search-context-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
           <span class="search-context-label">{{ fileService.breadcrumb()[0]?.name ?? 'Search' }}</span>
@@ -716,7 +719,7 @@
           <div class="info-row"><span>Created</span><span>{{ parseDateForInfo(f.created_at) | date:'MMM d, y, HH:mm' }}</span></div>
         }
         <div class="info-row"><span>Path</span><span>{{ infoPath() ?? 'Loading…' }}</span></div>
-        <div class="info-row"><span>Starred</span><span>{{ f.is_favorite ? 'Yes' : 'No' }}</span></div>
+        <div class="info-row"><span>Favorite</span><span>{{ f.is_favorite ? 'Yes' : 'No' }}</span></div>
         <div class="info-row"><span>Shared</span><span>{{ fileService.sharedFileIds().has(f.id) ? 'Yes — has share link' : 'No' }}</span></div>
         @if (!f.is_dir && f.mime_type) {
           <div class="info-row"><span>MIME type</span><span>{{ f.mime_type }}</span></div>
