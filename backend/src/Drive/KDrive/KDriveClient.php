@@ -737,22 +737,37 @@ final class KDriveClient implements DriveInterface
      * only when the browser's native <video> can't decode the source (e.g. old
      * MPEG-4 Visual / DivX-era files). Emits directly like proxyDownload.
      */
-    public function proxyTranscode(string $fileId): void
+    public function proxyTranscode(string $fileId, bool $debug = false): void
     {
         $out = self::TRANSCODE_CACHE_DIR . "/{$fileId}.mp4";
 
         if (!is_file($out) || filesize($out) === 0) {
-            if (!self::ffmpegBin()) { http_response_code(501); exit; }   // no ffmpeg
-            if (!$this->buildTranscode($fileId, $out)) { http_response_code(500); exit; }
+            if (!self::ffmpegBin()) {
+                if ($debug) { self::emitJson(['ok' => false, 'stage' => 'ffmpeg-missing']); }
+                http_response_code(501); exit;
+            }
+            $result = $this->buildTranscode($fileId, $out);
+            if ($debug) { self::emitJson($result); }
+            if (!$result['ok']) { http_response_code(500); exit; }
+        } elseif ($debug) {
+            self::emitJson(['ok' => true, 'stage' => 'cached', 'size' => filesize($out)]);
         }
         @touch($out); // mark as recently used for the LRU sweep
         self::serveLocalFile($out, 'video/mp4');
     }
 
+    private static function emitJson(array $data): never
+    {
+        http_response_code($data['ok'] ? 200 : 500);
+        header('Content-Type: application/json');
+        echo json_encode($data);
+        exit;
+    }
+
     /** Download the source from kDrive and transcode it to H.264/AAC MP4.
      *  Serialised per file via a lock so concurrent viewers transcode once.
-     *  Returns true on success (cache file ready). */
-    private function buildTranscode(string $fileId, string $out): bool
+     *  Returns ['ok'=>bool, ...diagnostics]. */
+    private function buildTranscode(string $fileId, string $out): array
     {
         $dir = dirname($out);
         if (!is_dir($dir)) @mkdir($dir, 0775, true);
@@ -762,7 +777,7 @@ final class KDriveClient implements DriveInterface
         if ($lock) flock($lock, LOCK_EX);
         try {
             // A concurrent request may have finished while we waited for the lock.
-            if (is_file($out) && filesize($out) > 0) return true;
+            if (is_file($out) && filesize($out) > 0) return ['ok' => true, 'stage' => 'cached'];
 
             $driveId = $this->getDriveId();
             $token   = $this->getToken();
@@ -775,8 +790,9 @@ final class KDriveClient implements DriveInterface
             } catch (\GuzzleHttp\Exception\GuzzleException $e) {
                 error_log("transcode source download failed [{$fileId}]: " . $e->getMessage());
                 @unlink($src);
-                return false;
+                return ['ok' => false, 'stage' => 'download', 'error' => substr($e->getMessage(), 0, 500)];
             }
+            $srcSize = is_file($src) ? filesize($src) : 0;
 
             $tmp = $out . '.part';
             $cmd = escapeshellarg(self::ffmpegBin())
@@ -789,13 +805,20 @@ final class KDriveClient implements DriveInterface
             @unlink($src);
 
             if ($code !== 0 || !is_file($tmp) || filesize($tmp) === 0) {
-                error_log("transcode ffmpeg failed [{$fileId}] code={$code}: " . implode(' ', array_slice($lines, -3)));
                 @unlink($tmp);
-                return false;
+                $tail = implode("\n", array_slice($lines, -6));
+                error_log("transcode ffmpeg failed [{$fileId}] code={$code}: " . str_replace("\n", ' ', $tail));
+                return [
+                    'ok'       => false,
+                    'stage'    => 'ffmpeg',
+                    'code'     => $code,
+                    'src_size' => $srcSize,
+                    'output'   => $tail,
+                ];
             }
             @rename($tmp, $out);
             self::sweepTranscodeCache();
-            return is_file($out) && filesize($out) > 0;
+            return ['ok' => is_file($out) && filesize($out) > 0, 'stage' => 'done', 'size' => @filesize($out) ?: 0];
         } finally {
             if ($lock) { flock($lock, LOCK_UN); fclose($lock); }
             @unlink($lockFile);

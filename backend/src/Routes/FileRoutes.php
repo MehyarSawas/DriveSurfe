@@ -110,7 +110,8 @@ final class FileRoutes
         // can't decode). Result is cached on disk, so it transcodes once.
         $group->get('/files/{id}/transcode', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
-            $drive->proxyTranscode($args['id']);
+            $debug = ($req->getQueryParams()['debug'] ?? '') === '1';
+            $drive->proxyTranscode($args['id'], $debug);
             return $res;
         })->add($auth);
 
