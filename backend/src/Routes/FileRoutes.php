@@ -105,6 +105,15 @@ final class FileRoutes
             return $res;
         })->add($auth);
 
+        // On-the-fly H.264 transcode — used by the preview only when native
+        // <video> playback fails (e.g. old MPEG-4 Visual/DivX files Safari
+        // can't decode). Result is cached on disk, so it transcodes once.
+        $group->get('/files/{id}/transcode', function (Request $req, Response $res, array $args) use ($drive): Response {
+            if (!self::validFileId($args['id'])) return self::fileIdError($res);
+            $drive->proxyTranscode($args['id']);
+            return $res;
+        })->add($auth);
+
         $group->get('/folder-tree', function (Request $req, Response $res) use ($drive): Response {
             try {
                 return self::json($res, ['data' => $drive->getFolderTree()]);

@@ -121,9 +121,23 @@
         </div>
       }
       @if (isVideo()) {
-        <video [src]="previewSrc()" [attr.poster]="file().thumbnail_url" controls playsinline autoplay preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'" (dblclick)="toggleFullscreen()">
-          Your browser does not support video playback.
-        </video>
+        @if (previewFailed()) {
+          <div class="no-preview">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+            <p>This video can't be played here</p>
+            <button class="btn-primary" (click)="download.emit(file())">Download</button>
+          </div>
+        } @else {
+          @if (videoTranscoding() && !videoReady()) {
+            <div class="media-loading media-converting">
+              <div class="media-spinner"></div>
+              <p>Converting video…</p>
+            </div>
+          }
+          <video [src]="previewSrc()" [attr.poster]="file().thumbnail_url" controls playsinline autoplay preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'" (dblclick)="toggleFullscreen()" (error)="onVideoError()" (canplay)="onVideoReady()">
+            Your browser does not support video playback.
+          </video>
+        }
       } @else if (isPdf()) {
         <ds-pdf-viewer [fileId]="file().id" [zoom]="zoom()" class="pdf-viewer-wrap" />
       } @else if (!previewFailed()) {

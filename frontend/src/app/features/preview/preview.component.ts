@@ -60,6 +60,13 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly zoom = signal(1);
   readonly isLoading = signal(false);
   readonly previewFailed = signal(false);
+  // Set when native <video> playback fails (unsupported codec, e.g. old
+  // MPEG-4 Visual / mp4v that Safari can't decode). We then reload the source
+  // from the server's on-the-fly H.264 transcode endpoint. Reset per file.
+  readonly videoTranscoding = signal(false);
+  // True once the (possibly transcoded) video can actually play — hides the
+  // "Converting…" overlay. Reset per file.
+  readonly videoReady = signal(false);
   readonly deletePhase = signal<DeletePhase>('idle');
   readonly countdown = signal(10);
   readonly folderPanelOpen = signal(false);
@@ -144,7 +151,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   readonly previewSrc = computed(() => {
     const f = this.file();
-    return this.isVideo() ? `/api/files/${f.id}/download` : this.imagePreviewUrl(f.id);
+    if (this.isVideo()) {
+      return this.videoTranscoding()
+        ? `/api/files/${f.id}/transcode`
+        : `/api/files/${f.id}/download`;
+    }
+    return this.imagePreviewUrl(f.id);
   });
 
   imagePreviewUrl(fileId: string): string {
@@ -168,6 +180,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.isSwiping = false;
       if (isNewFile) {
         this.previewFailed.set(false);
+        this.videoTranscoding.set(false);
+        this.videoReady.set(false);
         if (!this.isVideo() && !this.isPdf()) this.isLoading.set(true);
         if (!this.pendingInterval) {
           this.deletePhase.set('idle');
@@ -255,6 +269,23 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   onImageLoad(): void { this.isLoading.set(false); }
   onImageError(): void { this.isLoading.set(false); this.previewFailed.set(true); }
+
+  // Native <video> couldn't play the source. If we haven't already, retry via
+  // the server's on-the-fly H.264 transcode (handles old mp4v/DivX-era files
+  // Safari can't decode). If the transcode source also fails, give up quietly.
+  onVideoError(): void {
+    if (!this.isVideo()) return;
+    if (this.videoTranscoding()) {
+      // Transcode source also failed (no ffmpeg / conversion error) — give up
+      // and offer a download instead of spinning forever.
+      this.previewFailed.set(true);
+      return;
+    }
+    this.videoReady.set(false);
+    this.videoTranscoding.set(true);
+  }
+
+  onVideoReady(): void { this.videoReady.set(true); this.isLoading.set(false); }
 
   onFolderSelected(folder: DriveFile): void {
     this.flushPendingMove();

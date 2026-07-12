@@ -728,6 +728,160 @@ final class KDriveClient implements DriveInterface
         }
     }
 
+    private const TRANSCODE_CACHE_DIR = __DIR__ . '/../../../cache/transcode';
+    private const TRANSCODE_MAX_BYTES  = 2 * 1024 * 1024 * 1024; // ~2 GB cache cap
+
+    /**
+     * Serve a Safari-playable H.264/AAC MP4 of the given file, transcoding on
+     * the fly with ffmpeg the first time and caching the result on disk. Used
+     * only when the browser's native <video> can't decode the source (e.g. old
+     * MPEG-4 Visual / DivX-era files). Emits directly like proxyDownload.
+     */
+    public function proxyTranscode(string $fileId): void
+    {
+        $out = self::TRANSCODE_CACHE_DIR . "/{$fileId}.mp4";
+
+        if (!is_file($out) || filesize($out) === 0) {
+            if (!self::ffmpegBin()) { http_response_code(501); exit; }   // no ffmpeg
+            if (!$this->buildTranscode($fileId, $out)) { http_response_code(500); exit; }
+        }
+        @touch($out); // mark as recently used for the LRU sweep
+        self::serveLocalFile($out, 'video/mp4');
+    }
+
+    /** Download the source from kDrive and transcode it to H.264/AAC MP4.
+     *  Serialised per file via a lock so concurrent viewers transcode once.
+     *  Returns true on success (cache file ready). */
+    private function buildTranscode(string $fileId, string $out): bool
+    {
+        $dir = dirname($out);
+        if (!is_dir($dir)) @mkdir($dir, 0775, true);
+
+        $lockFile = $out . '.lock';
+        $lock = fopen($lockFile, 'c');
+        if ($lock) flock($lock, LOCK_EX);
+        try {
+            // A concurrent request may have finished while we waited for the lock.
+            if (is_file($out) && filesize($out) > 0) return true;
+
+            $driveId = $this->getDriveId();
+            $token   = $this->getToken();
+            $src     = $out . '.src';
+            try {
+                $this->http->get(
+                    self::API_V2 . "/{$driveId}/files/{$fileId}/download",
+                    ['headers' => ['Authorization' => "Bearer {$token}"], 'sink' => $src, 'timeout' => 300]
+                );
+            } catch (\GuzzleHttp\Exception\GuzzleException $e) {
+                error_log("transcode source download failed [{$fileId}]: " . $e->getMessage());
+                @unlink($src);
+                return false;
+            }
+
+            $tmp = $out . '.part';
+            $cmd = escapeshellarg(self::ffmpegBin())
+                 . ' -nostdin -y -i ' . escapeshellarg($src)
+                 . ' -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p'
+                 . ' -c:a aac -b:a 128k -movflags +faststart '
+                 . escapeshellarg($tmp) . ' 2>&1';
+            @set_time_limit(0);
+            exec($cmd, $lines, $code);
+            @unlink($src);
+
+            if ($code !== 0 || !is_file($tmp) || filesize($tmp) === 0) {
+                error_log("transcode ffmpeg failed [{$fileId}] code={$code}: " . implode(' ', array_slice($lines, -3)));
+                @unlink($tmp);
+                return false;
+            }
+            @rename($tmp, $out);
+            self::sweepTranscodeCache();
+            return is_file($out) && filesize($out) > 0;
+        } finally {
+            if ($lock) { flock($lock, LOCK_UN); fclose($lock); }
+            @unlink($lockFile);
+        }
+    }
+
+    /** Locate the ffmpeg binary (FFMPEG_BIN override, else PATH). Null if none. */
+    private static function ffmpegBin(): ?string
+    {
+        static $bin = false;
+        if ($bin !== false) return $bin;
+        $env = $_ENV['FFMPEG_BIN'] ?? null;
+        if ($env && is_executable($env)) return $bin = $env;
+        $found = trim((string) @shell_exec('command -v ffmpeg 2>/dev/null'));
+        return $bin = ($found !== '' ? $found : null);
+    }
+
+    /** Keep the transcode cache under TRANSCODE_MAX_BYTES, evicting oldest
+     *  (by mtime) first. Best-effort; ignores in-progress .part/.src files. */
+    private static function sweepTranscodeCache(): void
+    {
+        $files = glob(self::TRANSCODE_CACHE_DIR . '/*.mp4') ?: [];
+        $total = 0;
+        $entries = [];
+        foreach ($files as $f) {
+            $size = @filesize($f) ?: 0;
+            $total += $size;
+            $entries[] = ['path' => $f, 'size' => $size, 'mtime' => @filemtime($f) ?: 0];
+        }
+        if ($total <= self::TRANSCODE_MAX_BYTES) return;
+        usort($entries, fn($a, $b) => $a['mtime'] <=> $b['mtime']); // oldest first
+        foreach ($entries as $e) {
+            if ($total <= self::TRANSCODE_MAX_BYTES) break;
+            if (@unlink($e['path'])) $total -= $e['size'];
+        }
+    }
+
+    /** Stream a local file to the client honouring Range (206) — needed for
+     *  iOS <video> seeking. Mirrors proxyDownload's byte-range semantics. */
+    private static function serveLocalFile(string $path, string $mime): void
+    {
+        $size = filesize($path);
+        $fp   = fopen($path, 'rb');
+        if ($fp === false) { http_response_code(500); exit; }
+
+        header("Content-Type: {$mime}");
+        header("Accept-Ranges: bytes");
+        header("Cache-Control: private, max-age=86400");
+
+        $start = 0;
+        $end   = $size - 1;
+        $range = $_SERVER['HTTP_RANGE'] ?? null;
+        if ($range && preg_match('/^bytes=(\d*)-(\d*)$/', $range, $m) && ($m[1] !== '' || $m[2] !== '')) {
+            if ($m[1] === '') {                       // suffix: last N bytes
+                $start = max(0, $size - (int) $m[2]);
+            } else {
+                $start = (int) $m[1];
+                if ($m[2] !== '') $end = (int) $m[2];
+            }
+            $end = min($end, $size - 1);
+            if ($start > $end || $start < 0) {
+                http_response_code(416);
+                header("Content-Range: bytes */{$size}");
+                fclose($fp);
+                exit;
+            }
+            http_response_code(206);
+            header("Content-Range: bytes {$start}-{$end}/{$size}");
+        } else {
+            http_response_code(200);
+        }
+
+        $length = $end - $start + 1;
+        header("Content-Length: {$length}");
+        fseek($fp, $start);
+        $remaining = $length;
+        while ($remaining > 0 && !feof($fp)) {
+            $chunk = fread($fp, (int) min(65536, $remaining));
+            if ($chunk === '') break;
+            echo $chunk;
+            $remaining -= strlen($chunk);
+            if (connection_aborted()) break;
+        }
+        fclose($fp);
+    }
+
     private static function toIso(mixed $ts): ?string
     {
         if ($ts === null || $ts === '') return null;
