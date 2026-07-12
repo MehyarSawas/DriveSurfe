@@ -738,6 +738,28 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return new Date(m.year, m.month - 1, 1).toLocaleDateString(undefined, { month: 'long' });
   }
 
+  /** Per-cover image fallback state: some cover files have no generated
+   *  thumbnail (the /thumbnail endpoint 404s), so the tile showed a broken
+   *  image. Fall back thumbnail → full preview → coloured placeholder. */
+  private readonly coverImgState = signal<Map<string, 'preview' | 'failed'>>(new Map());
+
+  /** The src to use for a cover tile, or null to render the placeholder. */
+  coverSrc(f: DriveFile): string | null {
+    const st = this.coverImgState().get(f.id);
+    if (st === 'failed') return null;
+    if (st === 'preview') return f.preview_url ?? `/api/files/${f.id}/preview`;
+    return f.thumbnail_url ?? f.preview_url ?? null;
+  }
+
+  /** On image load error, advance the fallback: thumbnail → preview → give up. */
+  onCoverError(f: DriveFile): void {
+    this.coverImgState.update(m => {
+      const next = new Map(m);
+      next.set(f.id, next.get(f.id) === 'preview' ? 'failed' : 'preview');
+      return next;
+    });
+  }
+
   /** Read the month index from the server cache — a single, read-only fetch.
    *  The index is only BUILT by the nightly cron (bin/build-months-cache.php)
    *  or the explicit Reload action; opening the timeline never walks the
