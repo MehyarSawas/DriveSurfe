@@ -461,6 +461,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       if (window.innerWidth <= 768) this.sidebarOpen.set(false);
       return;
     }
+    // kDrive can't preview/thumbnail trashed files — don't open the viewer.
+    if (this.isTrash()) return;
     this.fileService.previewOpen.set(true);
     this.previewFile.set(file);
     const idx = this.mediaFiles().findIndex(f => f.id === file.id);
