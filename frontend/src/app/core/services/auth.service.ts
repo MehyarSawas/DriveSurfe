@@ -42,14 +42,24 @@ export class AuthService {
       const state = await firstValueFrom(this.http.get<AuthState>('/api/auth/me'));
       this.isAuthenticated.set(state.authenticated);
       this.currentDrive.set(state.drive ?? null);
-    } catch {
-      this.isAuthenticated.set(false);
+      try { localStorage.setItem('ds-was-authed', state.authenticated ? '1' : '0'); } catch {}
+    } catch (err) {
+      // Offline / server unreachable: we can't verify, but the session cookie
+      // may still be valid. If the user was authenticated before, keep them in
+      // (so the app + offline content opens) instead of bouncing to login,
+      // which can't succeed offline anyway. A real 401 (status 401) online
+      // still logs out.
+      const offline = !navigator.onLine || (err as { status?: number })?.status === 0;
+      const wasAuthed = (() => { try { return localStorage.getItem('ds-was-authed') === '1'; } catch { return false; } })();
+      this.isAuthenticated.set(offline && wasAuthed);
+      if (offline && wasAuthed) this.currentDrive.set('kdrive');
     } finally {
       this.isLoading.set(false);
     }
   }
 
   async logout(): Promise<void> {
+    try { localStorage.setItem('ds-was-authed', '0'); } catch {}
     await firstValueFrom(this.http.post('/api/auth/logout', {}));
     this.isAuthenticated.set(false);
     this.currentDrive.set(null);

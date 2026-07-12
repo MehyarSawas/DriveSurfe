@@ -20,8 +20,11 @@ self.addEventListener('activate', event => event.waitUntil((async () => {
 })()));
 
 /** Cache index.html + the JS/CSS bundles it references, so the app can open
- *  offline. Best-effort: if we're offline during install there's nothing to
- *  precache yet — it'll fill in on the next online asset fetch. */
+ *  offline. Best-effort: if we're offline there's nothing to refresh — it'll
+ *  fill in on the next online load. Re-run on every online navigation so the
+ *  cached index and its bundles always come from the SAME (latest) version —
+ *  otherwise a later deploy leaves the cached index pointing at bundle hashes
+ *  that aren't cached, and the app opens to a white screen offline. */
 async function precacheShell() {
   try {
     const cache = await caches.open(SHELL_CACHE);
@@ -66,7 +69,11 @@ self.addEventListener('fetch', event => {
 // navigate-mode caching pitfalls); the offline shell comes from precache.
 async function navigate(request) {
   try {
-    return await fetch(request);
+    const response = await fetch(request);
+    // Keep the offline snapshot in sync with the version just loaded online:
+    // refresh the cached index AND its bundle list so they never drift apart.
+    precacheShell();
+    return response;
   } catch {
     const cache = await caches.open(SHELL_CACHE);
     return (await cache.match('/index.html')) || Response.error();
