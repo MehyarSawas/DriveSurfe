@@ -17,6 +17,7 @@ export class FileGridComponent implements AfterViewInit, OnDestroy {
   readonly trash = input(false);
   readonly sharedIds = input<Set<string>>(new Set());
   readonly pinnedIds = input<Set<string>>(new Set());
+  readonly offlineIds = input<Set<string>>(new Set());
 
   readonly fileClick = output<DriveFile>();
   readonly selectToggle = output<DriveFile>();
@@ -31,6 +32,11 @@ export class FileGridComponent implements AfterViewInit, OnDestroy {
   readonly share = output<DriveFile>();
   readonly info = output<DriveFile>();
   readonly pin = output<DriveFile>();
+  readonly offline = output<DriveFile>();
+
+  isOffline(id: string): boolean {
+    return this.offlineIds().has(id);
+  }
 
   isPinned(id: string): boolean {
     return this.pinnedIds().has(id);
