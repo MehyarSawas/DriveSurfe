@@ -731,7 +731,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   /** One tile per year — its newest month's cover represents the year. */
   readonly timelineYearCovers = computed(() =>
-    this.timelineMonthsByYear().map(g => ({ year: g.year, cover: g.months[0].cover }))
+    this.timelineMonthsByYear().map(g => ({ year: g.year, month: g.months[0] }))
   );
 
   monthName(m: MonthCover): string {
@@ -758,13 +758,38 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return bust ? url + (url.includes('?') ? '&' : '?') + 'cb=' + bust : url;
   }
 
-  /** On image load error, advance the fallback: thumbnail → preview → give up. */
-  onCoverError(f: DriveFile): void {
-    this.coverImgState.update(m => {
-      const next = new Map(m);
-      next.set(f.id, next.get(f.id) === 'preview' ? 'failed' : 'preview');
+  /** Months whose dead cover we've already tried to replace (one attempt). */
+  private readonly repickedMonths = new Set<string>();
+
+  /** On image load error, advance the fallback: thumbnail → preview → give up.
+   *  When a cover fails entirely its file is gone (deleted/moved on the drive),
+   *  so re-pick a still-existing file from the same month as the new cover. */
+  onCoverError(m: MonthCover): void {
+    const id = m.cover.id;
+    const prev = this.coverImgState().get(id);
+    this.coverImgState.update(s => {
+      const next = new Map(s);
+      next.set(id, prev === 'preview' ? 'failed' : 'preview');
       return next;
     });
+    if (prev === 'preview') this.repickCover(m); // just transitioned to 'failed'
+  }
+
+  /** Fetch the month's page from its indexed cursor and swap in the newest
+   *  other in-month file as the cover — self-heals a stale cover without a
+   *  full index rebuild. One attempt per month; leaves the placeholder if none. */
+  private async repickCover(m: MonthCover): Promise<void> {
+    if (this.repickedMonths.has(m.key)) return;
+    this.repickedMonths.add(m.key);
+    try {
+      const page = await this.fileService.loadMediaPage(m.cursor);
+      const replacement = page.data.find(f =>
+        f.id !== m.cover.id && this.monthKeyOf(f) === m.key && (f.thumbnail_url || f.preview_url));
+      if (!replacement) return;
+      this.timelineCovers.update(list =>
+        list ? list.map(c => (c.key === m.key ? { ...c, cover: replacement } : c)) : list);
+      this.coverImgState.update(s => { const n = new Map(s); n.delete(replacement.id); return n; });
+    } catch { /* keep the placeholder */ }
   }
 
   /** Read the month index from the server cache — a single, read-only fetch.

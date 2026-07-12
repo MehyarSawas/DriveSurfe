@@ -424,8 +424,8 @@
               <div class="cover-grid years">
                 @for (y of timelineYearCovers(); track y.year) {
                   <div class="cover-tile year" (click)="openTimelineYear(y.year)">
-                    @if (coverSrc(y.cover); as src) {
-                      <img [src]="src" [alt]="y.year" loading="lazy" (error)="onCoverError(y.cover)" />
+                    @if (coverSrc(y.month.cover); as src) {
+                      <img [src]="src" [alt]="y.year" loading="lazy" (error)="onCoverError(y.month)" />
                     } @else {
                       <div class="cover-placeholder"></div>
                     }
@@ -447,7 +447,7 @@
                     @for (m of yg.months; track m.key) {
                       <div class="cover-tile" (click)="openTimelineMonth(m)">
                         @if (coverSrc(m.cover); as src) {
-                          <img [src]="src" [alt]="monthName(m)" loading="lazy" (error)="onCoverError(m.cover)" />
+                          <img [src]="src" [alt]="monthName(m)" loading="lazy" (error)="onCoverError(m)" />
                         } @else {
                           <div class="cover-placeholder"></div>
                         }
