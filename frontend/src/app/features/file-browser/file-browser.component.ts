@@ -14,7 +14,7 @@ import { FileGridComponent } from './components/file-grid/file-grid.component';
 import { FileListComponent } from './components/file-list/file-list.component';
 import { FolderTreeComponent } from './components/folder-tree/folder-tree.component';
 import { BreadcrumbComponent } from './components/breadcrumb/breadcrumb.component';
-import { SearchBarComponent } from './components/search-bar/search-bar.component';
+import { SearchBarComponent, SearchFilters } from './components/search-bar/search-bar.component';
 import { PreviewComponent } from '../preview/preview.component';
 import { FolderPickerComponent } from '../../shared/components/folder-picker/folder-picker.component';
 import { ShareDialogComponent } from '../../shared/components/share-dialog/share-dialog.component';
@@ -58,6 +58,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly sortBy = signal<SortBy>('last_modified_at');
   readonly sortDir = signal<SortDir>('desc');
   readonly filterType = signal<string>('');
+  /** Search-scoped refinement filters (date range + file-type categories),
+   *  driven by the search bar's filter dropdown and applied client-side to the
+   *  search results. */
+  readonly searchFilters = signal<SearchFilters>({ modifiedFrom: '', modifiedTo: '', types: [] });
+  /** True only during an actual text search — NOT the starred/shares/offline/
+   *  timeline views, which also populate searchResults. Gates the search-bar
+   *  refinement filters so they don't leak into those views. */
+  readonly isTextSearch = signal(false);
   readonly filterMenuOpen = signal(false);
   readonly viewMenuOpen = signal(false);
   readonly sidebarOpen = signal(window.innerWidth > 768);
@@ -236,8 +244,36 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     let files = this.fileService.searchResults() ?? this.fileService.files();
     const t = this.filterType();
     if (t) files = files.filter(f => f.is_dir || f.type === 'dir' || f.mime_type?.startsWith(t + '/'));
+    // Search-bar refinement filters apply only within an actual text search.
+    if (this.isTextSearch()) {
+      const { modifiedFrom, modifiedTo, types } = this.searchFilters();
+      if (types.length) files = files.filter(f => types.some(c => this.matchesCategory(f, c)));
+      if (modifiedFrom) {
+        const from = Date.parse(modifiedFrom + 'T00:00:00');
+        files = files.filter(f => f.modified_at && Date.parse(f.modified_at) >= from);
+      }
+      if (modifiedTo) {
+        const to = Date.parse(modifiedTo + 'T23:59:59');
+        files = files.filter(f => f.modified_at && Date.parse(f.modified_at) <= to);
+      }
+    }
     return files;
   });
+
+  /** Whether a file belongs to a search file-type category. */
+  private matchesCategory(f: DriveFile, cat: string): boolean {
+    const mime = f.mime_type ?? '';
+    const ext = (f.extension ?? '').toLowerCase();
+    switch (cat) {
+      case 'folder':   return f.is_dir || f.type === 'dir';
+      case 'image':    return mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','heic','heif','avif','svg','bmp','tiff'].includes(ext);
+      case 'video':    return mime.startsWith('video/') || ['mp4','mov','m4v','webm','avi','mkv','wmv','flv'].includes(ext);
+      case 'audio':    return mime.startsWith('audio/') || ['mp3','m4a','ogg','wav','flac','aac','wma'].includes(ext);
+      case 'document': return mime === 'application/pdf' || mime.startsWith('text/')
+        || ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','odt','ods','odp','csv','rtf','pages','numbers','key','md'].includes(ext);
+      default:         return false;
+    }
+  }
 
   /** DOM render window for the folder/trash/starred/shares/search grid+list.
    *  Rendering thousands of file cards (each firing a thumbnail request) locks
@@ -359,6 +395,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.cancelTimelineStream();
     ++this.coversGen;                       // stop any timeline cover polling
     this.timelineCoversLoading.set(false);
+    this.isTextSearch.set(false);           // leaving any active text search
     return ++this.viewSeq;
   }
 
@@ -446,6 +483,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.preSearchBreadcrumb.set(this.fileService.breadcrumb());
     }
     this._lastSearchEvent = event;
+    this.isTextSearch.set(true);
     // Update breadcrumb immediately so it always reflects current search term
     const label = event.folderId
       ? `"${event.query}" in ${event.folderName ?? 'folder'}`
@@ -458,8 +496,16 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** Search-bar filter dropdown changed (date range / file-type categories).
+   *  Purely client-side — no re-fetch needed; displayFiles reacts to the signal. */
+  onSearchFilters(filters: SearchFilters): void {
+    this.searchFilters.set(filters);
+  }
+
   cancelSearch(): void {
     this.searchBar?.clearSilent();
+    this.searchFilters.set({ modifiedFrom: '', modifiedTo: '', types: [] });
+    this.isTextSearch.set(false);
     this.fileService.abortSearch();
     this.fileService.searchResults.set(null);
     this.fileService.searchCapped.set(false);

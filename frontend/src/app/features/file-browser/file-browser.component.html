@@ -111,6 +111,7 @@
           [folderId]="fileService.currentFolderId()"
           [folderName]="currentFolderName()"
           (search)="onSearch($event)"
+          (filtersChange)="onSearchFilters($event)"
         />
 
         <div class="toolbar-actions">

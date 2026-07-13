@@ -75,6 +75,7 @@
 }
 
 .filter-btn {
+  position: relative;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -87,6 +88,22 @@
 
   &:hover { background: var(--color-border); }
   &.active svg { fill: var(--color-primary, #14a4dd); }
+
+  .filter-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    border-radius: 8px;
+    background: var(--color-primary, #14a4dd);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 15px;
+    text-align: center;
+  }
 }
 
 .filter-dropdown {
@@ -97,15 +114,71 @@
   border: 1px solid var(--color-border);
   border-radius: 12px;
   box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,.18));
-  min-width: 200px;
+  min-width: 240px;
   padding: 6px;
   z-index: 200;
 
   @media (max-width: 480px) {
     right: auto;
     left: 0;
-    min-width: 180px;
+    min-width: 220px;
   }
+}
+
+.filter-section {
+  padding: 4px 0;
+
+  & + .filter-section { border-top: 1px solid var(--color-border); }
+}
+
+.filter-heading {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--color-text-secondary);
+  padding: 6px 10px 4px;
+}
+
+.date-row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 10px 6px;
+}
+
+.date-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+
+  input {
+    border: 1px solid var(--color-border);
+    background: var(--color-hover);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 13px;
+    color: var(--color-text);
+    color-scheme: light dark;
+    outline: none;
+    min-width: 0;
+
+    &:focus { border-color: var(--color-primary, #14a4dd); }
+  }
+}
+
+.clear-filters {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-primary, #14a4dd);
+  transition: background var(--transition);
+
+  &:hover { background: var(--color-hover); }
 }
 
 .filter-option {
