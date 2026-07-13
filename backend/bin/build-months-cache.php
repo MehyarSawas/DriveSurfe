@@ -7,10 +7,12 @@
  * Meant to run from cron, e.g. nightly:
  *   30 3 * * * /usr/bin/php /path/to/DriveSurfe/backend/bin/build-months-cache.php >> /path/to/months-cron.log 2>&1
  *
- * Each listMediaMonths() call advances the cursor walk a few pages (or, once
- * the index is complete, rescans the head page for new uploads). This script
- * simply keeps calling it with pacing until the walk reports complete, so by
- * morning the whole index is built and the app serves it instantly.
+ * Each listMediaMonths(true) call advances a full-rebuild walk a few pages.
+ * This script keeps calling it with pacing until the walk reports complete —
+ * i.e. the whole stream has been re-walked fresh and atomically swapped in, so
+ * files deleted since the last run are gone. Run it on a short interval (e.g.
+ * every 10 min) to keep the index current:
+ *   *\/10 * * * * /usr/bin/php /path/to/DriveSurfe/backend/bin/build-months-cache.php >> /path/to/months-cron.log 2>&1
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -32,32 +34,33 @@ const STALL_PAUSE  = 30;   // s after a poll with no forward progress (rate-limi
 
 $start     = time();
 $lastCount = -1;
-$first     = true;
 
 while (time() - $start < MAX_RUNTIME) {
     try {
-        // build=true — only this script (not the web app) advances the walk
-        // and writes the cache. First call also forces a head refresh so new
-        // uploads are picked up even when the index is already complete.
-        $res   = $client->listMediaMonths($first, true);
-        $first = false;
+        // advance=true — walk the full stream fresh into the build buffer; the
+        // live index only swaps in once the walk completes. The web app never
+        // advances the walk itself (read-only), only this script and Reload do.
+        $res = $client->listMediaMonths(true);
     } catch (Throwable $e) {
         fwrite(STDERR, sprintf("[%s] ERROR %s\n", date('c'), $e->getMessage()));
         sleep(STALL_PAUSE);
         continue;
     }
 
-    $count = count($res['months']);
+    // Track the in-progress rebuild's month count for progress/pacing; the
+    // live count only changes when a completed walk swaps in.
+    $count = (int) ($res['meta']['build_count'] ?? 0);
     printf(
-        "[%s] months=%d complete=%s size=%s\n",
+        "[%s] rebuilding=%d live=%d complete=%s size=%s\n",
         date('c'),
         $count,
+        count($res['months']),
         $res['complete'] ? 'yes' : 'no',
         number_format($res['meta']['size_bytes'] ?? 0)
     );
 
     if ($res['complete']) {
-        printf("[%s] Done — index complete (%d months).\n", date('c'), $count);
+        printf("[%s] Done — rebuild complete (%d months live).\n", date('c'), count($res['months']));
         exit(0);
     }
 

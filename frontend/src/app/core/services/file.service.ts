@@ -240,11 +240,12 @@ export class FileService {
     );
   }
 
-  /** The month-cover index so far (newest first). Each call advances the
-   *  backend's cursor walk a few pages — poll until `complete` is true.
-   *  `refresh` forces a head-page rescan (new uploads) ignoring the TTL. */
-  async loadMediaMonths(refresh = false): Promise<MediaMonthsResponse> {
-    const params: Record<string, string> = refresh ? { refresh: '1' } : {};
+  /** The live month-cover index (newest first). A plain call is read-only.
+   *  `rebuild` advances a full rebuild of the whole index a few pages — poll
+   *  until `complete` is true (the fresh walk has finished and swapped in,
+   *  dropping any deleted files). */
+  async loadMediaMonths(rebuild = false): Promise<MediaMonthsResponse> {
+    const params: Record<string, string> = rebuild ? { rebuild: '1' } : {};
     const res = await firstValueFrom(
       this.http.get<ApiResponse<MediaMonthsResponse>>('/api/media/months', { params })
     );

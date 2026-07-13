@@ -150,8 +150,10 @@ final class FileRoutes
 
         $group->get('/media/months', function (Request $req, Response $res) use ($drive): Response {
             $params  = $req->getQueryParams();
-            $refresh = ($params['refresh'] ?? '') === '1';
-            return self::json($res, ['data' => $drive->listMediaMonths($refresh)]);
+            // ?rebuild=1 advances a full rebuild (cron + Reload button poll this
+            // until complete); a plain call is read-only.
+            $rebuild = ($params['rebuild'] ?? '') === '1';
+            return self::json($res, ['data' => $drive->listMediaMonths($rebuild)]);
         })->add($auth);
 
         $group->get('/trash', function (Request $req, Response $res) use ($drive): Response {

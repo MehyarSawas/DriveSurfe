@@ -279,7 +279,8 @@ final class KDriveClient implements DriveInterface
     }
 
     /**
-     * Timeline month covers, built as a persistent CURSOR-WALK index.
+     * Timeline month covers, built as a persistent CURSOR-WALK index that is
+     * fully REBUILT from scratch each cycle (so deleted files disappear).
      *
      * Empirically (this drive), the search endpoint's modified_before returns
      * nothing once it points into the past beyond the newest weeks, and
@@ -287,16 +288,14 @@ final class KDriveClient implements DriveInterface
      * cannot enumerate history at all. The only thing that reliably walks the
      * whole newest-first stream is plain cursor pagination.
      *
-     * So: each call advances the walk by up to MONTHS_PAGES_PER_CALL pages
-     * from a cursor persisted in a state file, merging every newly seen
-     * Y-m month (its first/newest file = cover, plus the CURSOR of the page
-     * it appeared on — month drill-down streams from that cursor). The
-     * frontend polls until `complete`. Once complete, only the newest page is
-     * rescanned (at most every MONTHS_HEAD_TTL) to pick up new uploads —
-     * history behind the head never changes.
+     * Every rebuild walks the entire stream fresh into a SEPARATE build buffer
+     * ('build_months' from 'build_cursor'), advancing a few pages per call. The
+     * live 'months' index (last completed walk) keeps being served untouched
+     * until the fresh walk finishes, at which point it atomically swaps in —
+     * so a rebuild never flashes an empty/partial timeline, and any file
+     * deleted since the previous walk is simply absent from the new index.
      */
     private const MONTHS_CACHE_DIR      = __DIR__ . '/../../../cache/months';
-    private const MONTHS_HEAD_TTL       = 900; // 15 min — only the head of the stream changes
     private const MONTHS_PAGES_PER_CALL = 5;   // per poll — bounded by rate limit + PHP exec time
     private const MONTHS_TIME_BUDGET    = 8;   // s per poll — return partial fast instead of hanging
 
@@ -310,19 +309,26 @@ final class KDriveClient implements DriveInterface
     }
 
     /**
-     * @param bool $refresh Head-page rescan (new uploads) + write — the app's
-     *                      explicit Reload action.
-     * @param bool $build   Advance the cursor walk + write — used ONLY by the
-     *                      cron script (bin/build-months-cache.php).
+     * @param bool $advance When true, advance a full-rebuild walk a few pages
+     *                      and write. Used by the cron (bin/build-months-cache.php)
+     *                      and the app's Reload action, which both poll until
+     *                      `complete` (rebuild finished). A fresh rebuild starts
+     *                      automatically whenever none is in progress.
      *
-     * A plain call (both false) is strictly READ-ONLY: it serves whatever the
-     * state file holds without touching the kDrive API or writing anything —
-     * opening the timeline must never burn API quota or grow the cache.
+     * A plain call ($advance = false) is strictly READ-ONLY: it serves the live
+     * index without touching the kDrive API or writing anything — opening the
+     * timeline must never burn API quota.
      */
-    public function listMediaMonths(bool $refresh = false, bool $build = false): array
+    public function listMediaMonths(bool $advance = false): array
     {
         $stateFile = $this->monthsStateFile();
-        $state = ['months' => [], 'cursor' => null, 'complete' => false, 'updated_at' => 0];
+        $state = [
+            'months'       => [],   // live index (last completed walk) — always served
+            'updated_at'   => 0,    // when the live index last completed
+            'building'     => false,
+            'build_months' => [],   // in-progress fresh walk accumulator
+            'build_cursor' => null, // resume point for the walk
+        ];
         if (is_file($stateFile)) {
             $cached = json_decode((string) file_get_contents($stateFile), true);
             if (is_array($cached) && isset($cached['months']) && is_array($cached['months'])) {
@@ -330,56 +336,63 @@ final class KDriveClient implements DriveInterface
             }
         }
 
-        if ($build && !$state['complete']) {
-            // Advance the walk under a hard TIME budget, not just a page count:
-            // when kDrive starts 429ing, get()'s retry sleeps (~18s each) would
-            // otherwise stack up inside one request and the call appears hung.
-            // Better to return whatever we have quickly — the cron loop calls
-            // again after a pause, giving the rolling rate window room to
-            // recover. Partial progress is kept on error (resume from cursor).
-            $deadline = time() + self::MONTHS_TIME_BUDGET;
-            try {
-                for ($i = 0; $i < self::MONTHS_PAGES_PER_CALL && time() < $deadline; $i++) {
-                    $pageCursor = $state['cursor'];
-                    $res = $this->listMedia($pageCursor);
-                    $this->mergeMonths($state['months'], $res['files'], $pageCursor, false);
-                    $state['cursor'] = $res['cursor'];
-                    if (!($res['has_more'] ?? false) || !$res['cursor']) {
-                        $state['complete'] = true;
-                        break;
-                    }
-                }
-            } catch (RuntimeException $e) {
-                // Keep partial progress; the cron loop resumes from the cursor.
-            }
-            $state['updated_at'] = time();
+        if ($advance) {
+            $this->advanceRebuild($state);
             $this->saveMonthsState($state);
-        } elseif ($refresh || ($build && time() - (int) $state['updated_at'] >= self::MONTHS_HEAD_TTL)) {
-            // Rescan only the head page so new uploads show up (new months
-            // appear; the newest months' covers track them). Reached via the
-            // app's Reload action or the cron's head-refresh pass.
-            try {
-                $res = $this->listMedia(null);
-                $this->mergeMonths($state['months'], $res['files'], null, true);
-                $state['updated_at'] = time();
-                $this->saveMonthsState($state);
-            } catch (RuntimeException $e) {
-                // Serve stale on error.
-            }
         }
 
         $months = $state['months'];
         krsort($months); // 'YYYY-MM' string keys — reverse-sorted = newest first
-        $result = [
+        return [
             'months'   => array_values($months),
-            'complete' => (bool) $state['complete'],
+            // "complete" = no rebuild currently in progress. The pollers stop here.
+            'complete' => empty($state['building']),
             'meta'     => [
-                'updated_at' => (int) $state['updated_at'],
-                'size_bytes' => is_file($stateFile) ? (int) filesize($stateFile) : 0,
-                'count'      => count($months),
+                'updated_at'  => (int) $state['updated_at'],
+                'size_bytes'  => is_file($stateFile) ? (int) filesize($stateFile) : 0,
+                'count'       => count($months),
+                // Months discovered so far in the in-progress rebuild — lets the
+                // cron detect forward progress (the live count stays static
+                // until the fresh walk swaps in).
+                'build_count' => count($state['build_months']),
             ],
         ];
-        return $result;
+    }
+
+    /**
+     * Advance the fresh-rebuild walk by up to MONTHS_PAGES_PER_CALL pages under
+     * a hard time budget (so a 429 retry-sleep can't make the request hang).
+     * Starts a new walk if none is in progress; on reaching the end of the
+     * stream, atomically swaps the freshly built index in as the live one.
+     */
+    private function advanceRebuild(array &$state): void
+    {
+        if (empty($state['building'])) {
+            $state['building']     = true;
+            $state['build_months'] = [];
+            $state['build_cursor'] = null;
+        }
+
+        $deadline = time() + self::MONTHS_TIME_BUDGET;
+        try {
+            for ($i = 0; $i < self::MONTHS_PAGES_PER_CALL && time() < $deadline; $i++) {
+                $pageCursor = $state['build_cursor'];
+                $res = $this->listMedia($pageCursor);
+                $this->mergeMonths($state['build_months'], $res['files'], $pageCursor, false);
+                $state['build_cursor'] = $res['cursor'];
+                if (!($res['has_more'] ?? false) || !$res['cursor']) {
+                    // Walk finished — swap the fresh index in and clear the buffer.
+                    $state['months']       = $state['build_months'];
+                    $state['updated_at']   = time();
+                    $state['building']     = false;
+                    $state['build_months'] = [];
+                    $state['build_cursor'] = null;
+                    return;
+                }
+            }
+        } catch (RuntimeException $e) {
+            // Keep partial build progress; the next call resumes from build_cursor.
+        }
     }
 
     /** Merge one page of newest-first files into the months map.

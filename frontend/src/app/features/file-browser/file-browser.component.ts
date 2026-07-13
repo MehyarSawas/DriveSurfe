@@ -866,12 +866,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     return bust ? url + (url.includes('?') ? '&' : '?') + 'cb=' + bust : url;
   }
 
-  /** Months whose dead cover we've already tried to replace (one attempt). */
-  private readonly repickedMonths = new Set<string>();
-
-  /** On image load error, advance the fallback: thumbnail → preview → give up.
-   *  When a cover fails entirely its file is gone (deleted/moved on the drive),
-   *  so re-pick a still-existing file from the same month as the new cover. */
+  /** On image load error, advance the per-cover fallback: thumbnail → preview
+   *  → coloured placeholder. (No self-healing re-pick: the index is fully
+   *  rebuilt on refresh, so a cover pointing at a deleted file simply drops out
+   *  on the next rebuild rather than being swapped live.) */
   onCoverError(m: MonthCover): void {
     const id = m.cover.id;
     const prev = this.coverImgState().get(id);
@@ -880,24 +878,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       next.set(id, prev === 'preview' ? 'failed' : 'preview');
       return next;
     });
-    if (prev === 'preview') this.repickCover(m); // just transitioned to 'failed'
-  }
-
-  /** Fetch the month's page from its indexed cursor and swap in the newest
-   *  other in-month file as the cover — self-heals a stale cover without a
-   *  full index rebuild. One attempt per month; leaves the placeholder if none. */
-  private async repickCover(m: MonthCover): Promise<void> {
-    if (this.repickedMonths.has(m.key)) return;
-    this.repickedMonths.add(m.key);
-    try {
-      const page = await this.fileService.loadMediaPage(m.cursor);
-      const replacement = page.data.find(f =>
-        f.id !== m.cover.id && this.monthKeyOf(f) === m.key && (f.thumbnail_url || f.preview_url));
-      if (!replacement) return;
-      this.timelineCovers.update(list =>
-        list ? list.map(c => (c.key === m.key ? { ...c, cover: replacement } : c)) : list);
-      this.coverImgState.update(s => { const n = new Map(s); n.delete(replacement.id); return n; });
-    } catch { /* keep the placeholder */ }
   }
 
   /** Read the month index from the server cache — a single, read-only fetch.
@@ -1206,7 +1186,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.navigateToFolder(HOME_FOLDER_ID, 'My Drive');
   }
 
-  /** Info-popover reload action: force a head rescan of the month index. */
+  /** Info-popover reload action: fully rebuild the month index, then swap in
+   *  the fresh result. Polls ?rebuild=1 until the whole stream has been
+   *  re-walked (complete) — the live index (and thus the covers shown) only
+   *  changes once the rebuild finishes, so deleted files drop out cleanly. */
   async reloadTimelineCache(): Promise<void> {
     if (this.timelineReloading()) return;
     this.timelineReloading.set(true);
@@ -1215,16 +1198,19 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       // Purge the preview SW/browser cache first so covers can't be served
       // stale (the installed PWA in particular keeps thumbnails cached).
       await this.previewCache.clearAll();
-      const res = await this.fileService.loadMediaMonths(true);
+      let res = await this.fileService.loadMediaMonths(true);
+      // Poll the rebuild to completion (bounded guard against a runaway loop).
+      for (let i = 0; !res.complete && i < 5000; i++) {
+        res = await this.fileService.loadMediaMonths(true);
+      }
       this.timelineCovers.set(res.months);
       this.timelineCoversMeta.set(res.meta);
       this.timelineCoversComplete = res.complete;
-      // Re-fetch every cover fresh: clear per-cover fallback state and bump the
-      // cache-buster so the browser + preview service worker don't serve stale
-      // (or previously-failed) thumbnails.
+      // Re-fetch every cover fresh: clear the per-cover thumbnail→preview
+      // fallback state and bump the cache-buster so the browser + preview
+      // service worker don't serve stale thumbnails for the new covers.
       this.coverImgState.set(new Map());
       this.coverCacheBust.update(n => n + 1);
-      if (!res.complete) this.ensureTimelineCovers(); // resume the walk
     } catch (err) {
       console.error('timeline cache reload error:', err);
       this.timelineReloadError.set((err as any)?.error?.error ?? 'Reload failed');
