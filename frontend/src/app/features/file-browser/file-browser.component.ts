@@ -62,10 +62,15 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
    *  driven by the search bar's filter dropdown and applied client-side to the
    *  search results. */
   readonly searchFilters = signal<SearchFilters>({ modifiedFrom: '', modifiedTo: '', types: [] });
-  /** True only during an actual text search — NOT the starred/shares/offline/
-   *  timeline views, which also populate searchResults. Gates the search-bar
-   *  refinement filters so they don't leak into those views. */
-  readonly isTextSearch = signal(false);
+  /** Virtual views that reuse searchResults as their data channel — the
+   *  search-bar refinement filters must NOT apply to these. */
+  private static readonly VIRTUAL_VIEWS = new Set([
+    '__trash__', '__starred__', '__shares__', '__offline__', '__timeline__',
+  ]);
+  readonly filtersActive = computed(() => {
+    const f = this.searchFilters();
+    return !!(f.modifiedFrom || f.modifiedTo || f.types.length);
+  });
   readonly filterMenuOpen = signal(false);
   readonly viewMenuOpen = signal(false);
   readonly sidebarOpen = signal(window.innerWidth > 768);
@@ -244,8 +249,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     let files = this.fileService.searchResults() ?? this.fileService.files();
     const t = this.filterType();
     if (t) files = files.filter(f => f.is_dir || f.type === 'dir' || f.mime_type?.startsWith(t + '/'));
-    // Search-bar refinement filters apply only within an actual text search.
-    if (this.isTextSearch()) {
+    // Search-bar refinement filters (date + type) apply to normal folder and
+    // search views, but NOT the special virtual views (trash/starred/shares/
+    // offline/timeline) that reuse searchResults as their data channel.
+    if (this.filtersActive() && !FileBrowserComponent.VIRTUAL_VIEWS.has(this.fileService.currentFolderId())) {
       const { modifiedFrom, modifiedTo, types } = this.searchFilters();
       if (types.length) files = files.filter(f => types.some(c => this.matchesCategory(f, c)));
       if (modifiedFrom) {
@@ -395,7 +402,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.cancelTimelineStream();
     ++this.coversGen;                       // stop any timeline cover polling
     this.timelineCoversLoading.set(false);
-    this.isTextSearch.set(false);           // leaving any active text search
     return ++this.viewSeq;
   }
 
@@ -483,7 +489,6 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.preSearchBreadcrumb.set(this.fileService.breadcrumb());
     }
     this._lastSearchEvent = event;
-    this.isTextSearch.set(true);
     // Update breadcrumb immediately so it always reflects current search term
     const label = event.folderId
       ? `"${event.query}" in ${event.folderName ?? 'folder'}`
@@ -497,15 +502,50 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   /** Search-bar filter dropdown changed (date range / file-type categories).
-   *  Purely client-side — no re-fetch needed; displayFiles reacts to the signal. */
+   *  Purely client-side — displayFiles reacts to the signal and refines the
+   *  current folder/search view live, no re-fetch needed. */
   onSearchFilters(filters: SearchFilters): void {
     this.searchFilters.set(filters);
+  }
+
+  /** kDrive `types[]` keys that can be enumerated server-side (empty-keyword
+   *  search). Documents have no reliable kDrive type, so they're refined
+   *  client-side only. */
+  private serverTypesFor(cats: string[]): string[] {
+    const map: Record<string, string> = { image: 'image', video: 'video', audio: 'audio', folder: 'dir' };
+    return cats.map(c => map[c]).filter((v): v is string => !!v);
+  }
+
+  /** Explicit "Apply filters": run a search even with an empty keyword, using
+   *  the selected file types to enumerate matches drive-wide. Date + document
+   *  filters are then applied client-side via displayFiles. */
+  async onApplyFilters(event: { query: string; folderId?: string; folderName?: string }): Promise<void> {
+    const q = event.query.trim();
+    const serverTypes = this.serverTypesFor(this.searchFilters().types);
+    // A keyword drives a normal search; otherwise we need at least one
+    // enumerable type. With neither, the live folder filter already refines the
+    // current view, so there's nothing extra to fetch.
+    if (!q && !serverTypes.length) return;
+
+    if (!this._lastSearchEvent) {
+      this.preSearchBreadcrumb.set(this.fileService.breadcrumb());
+    }
+    this._lastSearchEvent = event;
+    const label = q
+      ? (event.folderId ? `"${q}" in ${event.folderName ?? 'folder'}` : `Search: "${q}"`)
+      : (event.folderId ? `Filtered in ${event.folderName ?? 'folder'}` : 'Filtered results');
+    this.fileService.breadcrumb.set([{ id: '__search__', name: label }]);
+
+    await this.fileService.search(q, event.folderId, {
+      sortBy: this.sortBy(),
+      sortDir: this.sortDir(),
+      types: serverTypes,
+    });
   }
 
   cancelSearch(): void {
     this.searchBar?.clearSilent();
     this.searchFilters.set({ modifiedFrom: '', modifiedTo: '', types: [] });
-    this.isTextSearch.set(false);
     this.fileService.abortSearch();
     this.fileService.searchResults.set(null);
     this.fileService.searchCapped.set(false);

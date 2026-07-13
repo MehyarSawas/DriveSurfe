@@ -127,10 +127,18 @@ final class FileRoutes
             $params   = $req->getQueryParams();
             $query    = $params['q'] ?? '';
             $folderId = $params['folderId'] ?? null;
+            // Optional kDrive type filter (comma-separated: image,video,audio,dir)
+            // — lets a filter-only search (empty q) enumerate by type.
+            $allowedTypes = ['image', 'video', 'audio', 'dir'];
+            $types = array_values(array_intersect(
+                $allowedTypes,
+                array_filter(explode(',', (string) ($params['types'] ?? '')))
+            ));
             $options  = [
                 'sortBy'  => $params['sortBy']  ?? 'relevance',
                 'sortDir' => $params['sortDir'] ?? 'desc',
                 'cursor'  => $params['cursor']  ?? null,
+                'types'   => $types,
             ];
             $result = $drive->search($query, $folderId, $options);
             return self::json($res, $result);

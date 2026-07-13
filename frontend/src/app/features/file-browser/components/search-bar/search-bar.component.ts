@@ -90,6 +90,7 @@ export interface SearchFilters {
             @if (hasFilters()) {
               <button class="clear-filters" (click)="clearFilters()">Clear filters</button>
             }
+            <button class="apply-filters" (click)="applyNow()">Apply filters</button>
           </div>
         }
       </div>
@@ -105,6 +106,9 @@ export class SearchBarComponent {
   readonly folderName = input<string>('My Drive');
   readonly search = output<{ query: string; folderId?: string; folderName?: string }>();
   readonly filtersChange = output<SearchFilters>();
+  /** Explicit "Apply filters" — runs the search even with an empty keyword
+   *  (so filters alone can drive a drive-wide search). */
+  readonly apply = output<{ query: string; folderId?: string; folderName?: string }>();
 
   readonly TYPE_OPTIONS = [
     { key: 'folder',   label: 'Folders' },
@@ -183,6 +187,15 @@ export class SearchBarComponent {
   toggleFolderOnly(): void {
     this.folderOnly.update(v => !v);
     if (this.query()) this.emitSearch();
+  }
+
+  applyNow(): void {
+    const q = this.query();
+    this.apply.emit(this.folderOnly() && this.folderScopeAvailable()
+      ? { query: q, folderId: this.folderId(), folderName: this.folderName() }
+      : { query: q });
+    this.dropdownOpen.set(false);
+    this.inputEl?.nativeElement.blur();
   }
 
   onDateFrom(value: string): void { this.dateFrom.set(value ?? ''); this.emitFilters(); }

@@ -64,27 +64,49 @@ final class KDriveClient implements DriveInterface
         return $this->buildTree($dirs, '5');
     }
 
+    /**
+     * @param array $options sortBy, sortDir, cursor, and `types` (kDrive type
+     *   keys, e.g. ['image','video']). The query may be empty ONLY when types
+     *   are given — the search endpoint then enumerates by type across the
+     *   drive (same as the timeline/Gallery does), bounded by a page cap so a
+     *   filter-only "browse everything of type X" can't walk forever.
+     */
     public function search(string $query, ?string $folderId = null, array $options = []): array
     {
         $driveId = $this->getDriveId();
+        $query   = trim($query);
+        $types   = array_values(array_filter((array) ($options['types'] ?? [])));
 
-        // V3 order_by only accepts last_modified_at or relevance
+        // Nothing to search on (no keyword AND no type constraint) → empty.
+        if ($query === '' && !$types) {
+            return ['data' => [], 'has_more' => false, 'cursor' => null, 'capped' => false];
+        }
+
+        // V3 order_by only accepts last_modified_at or relevance. A type-only
+        // (no keyword) enumeration has no relevance to rank by, so order it by
+        // recency instead.
         $sortBy  = $options['sortBy'] ?? 'relevance';
         $sortDir = $options['sortDir'] ?? 'desc';
-        $apiOrderBy = match ($sortBy) {
-            'last_modified_at' => 'last_modified_at',
-            default            => 'relevance',
+        $apiOrderBy = match (true) {
+            $sortBy === 'last_modified_at' => 'last_modified_at',
+            $query === ''                  => 'last_modified_at',
+            default                        => 'relevance',
         };
 
         $params = [
-            'query'       => $query,
-            'query_scope' => 'filename',
             'limit'       => 500,
             'with'        => 'is_favorite',
             'depth'       => 'unlimited',
             'order_by'    => $apiOrderBy,
             'order'       => $sortDir,
         ];
+        if ($query !== '') {
+            $params['query']       = $query;
+            $params['query_scope'] = 'filename';
+        }
+        if ($types) {
+            $params['types'] = $types;
+        }
         if ($folderId !== null && $folderId !== '' && $folderId !== '1') {
             $params['directory_id'] = (int) $folderId;
         }
@@ -92,16 +114,23 @@ final class KDriveClient implements DriveInterface
             $params['cursor'] = $options['cursor'];
         }
 
-        $all = [];
+        // A keyword search is naturally bounded by filename matches; a type-only
+        // enumeration is not, so cap its pages (still plenty for a personal drive).
+        $maxPages = $query === '' ? 60 : 1000;
+
+        $all    = [];
+        $pages  = 0;
+        $capped = false;
         do {
             $data    = $this->get("{$driveId}/files/search", $params, self::API_V3);
             $all     = array_merge($all, $this->normalizeFiles($data['data'] ?? []));
             $hasMore = !empty($data['has_more']);
             $cursor  = $hasMore ? ($data['cursor'] ?? null) : null;
             if ($cursor) $params['cursor'] = $cursor;
+            if (++$pages >= $maxPages && $hasMore) { $capped = true; break; }
         } while ($hasMore && $cursor);
 
-        return ['data' => $all, 'has_more' => false, 'cursor' => null, 'capped' => false];
+        return ['data' => $all, 'has_more' => false, 'cursor' => null, 'capped' => $capped];
     }
 
     public function thumbnailUrl(string $fileId): string
