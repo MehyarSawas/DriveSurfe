@@ -246,13 +246,15 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   });
 
   readonly displayFiles = computed(() => {
-    let files = this.fileService.searchResults() ?? this.fileService.files();
+    const searchResults = this.fileService.searchResults();
+    const currentId = this.fileService.currentFolderId();
+    let files = searchResults ?? this.fileService.files();
     const t = this.filterType();
     if (t) files = files.filter(f => f.is_dir || f.type === 'dir' || f.mime_type?.startsWith(t + '/'));
     // Search-bar refinement filters (date + type) apply to normal folder and
     // search views, but NOT the special virtual views (trash/starred/shares/
     // offline/timeline) that reuse searchResults as their data channel.
-    if (this.filtersActive() && !FileBrowserComponent.VIRTUAL_VIEWS.has(this.fileService.currentFolderId())) {
+    if (this.filtersActive() && !FileBrowserComponent.VIRTUAL_VIEWS.has(currentId)) {
       const { modifiedFrom, modifiedTo, types } = this.searchFilters();
       if (types.length) files = files.filter(f => types.some(c => this.matchesCategory(f, c)));
       if (modifiedFrom) {
@@ -264,8 +266,32 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
         files = files.filter(f => f.modified_at && Date.parse(f.modified_at) <= to);
       }
     }
+    // Search-backed lists (search / starred / shares / offline) aren't ordered
+    // by kDrive on the chosen field, so sort them client-side. The folder view
+    // is already sorted server-side (loadFiles); the timeline manages its own.
+    if (searchResults !== null && currentId !== '__timeline__') {
+      files = this.sortFiles(files);
+    }
     return files;
   });
+
+  /** Client-side sort matching the active sort field/direction. Folders are
+   *  kept before files (as in the folder view) then ordered within each group. */
+  private sortFiles(files: DriveFile[]): DriveFile[] {
+    const by = this.sortBy();
+    const mul = this.sortDir() === 'asc' ? 1 : -1;
+    const cmp = (a: DriveFile, b: DriveFile): number => {
+      const ad = a.is_dir || a.type === 'dir';
+      const bd = b.is_dir || b.type === 'dir';
+      if (ad !== bd) return ad ? -1 : 1; // folders first, regardless of direction
+      let r: number;
+      if (by === 'name') r = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      else if (by === 'size') r = (a.size || 0) - (b.size || 0);
+      else r = (Date.parse(a.modified_at || '') || 0) - (Date.parse(b.modified_at || '') || 0);
+      return r * mul;
+    };
+    return [...files].sort(cmp);
+  }
 
   /** Whether a file belongs to a search file-type category. */
   private matchesCategory(f: DriveFile, cat: string): boolean {
@@ -795,11 +821,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       return;
     }
     if (this.fileService.searchResults() !== null) {
-      if (this._lastSearchEvent) this.onSearch(this._lastSearchEvent);
-    } else {
-      this.saveFolderSort(this.fileService.currentFolderId());
-      this.loadCurrentFolder();
+      // Search / starred / shares / offline hold a client-side list that kDrive
+      // doesn't order by the chosen field — displayFiles sorts it reactively,
+      // so just changing the sort signals is enough. Re-running the search here
+      // would cancel a filter-only (empty-keyword) search.
+      return;
     }
+    this.saveFolderSort(this.fileService.currentFolderId());
+    this.loadCurrentFolder();
   }
 
   setFilter(type: string): void {
