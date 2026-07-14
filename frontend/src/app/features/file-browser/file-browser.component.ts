@@ -266,32 +266,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
         files = files.filter(f => f.modified_at && Date.parse(f.modified_at) <= to);
       }
     }
-    // Search-backed lists (search / starred / shares / offline) aren't ordered
-    // by kDrive on the chosen field, so sort them client-side. The folder view
-    // is already sorted server-side (loadFiles); the timeline manages its own.
-    if (searchResults !== null && currentId !== '__timeline__') {
-      files = this.sortFiles(files);
-    }
     return files;
   });
-
-  /** Client-side sort matching the active sort field/direction. Folders are
-   *  kept before files (as in the folder view) then ordered within each group. */
-  private sortFiles(files: DriveFile[]): DriveFile[] {
-    const by = this.sortBy();
-    const mul = this.sortDir() === 'asc' ? 1 : -1;
-    const cmp = (a: DriveFile, b: DriveFile): number => {
-      const ad = a.is_dir || a.type === 'dir';
-      const bd = b.is_dir || b.type === 'dir';
-      if (ad !== bd) return ad ? -1 : 1; // folders first, regardless of direction
-      let r: number;
-      if (by === 'name') r = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-      else if (by === 'size') r = (a.size || 0) - (b.size || 0);
-      else r = (Date.parse(a.modified_at || '') || 0) - (Date.parse(b.modified_at || '') || 0);
-      return r * mul;
-    };
-    return [...files].sort(cmp);
-  }
 
   /** Whether a file belongs to a search file-type category. */
   private matchesCategory(f: DriveFile, cat: string): boolean {
@@ -331,6 +307,18 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     effect(() => {
       this.viewToken();
       this.displayLimit.set(FileBrowserComponent.INITIAL_DISPLAY);
+    }, { allowSignalWrites: true });
+
+    // Auto-fill the first screen of a search: when client-side filters (date /
+    // documents) hide most of a server page, keep pulling pages until enough
+    // matches are visible or the server has no more. Terminates on !hasMore.
+    effect(() => {
+      if (this.fileService.searchHasMore()
+          && !this.fileService.searchLoadingMore()
+          && !this.fileService.searchLoading()
+          && this.displayFiles().length < FileBrowserComponent.INITIAL_DISPLAY) {
+        this.fileService.loadMoreSearch();
+      }
     }, { allowSignalWrites: true });
   }
 
@@ -821,10 +809,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       return;
     }
     if (this.fileService.searchResults() !== null) {
-      // Search / starred / shares / offline hold a client-side list that kDrive
-      // doesn't order by the chosen field — displayFiles sorts it reactively,
-      // so just changing the sort signals is enough. Re-running the search here
-      // would cancel a filter-only (empty-keyword) search.
+      // Search results are ordered + paginated server-side, so re-run the
+      // search in the new order (routing an empty keyword through the filter
+      // path so it isn't cancelled). Starred/shares/offline have no re-run
+      // handler (no _lastSearchEvent) and keep their server order.
+      if (this._lastSearchEvent) {
+        if (this._lastSearchEvent.query.trim()) this.onSearch(this._lastSearchEvent);
+        else this.onApplyFilters(this._lastSearchEvent);
+      }
       return;
     }
     this.saveFolderSort(this.fileService.currentFolderId());
@@ -1206,8 +1198,16 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       // Folder / trash / starred / shares / search: grow the render window as
       // the user nears the bottom.
       const el = e.target as HTMLElement;
-      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 800 && this.hasMoreToRender()) {
-        this.displayLimit.update(n => n + 200);
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 800) {
+        if (this.hasMoreToRender()) {
+          this.displayLimit.update(n => n + 200);
+        }
+        // Search results paginate server-side — pull the next page when the
+        // render window is near the end of what's loaded.
+        if (this.fileService.searchHasMore()
+            && this.displayLimit() >= (this.fileService.searchResults()?.length ?? 0) - 200) {
+          this.fileService.loadMoreSearch();
+        }
       }
       return;
     }

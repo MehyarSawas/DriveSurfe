@@ -86,23 +86,23 @@ final class KDriveClient implements DriveInterface
             return ['data' => [], 'has_more' => false, 'cursor' => null, 'capped' => false];
         }
 
-        // V3 order_by only accepts last_modified_at or relevance. A type-only
-        // (no keyword) enumeration has no relevance to rank by, so order it by
-        // recency instead.
-        $sortBy  = $options['sortBy'] ?? 'relevance';
-        $sortDir = $options['sortDir'] ?? 'desc';
-        $apiOrderBy = match (true) {
-            $sortBy === 'last_modified_at' => 'last_modified_at',
-            $query === ''                  => 'last_modified_at',
-            default                        => 'relevance',
-        };
+        // ONE page per call, with the cursor returned so the client can load
+        // more on scroll. kDrive's search endpoint only orders server-side by
+        // last_modified_at (or relevance for a keyword) — name/size can't be
+        // sorted server-side across a drive-wide search — so results are
+        // ordered by recency (matching the sort bar's date direction), keeping
+        // pagination stable across pages.
+        $sortDir = ($options['sortDir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
+        $apiOrderBy = ($query !== '' && ($options['sortBy'] ?? '') !== 'last_modified_at')
+            ? 'relevance'
+            : 'last_modified_at';
 
         $params = [
-            'limit'       => 500,
-            'with'        => 'is_favorite',
-            'depth'       => 'unlimited',
-            'order_by'    => $apiOrderBy,
-            'order'       => $sortDir,
+            'limit'    => 200,
+            'with'     => 'is_favorite',
+            'depth'    => 'unlimited',
+            'order_by' => $apiOrderBy,
+            'order'    => $sortDir,
         ];
         if ($query !== '') {
             $params['query']       = $query;
@@ -118,23 +118,14 @@ final class KDriveClient implements DriveInterface
             $params['cursor'] = $options['cursor'];
         }
 
-        // A keyword search is naturally bounded by filename matches; a type-only
-        // enumeration is not, so cap its pages (still plenty for a personal drive).
-        $maxPages = $query === '' ? 60 : 1000;
-
-        $all    = [];
-        $pages  = 0;
-        $capped = false;
-        do {
-            $data    = $this->get("{$driveId}/files/search", $params, self::API_V3);
-            $all     = array_merge($all, $this->normalizeFiles($data['data'] ?? []));
-            $hasMore = !empty($data['has_more']);
-            $cursor  = $hasMore ? ($data['cursor'] ?? null) : null;
-            if ($cursor) $params['cursor'] = $cursor;
-            if (++$pages >= $maxPages && $hasMore) { $capped = true; break; }
-        } while ($hasMore && $cursor);
-
-        return ['data' => $all, 'has_more' => false, 'cursor' => null, 'capped' => $capped];
+        $data    = $this->get("{$driveId}/files/search", $params, self::API_V3);
+        $hasMore = !empty($data['has_more']);
+        return [
+            'data'     => $this->normalizeFiles($data['data'] ?? []),
+            'cursor'   => $hasMore ? ($data['cursor'] ?? null) : null,
+            'has_more' => $hasMore,
+            'capped'   => false,
+        ];
     }
 
     public function thumbnailUrl(string $fileId): string

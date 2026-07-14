@@ -24,6 +24,13 @@ interface FilesResponse {
   has_more: boolean;
 }
 
+export interface SearchOptions {
+  sortBy?: string;
+  sortDir?: string;
+  types?: string[];
+  all?: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FileService {
   private http = inject(HttpClient);
@@ -195,22 +202,40 @@ export class FileService {
 
   private searchGen = 0;
   private searchAbort$ = new Subject<void>();
+  /** Cursor + params for loading further search pages (load-more-on-scroll). */
+  private searchCursor: string | null = null;
+  private lastSearch: { query: string; folderId?: string; options: SearchOptions } | null = null;
+  readonly searchHasMore = signal(false);
+  readonly searchLoadingMore = signal(false);
 
   abortSearch(): void {
     this.searchAbort$.next();
     ++this.searchGen;
     this.searchLoading.set(false);
+    this.searchLoadingMore.set(false);
+    this.searchHasMore.set(false);
+    this.searchCursor = null;
+    this.lastSearch = null;
   }
 
-  async search(query: string, folderId?: string, options?: { sortBy?: string; sortDir?: string; types?: string[]; all?: boolean }): Promise<void> {
-    this.searchAbort$.next();
-    const gen = ++this.searchGen;
+  private searchParams(query: string, folderId: string | undefined, options: SearchOptions, cursor?: string | null): Record<string, string> {
     const params: Record<string, string> = { q: query };
     if (folderId) params['folderId'] = folderId;
-    if (options?.sortBy) params['sortBy'] = options.sortBy;
-    if (options?.sortDir) params['sortDir'] = options.sortDir;
-    if (options?.types?.length) params['types'] = options.types.join(',');
-    if (options?.all) params['all'] = '1';
+    if (options.sortBy) params['sortBy'] = options.sortBy;
+    if (options.sortDir) params['sortDir'] = options.sortDir;
+    if (options.types?.length) params['types'] = options.types.join(',');
+    if (options.all) params['all'] = '1';
+    if (cursor) params['cursor'] = cursor;
+    return params;
+  }
+
+  async search(query: string, folderId?: string, options?: SearchOptions): Promise<void> {
+    this.searchAbort$.next();
+    const gen = ++this.searchGen;
+    const opts = options ?? {};
+    this.lastSearch = { query, folderId, options: opts };
+    this.searchCursor = null;
+    this.searchHasMore.set(false);
 
     this.searchLoading.set(true);
     this.searchResults.set([]);
@@ -219,14 +244,37 @@ export class FileService {
     try {
       const res = await firstValueFrom(
         this.http.get<{ data: DriveFile[]; has_more: boolean; cursor: string | null; capped: boolean }>(
-          '/api/search', { params }
+          '/api/search', { params: this.searchParams(query, folderId, opts) }
         ).pipe(takeUntil(this.searchAbort$))
       );
       if (gen !== this.searchGen) return;
       this.searchResults.set(res.data);
+      this.searchCursor = res.cursor;
+      this.searchHasMore.set(res.has_more);
       this.searchCapped.set(res.capped ?? false);
     } finally {
       if (gen === this.searchGen) this.searchLoading.set(false);
+    }
+  }
+
+  /** Fetch the next page of the current search and append it (scroll-driven). */
+  async loadMoreSearch(): Promise<void> {
+    if (!this.searchCursor || this.searchLoadingMore() || !this.lastSearch) return;
+    const gen = this.searchGen;
+    const { query, folderId, options } = this.lastSearch;
+    this.searchLoadingMore.set(true);
+    try {
+      const res = await firstValueFrom(
+        this.http.get<{ data: DriveFile[]; has_more: boolean; cursor: string | null; capped: boolean }>(
+          '/api/search', { params: this.searchParams(query, folderId, options, this.searchCursor) }
+        ).pipe(takeUntil(this.searchAbort$))
+      );
+      if (gen !== this.searchGen) return;
+      this.searchResults.update(cur => [...(cur ?? []), ...res.data]);
+      this.searchCursor = res.cursor;
+      this.searchHasMore.set(res.has_more);
+    } finally {
+      if (gen === this.searchGen) this.searchLoadingMore.set(false);
     }
   }
 
