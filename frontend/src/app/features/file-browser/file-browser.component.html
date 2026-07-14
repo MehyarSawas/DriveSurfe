@@ -343,25 +343,40 @@
             <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
           }
         </button>
+      } @else if (isSearchView()) {
+        <!-- kDrive can only sort a drive-wide search by date or relevance -->
+        <button class="sort-btn" (click)="toggleSort('relevance')">
+          Relevance
+          @if (sortBy() === 'relevance') {
+            <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+          }
+        </button>
+        <button class="sort-btn" (click)="toggleSort('last_modified_at')">
+          Modified
+          @if (sortBy() === 'last_modified_at') {
+            <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+          }
+        </button>
+      } @else {
+        <button class="sort-btn" (click)="toggleSort('name')">
+          Name
+          @if (sortBy() === 'name') {
+            <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+          }
+        </button>
+        <button class="sort-btn" (click)="toggleSort('last_modified_at')">
+          Modified
+          @if (sortBy() === 'last_modified_at') {
+            <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+          }
+        </button>
+        <button class="sort-btn" (click)="toggleSort('size')">
+          Size
+          @if (sortBy() === 'size') {
+            <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+          }
+        </button>
       }
-      <button class="sort-btn" (click)="toggleSort('name')">
-        Name
-        @if (sortBy() === 'name') {
-          <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
-        }
-      </button>
-      <button class="sort-btn" (click)="toggleSort('last_modified_at')">
-        Modified
-        @if (sortBy() === 'last_modified_at') {
-          <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
-        }
-      </button>
-      <button class="sort-btn" (click)="toggleSort('size')">
-        Size
-        @if (sortBy() === 'size') {
-          <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
-        }
-      </button>
       @if (fileService.searchResults(); as results) {
         <span class="search-results-count">
           @if (fileService.searchLoading()) {

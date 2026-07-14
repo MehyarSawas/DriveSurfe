@@ -51,7 +51,7 @@ export interface ShareLinkOptions {
   valid_until?: number | null;
 }
 
-export type SortBy = 'name' | 'last_modified_at' | 'size' | 'deleted_at';
+export type SortBy = 'name' | 'last_modified_at' | 'size' | 'deleted_at' | 'relevance';
 export type SortDir = 'asc' | 'desc';
 export type ViewMode = 'grid' | 'grid-large' | 'list';
 

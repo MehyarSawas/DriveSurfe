@@ -71,6 +71,12 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const f = this.searchFilters();
     return !!(f.modifiedFrom || f.modifiedTo || f.types.length);
   });
+  /** An actual drive-wide search (keyword or filter-only) — as opposed to the
+   *  virtual list views that also use searchResults. Drives the search-only
+   *  sort bar (Relevance + Modified). */
+  readonly isSearchView = computed(() =>
+    this.fileService.searchResults() !== null
+    && !FileBrowserComponent.VIRTUAL_VIEWS.has(this.fileService.currentFolderId()));
   readonly filterMenuOpen = signal(false);
   readonly viewMenuOpen = signal(false);
   readonly sidebarOpen = signal(window.innerWidth > 768);
@@ -503,6 +509,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.preSearchBreadcrumb.set(this.fileService.breadcrumb());
     }
     this._lastSearchEvent = event;
+    this.coerceSearchSort(true); // keyword present → relevance/date only
     // Update breadcrumb immediately so it always reflects current search term
     const label = event.folderId
       ? `"${event.query}" in ${event.folderName ?? 'folder'}`
@@ -513,6 +520,19 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       sortBy: this.sortBy(),
       sortDir: this.sortDir(),
     });
+  }
+
+  /** kDrive can only order a search by relevance or last_modified_at. Coerce the
+   *  active sort into a valid one when entering a search: default a keyword
+   *  search to relevance, a filter-only (no keyword) search to date. */
+  private coerceSearchSort(hasKeyword: boolean): void {
+    const by = this.sortBy();
+    const valid = hasKeyword ? (by === 'relevance' || by === 'last_modified_at')
+                             : (by === 'last_modified_at');
+    if (!valid) {
+      this.sortBy.set(hasKeyword ? 'relevance' : 'last_modified_at');
+      this.sortDir.set('desc');
+    }
   }
 
   /** Search-bar filter dropdown changed (date range / file-type categories).
@@ -548,6 +568,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.preSearchBreadcrumb.set(this.fileService.breadcrumb());
     }
     this._lastSearchEvent = event;
+    this.coerceSearchSort(!!q);
     const label = q
       ? (event.folderId ? `"${q}" in ${event.folderName ?? 'folder'}` : `Search: "${q}"`)
       : (event.folderId ? `Filtered in ${event.folderName ?? 'folder'}` : 'Filtered results');
@@ -574,6 +595,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     this.fileService.breadcrumb.set(restore);
     this.preSearchBreadcrumb.set([]);
     this._lastSearchEvent = null;
+    // 'relevance' is search-only — restore a folder-valid sort on the way out.
+    if (this.sortBy() === 'relevance') {
+      this.applySavedSort(this.fileService.currentFolderId());
+    }
   }
 
   async openPreview(file: DriveFile): Promise<void> {
@@ -785,7 +810,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       this.sortDir.update(d => d === 'asc' ? 'desc' : 'asc');
     } else {
       this.sortBy.set(by);
-      this.sortDir.set('asc');
+      // Relevance only makes sense most-relevant-first.
+      this.sortDir.set(by === 'relevance' ? 'desc' : 'asc');
     }
     if (this.isTimeline()) {
       // Modified sorts SERVER-side: restart the stream in the chosen order so
