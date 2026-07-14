@@ -1457,10 +1457,19 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   navigateToFolder(id: string, name: string): void {
-    this.beginView();
+    const seq = this.beginView();
     this.fileService.clearSelection();
     this.applySavedSort(id);
+    // Instant, incremental breadcrumb (correct for drilling into a child).
     this.fileService.navigateToFolder(id, name);
+    // A jump to an arbitrary folder (a sidebar pin, folder tree, or the folder
+    // picker) has no relation to the current path, so rebuild the full
+    // breadcrumb from the parent chain and override the incremental guess.
+    if (id !== HOME_FOLDER_ID) {
+      this.resolveBreadcrumb(id).then(crumbs => {
+        if (seq === this.viewSeq && crumbs.length) this.fileService.breadcrumb.set(crumbs);
+      });
+    }
     this.router.navigate(['/folder', id]);
     this.loadCurrentFolder();
     this.closeSidebarOnMobile();
