@@ -76,9 +76,13 @@ final class KDriveClient implements DriveInterface
         $driveId = $this->getDriveId();
         $query   = trim($query);
         $types   = array_values(array_filter((array) ($options['types'] ?? [])));
+        // `all` = explicitly enumerate the whole drive with no keyword and no
+        // type constraint (used for Documents / date-only filters, which have
+        // no kDrive type to enumerate by — narrowed client-side afterwards).
+        $all     = !empty($options['all']);
 
-        // Nothing to search on (no keyword AND no type constraint) → empty.
-        if ($query === '' && !$types) {
+        // Nothing to search on (no keyword, no type, not an explicit enumerate) → empty.
+        if ($query === '' && !$types && !$all) {
             return ['data' => [], 'has_more' => false, 'cursor' => null, 'capped' => false];
         }
 

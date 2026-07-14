@@ -139,6 +139,7 @@ final class FileRoutes
                 'sortDir' => $params['sortDir'] ?? 'desc',
                 'cursor'  => $params['cursor']  ?? null,
                 'types'   => $types,
+                'all'     => ($params['all'] ?? '') === '1',
             ];
             $result = $drive->search($query, $folderId, $options);
             return self::json($res, $result);

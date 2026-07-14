@@ -521,11 +521,14 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
    *  filters are then applied client-side via displayFiles. */
   async onApplyFilters(event: { query: string; folderId?: string; folderName?: string }): Promise<void> {
     const q = event.query.trim();
-    const serverTypes = this.serverTypesFor(this.searchFilters().types);
-    // A keyword drives a normal search; otherwise we need at least one
-    // enumerable type. With neither, the live folder filter already refines the
-    // current view, so there's nothing extra to fetch.
-    if (!q && !serverTypes.length) return;
+    const filters = this.searchFilters();
+    const serverTypes = this.serverTypesFor(filters.types);
+    const hasFilters = !!(filters.modifiedFrom || filters.modifiedTo || filters.types.length);
+    // Nothing to run: no keyword and no filters at all.
+    if (!q && !hasFilters) return;
+    // No keyword and no server-enumerable type (Documents / date-only) → walk
+    // the whole drive and let displayFiles narrow it client-side.
+    const enumerateAll = !q && !serverTypes.length;
 
     if (!this._lastSearchEvent) {
       this.preSearchBreadcrumb.set(this.fileService.breadcrumb());
@@ -540,6 +543,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       sortBy: this.sortBy(),
       sortDir: this.sortDir(),
       types: serverTypes,
+      all: enumerateAll,
     });
   }
 

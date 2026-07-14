@@ -202,7 +202,7 @@ export class FileService {
     this.searchLoading.set(false);
   }
 
-  async search(query: string, folderId?: string, options?: { sortBy?: string; sortDir?: string; types?: string[] }): Promise<void> {
+  async search(query: string, folderId?: string, options?: { sortBy?: string; sortDir?: string; types?: string[]; all?: boolean }): Promise<void> {
     this.searchAbort$.next();
     const gen = ++this.searchGen;
     const params: Record<string, string> = { q: query };
@@ -210,6 +210,7 @@ export class FileService {
     if (options?.sortBy) params['sortBy'] = options.sortBy;
     if (options?.sortDir) params['sortDir'] = options.sortDir;
     if (options?.types?.length) params['types'] = options.types.join(',');
+    if (options?.all) params['all'] = '1';
 
     this.searchLoading.set(true);
     this.searchResults.set([]);
