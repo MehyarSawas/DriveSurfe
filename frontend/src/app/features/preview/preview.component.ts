@@ -105,6 +105,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private touchCurrentX = 0;
   private touchCurrentY = 0;
   private isSwiping = false;
+  private lastTapTime = 0; // for double-tap-to-fullscreen detection
   readonly isTwoFingerTouch = signal(false);
 
   // Pinch-to-zoom state
@@ -553,10 +554,18 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     } else {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
-      // Tap detection: short touch with minimal movement → toggle fullscreen
+      // Tap detection: a short touch with minimal movement is a tap. TWO taps
+      // in quick succession (double-tap) toggle fullscreen; a single tap does
+      // nothing, so an accidental tap no longer flips fullscreen.
       const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
       if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
-        this.toggleFullscreen();
+        const now = Date.now();
+        if (now - this.lastTapTime < 300) {
+          this.toggleFullscreen();
+          this.lastTapTime = 0; // consumed — a third tap starts fresh
+        } else {
+          this.lastTapTime = now;
+        }
       }
     }
   }
