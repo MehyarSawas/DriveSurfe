@@ -297,7 +297,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.videoTranscoding.set(true);
   }
 
-  onVideoReady(): void { this.videoReady.set(true); this.isLoading.set(false); }
+  onVideoReady(e?: Event): void {
+    this.videoReady.set(true);
+    this.isLoading.set(false);
+    // canplay is the most reliable moment to start muted autoplay in a slideshow.
+    if (this.autoplayOn() && this.isVideo()) this.playCurrentVideo(e?.target as HTMLVideoElement | undefined);
+  }
 
   onFolderSelected(folder: DriveFile): void {
     this.flushPendingMove();
@@ -622,14 +627,17 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.autoplayTimer = setTimeout(() => this.autoAdvance(), PreviewComponent.AUTOPLAY_MS);
   }
 
-  /** Force the current <video> to start playing during a slideshow. Muted, so
-   *  browsers don't block programmatic autoplay without a user gesture. */
-  private playCurrentVideo(): void {
-    const v = this.videoEl?.nativeElement;
+  /** Force a <video> to start playing during a slideshow. It's muted (via the
+   *  [muted] binding) so the browser's autoplay policy allows it. Prefer the
+   *  element passed from the event (the ViewChild ref can lag a navigation). */
+  private playCurrentVideo(el?: HTMLVideoElement): void {
+    const v = el ?? this.videoEl?.nativeElement;
     if (!v) return;
     v.muted = true;
-    try { v.currentTime = 0; } catch { /* not seekable yet */ }
-    v.play().catch(() => { /* still blocked — the frame just shows for the dwell */ });
+    const p = v.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => { /* still blocked — the frame just shows for the dwell */ });
+    }
   }
 
   private autoAdvance(): void {
@@ -640,7 +648,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   /** Video element ready — kick off playback if a slideshow is running (the
    *  element may not have existed yet when the item was first scheduled). */
-  onVideoMeta(): void { if (this.autoplayOn() && this.isVideo()) this.playCurrentVideo(); }
+  onVideoMeta(e: Event): void {
+    if (this.autoplayOn() && this.isVideo()) this.playCurrentVideo(e.target as HTMLVideoElement);
+  }
 
   onTitleClick(el: HTMLElement): void {
     if (el.scrollWidth > el.offsetWidth) {
