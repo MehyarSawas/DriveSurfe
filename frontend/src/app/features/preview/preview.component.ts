@@ -80,10 +80,13 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly isFullscreen = signal(false);
   private _fsHandler!: () => void;
 
-  // Slideshow autoplay — auto-advance to the next item on an interval.
+  // Slideshow autoplay — images dwell for AUTOPLAY_MS; videos play through and
+  // advance when they end (a duration-based timer is the fallback if the
+  // 'ended' event never fires, e.g. blocked autoplay).
   readonly autoplayOn = signal(false);
-  private autoplayTimer: ReturnType<typeof setInterval> | null = null;
+  private autoplayTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly AUTOPLAY_MS = 3500;
+  @ViewChild('videoEl') private videoEl?: ElementRef<HTMLVideoElement>;
 
   readonly swipeAction = computed<'delete' | 'move' | null>(() => {
     if (this.isTwoFingerTouch() || this.zoom() !== 1) return null;
@@ -194,6 +197,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
           this.countdown.set(10);
           this.pendingDeleteFile.set(null);
         }
+        // Slideshow: (re)schedule the advance for the new item — image dwell,
+        // or wait for the video to play through.
+        if (this.autoplayOn()) this.scheduleAutoAdvance();
       }
     });
 
@@ -285,6 +291,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       // Transcode source also failed (no ffmpeg / conversion error) — give up
       // and offer a download instead of spinning forever.
       this.previewFailed.set(true);
+      // Don't stall a running slideshow on an unplayable video.
+      if (this.autoplayOn()) {
+        this.clearAutoplayTimer();
+        this.autoplayTimer = setTimeout(() => this.autoAdvance(), PreviewComponent.AUTOPLAY_MS);
+      }
       return;
     }
     this.videoReady.set(false);
@@ -588,22 +599,58 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
-  /** Toggle the slideshow: auto-advance to the next item until it's turned off
-   *  or the last item is reached. */
+  /** Toggle the slideshow. Images auto-advance after a fixed dwell; videos play
+   *  through and advance when they finish. */
   toggleAutoplay(): void {
     if (this.autoplayOn()) { this.stopAutoplay(); return; }
     if (!this.hasNext()) return; // nothing to advance to
     this.autoplayOn.set(true);
-    this.autoplayTimer = setInterval(() => {
-      if (this.hasNext()) this.next.emit();
-      else this.stopAutoplay(); // reached the end
-    }, PreviewComponent.AUTOPLAY_MS);
+    this.scheduleAutoAdvance(); // the file-change effect handles later items
   }
 
   private stopAutoplay(): void {
     this.autoplayOn.set(false);
-    if (this.autoplayTimer) { clearInterval(this.autoplayTimer); this.autoplayTimer = null; }
+    this.clearAutoplayTimer();
   }
+
+  private clearAutoplayTimer(): void {
+    if (this.autoplayTimer) { clearTimeout(this.autoplayTimer); this.autoplayTimer = null; }
+  }
+
+  /** Schedule the advance for the current item: a fixed dwell for images; for
+   *  videos, wait for the 'ended' event (a duration-based timer is scheduled
+   *  once metadata loads, as a fallback for blocked autoplay). */
+  private scheduleAutoAdvance(): void {
+    this.clearAutoplayTimer();
+    if (!this.autoplayOn()) return;
+    if (this.isVideo()) { this.scheduleVideoAdvance(); return; }
+    this.autoplayTimer = setTimeout(() => this.autoAdvance(), PreviewComponent.AUTOPLAY_MS);
+  }
+
+  /** Fallback timer for a video: advance shortly after its duration in case the
+   *  'ended' event never arrives (autoplay blocked / paused). No-op until the
+   *  metadata (and thus duration) is known — onVideoMeta re-invokes it then. */
+  private scheduleVideoAdvance(): void {
+    if (!this.autoplayOn() || !this.isVideo()) return;
+    this.clearAutoplayTimer();
+    const v = this.videoEl?.nativeElement;
+    if (v && isFinite(v.duration) && v.duration > 0) {
+      const remainingMs = Math.max(0, v.duration - v.currentTime) * 1000;
+      this.autoplayTimer = setTimeout(() => this.autoAdvance(), remainingMs + 800);
+    }
+  }
+
+  private autoAdvance(): void {
+    if (!this.autoplayOn()) return;
+    if (this.hasNext()) this.next.emit();
+    else this.stopAutoplay(); // reached the end
+  }
+
+  /** Video metadata ready — (re)arm the fallback timer now that duration known. */
+  onVideoMeta(): void { this.scheduleVideoAdvance(); }
+
+  /** Video finished playing — advance immediately during a slideshow. */
+  onVideoEnded(): void { if (this.autoplayOn()) this.autoAdvance(); }
 
   onTitleClick(el: HTMLElement): void {
     if (el.scrollWidth > el.offsetWidth) {
