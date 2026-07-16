@@ -142,7 +142,7 @@
               <p>Converting video…</p>
             </div>
           }
-          <video #videoEl [src]="previewSrc()" [attr.poster]="file().thumbnail_url" controls playsinline autoplay [muted]="autoplayOn()" preload="metadata" class="media-video" [style.transform]="'scale(' + zoom() + ')'" (dblclick)="toggleFullscreen()" (error)="onVideoError()" (canplay)="onVideoReady($event)" (loadedmetadata)="onVideoMeta($event)" (playing)="onVideoPlaying()">
+          <video #videoEl [src]="previewSrc()" [attr.poster]="file().thumbnail_url" [controls]="!autoplayOn()" playsinline autoplay [muted]="autoplayOn()" preload="auto" class="media-video" [style.transform]="'scale(' + zoom() + ')'" (dblclick)="toggleFullscreen()" (error)="onVideoError()" (canplay)="onVideoReady($event)" (loadedmetadata)="onVideoMeta($event)" (playing)="onVideoPlaying()">
             Your browser does not support video playback.
           </video>
         }

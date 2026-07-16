@@ -146,6 +146,41 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       ['jpg','jpeg','png','gif','webp','heic','heif'].some(e => f.extension === e);
   }
 
+  // Detached <video> elements buffering upcoming clips so a slideshow video
+  // starts instantly instead of waiting on the /download request. The download
+  // response is cacheable (Cache-Control: private, max-age=3600), so the
+  // visible player reuses these bytes. Bounded — videos are large.
+  private readonly videoPreloadCache = new Map<string, HTMLVideoElement>();
+  private static readonly VIDEO_PRELOAD_MAX = 3;
+
+  private isVideoPreloadable(f: DriveFile): boolean {
+    return f.mime_type?.startsWith('video/') ||
+      ['mp4','mov','m4v','webm','avi','mkv'].includes(f.extension);
+  }
+
+  private preloadVideos(index: number): void {
+    const files = this.mediaFiles();
+    for (const i of [index + 1, index + 2]) {
+      if (i < 0 || i >= files.length) continue;
+      const f = files[i];
+      if (!this.isVideoPreloadable(f) || this.videoPreloadCache.has(f.id)) continue;
+      const v = document.createElement('video');
+      v.muted = true;
+      v.preload = 'auto';
+      v.src = `/api/files/${f.id}/download`;
+      v.load();
+      this.videoPreloadCache.set(f.id, v);
+    }
+    // Evict oldest (insertion order) to bound memory/bandwidth.
+    while (this.videoPreloadCache.size > FileBrowserComponent.VIDEO_PRELOAD_MAX) {
+      const oldest = this.videoPreloadCache.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      const old = this.videoPreloadCache.get(oldest);
+      if (old) { old.src = ''; old.load(); }
+      this.videoPreloadCache.delete(oldest);
+    }
+  }
+
   // Abort all background in-flight requests so navigation is never blocked by strip preloads
   private abortBackground(): void {
     for (const img of this.backgroundImages) {
@@ -195,6 +230,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     const gen = ++this.preloadGen;
     const files = this.mediaFiles();
     this.preloadBatch([index-2, index-1, index+1, index+2, index+3, index+4, index+5], files);
+    this.preloadVideos(index); // warm upcoming video streams for the slideshow
     this.preloadStrip(index, gen);
   }
 
@@ -367,6 +403,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
     this.abortBackground();
+    for (const v of this.videoPreloadCache.values()) { v.src = ''; v.load(); }
+    this.videoPreloadCache.clear();
     this.fileService.cancelLoad();
   }
 
