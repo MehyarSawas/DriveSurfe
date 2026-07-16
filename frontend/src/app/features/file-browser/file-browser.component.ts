@@ -152,6 +152,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   // visible player reuses these bytes. Bounded — videos are large.
   private readonly videoPreloadCache = new Map<string, HTMLVideoElement>();
   private static readonly VIDEO_PRELOAD_MAX = 3;
+  /** Off-screen host: browsers only buffer <video preload=auto> that is in the
+   *  DOM, so detached elements never actually prefetch. */
+  private videoPreloadHost: HTMLDivElement | null = null;
 
   private isVideoPreloadable(f: DriveFile): boolean {
     return f.mime_type?.startsWith('video/') ||
@@ -160,6 +163,13 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
 
   private preloadVideos(index: number): void {
     const files = this.mediaFiles();
+    if (!this.videoPreloadHost) {
+      const host = document.createElement('div');
+      host.setAttribute('aria-hidden', 'true');
+      host.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;';
+      document.body.appendChild(host);
+      this.videoPreloadHost = host;
+    }
     for (const i of [index + 1, index + 2]) {
       if (i < 0 || i >= files.length) continue;
       const f = files[i];
@@ -167,7 +177,9 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       const v = document.createElement('video');
       v.muted = true;
       v.preload = 'auto';
+      v.playsInline = true;
       v.src = `/api/files/${f.id}/download`;
+      this.videoPreloadHost.appendChild(v); // must be in the DOM to buffer
       v.load();
       this.videoPreloadCache.set(f.id, v);
     }
@@ -176,7 +188,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       const oldest = this.videoPreloadCache.keys().next().value as string | undefined;
       if (oldest === undefined) break;
       const old = this.videoPreloadCache.get(oldest);
-      if (old) { old.src = ''; old.load(); }
+      if (old) { old.removeAttribute('src'); old.load(); old.remove(); }
       this.videoPreloadCache.delete(oldest);
     }
   }
@@ -403,8 +415,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
     this.abortBackground();
-    for (const v of this.videoPreloadCache.values()) { v.src = ''; v.load(); }
+    for (const v of this.videoPreloadCache.values()) { v.removeAttribute('src'); v.load(); v.remove(); }
     this.videoPreloadCache.clear();
+    this.videoPreloadHost?.remove();
+    this.videoPreloadHost = null;
     this.fileService.cancelLoad();
   }
 
