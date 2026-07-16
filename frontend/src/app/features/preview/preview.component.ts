@@ -291,12 +291,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       // Transcode source also failed (no ffmpeg / conversion error) — give up
       // and offer a download instead of spinning forever.
       this.previewFailed.set(true);
-      // Don't stall a running slideshow on an unplayable video.
-      if (this.autoplayOn()) {
-        this.clearAutoplayTimer();
-        this.autoplayTimer = setTimeout(() => this.autoAdvance(), PreviewComponent.AUTOPLAY_MS);
-      }
-      return;
+      return; // slideshow's fixed dwell timer already advances past it
     }
     this.videoReady.set(false);
     this.videoTranscoding.set(true);
@@ -617,27 +612,24 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     if (this.autoplayTimer) { clearTimeout(this.autoplayTimer); this.autoplayTimer = null; }
   }
 
-  /** Schedule the advance for the current item: a fixed dwell for images; for
-   *  videos, wait for the 'ended' event (a duration-based timer is scheduled
-   *  once metadata loads, as a fallback for blocked autoplay). */
+  /** Every item (image or video) dwells for a fixed time, then advances.
+   *  A video is forced to play (muted, so the browser's autoplay policy allows
+   *  it) for those seconds instead of showing a static frame. */
   private scheduleAutoAdvance(): void {
     this.clearAutoplayTimer();
     if (!this.autoplayOn()) return;
-    if (this.isVideo()) { this.scheduleVideoAdvance(); return; }
+    if (this.isVideo()) this.playCurrentVideo();
     this.autoplayTimer = setTimeout(() => this.autoAdvance(), PreviewComponent.AUTOPLAY_MS);
   }
 
-  /** Fallback timer for a video: advance shortly after its duration in case the
-   *  'ended' event never arrives (autoplay blocked / paused). No-op until the
-   *  metadata (and thus duration) is known — onVideoMeta re-invokes it then. */
-  private scheduleVideoAdvance(): void {
-    if (!this.autoplayOn() || !this.isVideo()) return;
-    this.clearAutoplayTimer();
+  /** Force the current <video> to start playing during a slideshow. Muted, so
+   *  browsers don't block programmatic autoplay without a user gesture. */
+  private playCurrentVideo(): void {
     const v = this.videoEl?.nativeElement;
-    if (v && isFinite(v.duration) && v.duration > 0) {
-      const remainingMs = Math.max(0, v.duration - v.currentTime) * 1000;
-      this.autoplayTimer = setTimeout(() => this.autoAdvance(), remainingMs + 800);
-    }
+    if (!v) return;
+    v.muted = true;
+    try { v.currentTime = 0; } catch { /* not seekable yet */ }
+    v.play().catch(() => { /* still blocked — the frame just shows for the dwell */ });
   }
 
   private autoAdvance(): void {
@@ -646,11 +638,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     else this.stopAutoplay(); // reached the end
   }
 
-  /** Video metadata ready — (re)arm the fallback timer now that duration known. */
-  onVideoMeta(): void { this.scheduleVideoAdvance(); }
-
-  /** Video finished playing — advance immediately during a slideshow. */
-  onVideoEnded(): void { if (this.autoplayOn()) this.autoAdvance(); }
+  /** Video element ready — kick off playback if a slideshow is running (the
+   *  element may not have existed yet when the item was first scheduled). */
+  onVideoMeta(): void { if (this.autoplayOn() && this.isVideo()) this.playCurrentVideo(); }
 
   onTitleClick(el: HTMLElement): void {
     if (el.scrollWidth > el.offsetWidth) {
