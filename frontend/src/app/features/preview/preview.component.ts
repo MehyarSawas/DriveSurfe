@@ -80,6 +80,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly isFullscreen = signal(false);
   private _fsHandler!: () => void;
 
+  // Slideshow autoplay — auto-advance to the next item on an interval.
+  readonly autoplayOn = signal(false);
+  private autoplayTimer: ReturnType<typeof setInterval> | null = null;
+  private static readonly AUTOPLAY_MS = 3500;
+
   readonly swipeAction = computed<'delete' | 'move' | null>(() => {
     if (this.isTwoFingerTouch() || this.zoom() !== 1) return null;
     const dy = this.swipeOffsetY();
@@ -354,6 +359,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   ngOnDestroy(): void {
     this.alive = false;
+    this.stopAutoplay();
     this.clearPending();
     if (this.sessionSavedTimer) clearTimeout(this.sessionSavedTimer);
     if (this.boundTouchMove) {
@@ -582,6 +588,23 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
+  /** Toggle the slideshow: auto-advance to the next item until it's turned off
+   *  or the last item is reached. */
+  toggleAutoplay(): void {
+    if (this.autoplayOn()) { this.stopAutoplay(); return; }
+    if (!this.hasNext()) return; // nothing to advance to
+    this.autoplayOn.set(true);
+    this.autoplayTimer = setInterval(() => {
+      if (this.hasNext()) this.next.emit();
+      else this.stopAutoplay(); // reached the end
+    }, PreviewComponent.AUTOPLAY_MS);
+  }
+
+  private stopAutoplay(): void {
+    this.autoplayOn.set(false);
+    if (this.autoplayTimer) { clearInterval(this.autoplayTimer); this.autoplayTimer = null; }
+  }
+
   onTitleClick(el: HTMLElement): void {
     if (el.scrollWidth > el.offsetWidth) {
       this.titlePopupOpen.update(v => !v);
@@ -590,6 +613,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   requestClose(): void {
     this.alive = false;
+    this.stopAutoplay();
     this.isFullscreen.set(false);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     this.flushPending();

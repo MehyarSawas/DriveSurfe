@@ -18,8 +18,12 @@
           }
         </svg>
       </button>
-      <button class="icon-btn" (click)="download.emit(file())" title="Download">
-        <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+      <button class="icon-btn" [class.active]="autoplayOn()" (click)="toggleAutoplay()" [title]="autoplayOn() ? 'Stop slideshow' : 'Start slideshow'">
+        @if (autoplayOn()) {
+          <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+        } @else {
+          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        }
       </button>
       <button class="icon-btn" (click)="folderPanelOpen.set(true)" title="Move to folder">
         <svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM16 11h-5V8l-5 5 5 5v-3h5z"/></svg>
@@ -52,6 +56,10 @@
   @if (menuOpen()) {
     <div class="menu-backdrop" (click)="menuOpen.set(false)" (touchstart)="menuOpen.set(false)"></div>
     <div class="preview-menu" (click)="$event.stopPropagation()">
+      <button class="preview-menu-item" (click)="download.emit(file()); menuOpen.set(false)">
+        <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        Download
+      </button>
       <button class="preview-menu-item" (click)="info.emit(file()); menuOpen.set(false)">
         <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
         Info
