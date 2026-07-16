@@ -26,6 +26,13 @@ export class PreviewCacheService {
     this.sw.postMessage({ type: 'DELETE_SESSION', sessionId });
   }
 
+  /** Ask the service worker to fetch and buffer a video's full stream so the
+   *  player starts instantly (served from cache with range support) when the
+   *  slideshow reaches it. No-op without a controlling SW. */
+  preloadVideo(fileId: string): void {
+    this.sw?.postMessage({ type: 'PRELOAD_VIDEO', url: `/api/files/${fileId}/download` });
+  }
+
   /** Purge every preview/thumbnail cache (general + all sessions) directly via
    *  the Cache Storage API — works from the page regardless of whether a
    *  service worker is currently controlling it. Used by the timeline "Reload"

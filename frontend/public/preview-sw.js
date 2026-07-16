@@ -42,6 +42,89 @@ async function precacheShell() {
 const isPreviewRequest = url =>
   /\/api\/files\/[^/]+\/(thumbnail|preview)/.test(new URL(url).pathname);
 
+// ---- Slideshow video preloading -------------------------------------------
+// Whole clips are buffered in memory (bounded) so a slideshow video plays
+// instantly, served from cache WITH byte-range support (iOS/Safari require a
+// 206). Only ever serve from the buffer when the clip is already preloaded —
+// otherwise pass through so the first play streams normally instead of waiting
+// on a full download.
+const videoBuffers = new Map();          // key -> { buf: ArrayBuffer, type, size }
+const videoInflight = new Map();         // key -> Promise (dedupe concurrent preloads)
+let videoBytesTotal = 0;
+const VIDEO_MAX_SINGLE = 90 * 1024 * 1024;   // don't buffer clips larger than this
+const VIDEO_MAX_TOTAL  = 180 * 1024 * 1024;  // total memory budget for buffered clips
+
+// A video-playback request: /api/files/{id}/download WITHOUT ?dl=1 (which is a
+// real attachment download, left untouched).
+const videoKey = url =>
+  /^\/api\/files\/[^/]+\/download$/.test(url.pathname) && url.searchParams.get('dl') !== '1'
+    ? url.origin + url.pathname
+    : null;
+
+function evictVideos() {
+  while (videoBytesTotal > VIDEO_MAX_TOTAL && videoBuffers.size > 1) {
+    const oldest = videoBuffers.keys().next().value; // insertion order = LRU
+    const e = videoBuffers.get(oldest);
+    videoBuffers.delete(oldest);
+    videoBytesTotal -= e.size;
+  }
+}
+
+// Fetch a clip's full body once and buffer it. Returns the entry or null (too
+// big / failed). fetch() inside the SW does NOT re-enter this fetch handler.
+function bufferVideo(key) {
+  const hit = videoBuffers.get(key);
+  if (hit) { videoBuffers.delete(key); videoBuffers.set(key, hit); return Promise.resolve(hit); }
+  if (videoInflight.has(key)) return videoInflight.get(key);
+  const p = (async () => {
+    try {
+      const res = await fetch(key); // full 200, no Range
+      if (!res.ok) return null;
+      const len = parseInt(res.headers.get('Content-Length') || '0', 10);
+      if (len && len > VIDEO_MAX_SINGLE) return null;
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength > VIDEO_MAX_SINGLE) return null;
+      const entry = { buf, type: res.headers.get('Content-Type') || 'video/mp4', size: buf.byteLength };
+      videoBuffers.set(key, entry);
+      videoBytesTotal += entry.size;
+      evictVideos();
+      return entry;
+    } catch {
+      return null;
+    } finally {
+      videoInflight.delete(key);
+    }
+  })();
+  videoInflight.set(key, p);
+  return p;
+}
+
+// Serve a buffered clip, honouring the client's Range (206) — required for
+// video playback on Safari/iOS and for seeking everywhere.
+function serveBufferedVideo(request, key) {
+  const entry = videoBuffers.get(key);
+  videoBuffers.delete(key); videoBuffers.set(key, entry); // LRU bump
+  const total = entry.size;
+  const base = { 'Content-Type': entry.type, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=3600' };
+  const range = request.headers.get('range');
+  const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
+  if (!m || (m[1] === '' && m[2] === '')) {
+    return new Response(entry.buf, { status: 200, headers: { ...base, 'Content-Length': String(total) } });
+  }
+  let start, end;
+  if (m[1] === '') { start = Math.max(0, total - parseInt(m[2], 10)); end = total - 1; }
+  else { start = parseInt(m[1], 10); end = m[2] === '' ? total - 1 : parseInt(m[2], 10); }
+  end = Math.min(end, total - 1);
+  if (isNaN(start) || start < 0 || start > end) {
+    return new Response(null, { status: 416, headers: { ...base, 'Content-Range': `bytes */${total}` } });
+  }
+  const slice = entry.buf.slice(start, end + 1);
+  return new Response(slice, {
+    status: 206,
+    headers: { ...base, 'Content-Range': `bytes ${start}-${end}/${total}`, 'Content-Length': String(slice.byteLength) },
+  });
+}
+
 // Immutable, content-hashed bundles (safe to serve cache-first — the filename
 // changes on every deploy, so a cached copy is never stale).
 const isHashedAsset = url =>
@@ -55,6 +138,10 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (isPreviewRequest(req.url)) {
     event.respondWith(serve(req));
+  } else if (videoKey(url) && videoBuffers.has(videoKey(url))) {
+    // Only intercept when the clip is already buffered; otherwise let it stream
+    // from the network normally (don't block the first play on a full download).
+    event.respondWith(serveBufferedVideo(req, videoKey(url)));
   } else if (req.mode === 'navigate' && !url.pathname.startsWith('/api/')) {
     // App routes only. Never intercept /api navigations (e.g. file downloads
     // opened in a new context) — they must reach the network as-is.
@@ -147,5 +234,10 @@ self.addEventListener('message', event => {
 
   if (type === 'DELETE_SESSION') {
     event.waitUntil(caches.delete(CACHE_PREFIX + sessionId));
+  }
+
+  if (type === 'PRELOAD_VIDEO' && event.data.url) {
+    const u = new URL(event.data.url, self.location.origin);
+    event.waitUntil(bufferVideo(u.origin + u.pathname).then(() => {}));
   }
 });
