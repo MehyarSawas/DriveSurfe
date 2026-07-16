@@ -623,20 +623,31 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private scheduleAutoAdvance(): void {
     this.clearAutoplayTimer();
     if (!this.autoplayOn()) return;
-    if (this.isVideo()) this.playCurrentVideo();
-    this.autoplayTimer = setTimeout(() => this.autoAdvance(), PreviewComponent.AUTOPLAY_MS);
+    if (this.isVideo()) {
+      // Start playback; the 3.5s dwell starts when it actually plays (the
+      // 'playing' event) so buffering doesn't eat the window. A longer cap
+      // guarantees we still advance if it never manages to play.
+      this.playCurrentVideo();
+      this.autoplayTimer = setTimeout(() => this.autoAdvance(), PreviewComponent.AUTOPLAY_MS + 8000);
+    } else {
+      this.autoplayTimer = setTimeout(() => this.autoAdvance(), PreviewComponent.AUTOPLAY_MS);
+    }
   }
 
-  /** Force a <video> to start playing during a slideshow. It's muted (via the
-   *  [muted] binding) so the browser's autoplay policy allows it. Prefer the
-   *  element passed from the event (the ViewChild ref can lag a navigation). */
+  /** Force a <video> to start playing during a slideshow, muted so the browser's
+   *  autoplay policy allows it. `defaultMuted` reflects to the muted attribute,
+   *  which some browsers check at autoplay time. Prefer the element passed from
+   *  the event (the ViewChild ref can lag a navigation). */
   private playCurrentVideo(el?: HTMLVideoElement): void {
     const v = el ?? this.videoEl?.nativeElement;
     if (!v) return;
+    v.defaultMuted = true;
     v.muted = true;
+    v.volume = 0;
     const p = v.play();
     if (p && typeof p.catch === 'function') {
-      p.catch(() => { /* still blocked — the frame just shows for the dwell */ });
+      // If it was rejected because it wasn't muted in time, mute + retry once.
+      p.catch(() => { v.muted = true; v.play().catch(() => { /* give up; cap timer advances */ }); });
     }
   }
 
@@ -650,6 +661,13 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
    *  element may not have existed yet when the item was first scheduled). */
   onVideoMeta(e: Event): void {
     if (this.autoplayOn() && this.isVideo()) this.playCurrentVideo(e.target as HTMLVideoElement);
+  }
+
+  /** Video actually started playing — now start the fixed 3.5s dwell. */
+  onVideoPlaying(): void {
+    if (!this.autoplayOn()) return;
+    this.clearAutoplayTimer();
+    this.autoplayTimer = setTimeout(() => this.autoAdvance(), PreviewComponent.AUTOPLAY_MS);
   }
 
   onTitleClick(el: HTMLElement): void {
