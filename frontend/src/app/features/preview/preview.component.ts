@@ -386,7 +386,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       case 'ArrowLeft': this.prev.emit(); break;
       case 'ArrowRight': this.next.emit(); break;
       case 'Escape': if (this.menuOpen()) { this.menuOpen.set(false); } else if (this.titlePopupOpen()) { this.titlePopupOpen.set(false); } else { this.requestClose(); } break;
-      case 'Delete': this.initiateDelete(); break;
+      case 'Delete':
+      case 'Backspace':
+        this.initiateDelete();
+        break;
       case 'f': case 'F': this.toggleFullscreen(); break;
       case '+': case '=': this.zoomIn(); break;
       case '-': this.zoomOut(); break;
