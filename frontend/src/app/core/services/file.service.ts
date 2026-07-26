@@ -495,6 +495,55 @@ export class FileService {
     return res.data;
   }
 
+  async shareFiles(driveFiles: DriveFile[]): Promise<void> {
+
+
+    const files: File[] = [];
+
+    for (const file of driveFiles) {
+
+      const url = `/api/files/${file.id}/download?dl=1`;
+
+      const res = await firstValueFrom(
+          this.http.get(url, { responseType: 'blob' })
+      );
+
+      files.push(
+          new File([res], file.name, { type: res.type || 'application/octet-stream' })
+      );
+    }
+
+    // iOS standalone PWAs (WKWebView) can't trigger a normal file download, but
+    // they DO support the Web Share API — fetch the file and hand it to the OS
+    // share sheet so the user gets "Save to Files" / share options.
+    // (Skipped for bulk downloads — one share sheet per file would be unusable.)
+    const nav = navigator as Navigator & {
+      share?: (d: ShareData) => Promise<void>;
+      canShare?: (d: ShareData) => boolean;
+    };
+
+    if (nav.share) {
+      try {
+        if (!nav.canShare || nav.canShare({ files: files })) {
+          // Once the OS share sheet is presented, this handoff is done — do NOT
+          // fall through to the anchor. If share() rejects it's a user cancel
+          // (AbortError), which is a completed action, not a retry: the anchor
+          // fallback would navigate the PWA webview to the download URL and
+          // trap the user on a dead "open in preview" page.
+          try {
+            await nav.share({ files: files });
+          } catch {
+            /* user dismissed the sheet — nothing more to do */
+          }
+          return;
+        }
+      } catch {
+        /* couldn't fetch the blob or build the file — fall through to anchor */
+      }
+    }
+  }
+
+
   async downloadFile(fileId: string, name: string, allowShare = true): Promise<void> {
     const url = `/api/files/${fileId}/download?dl=1`;
 

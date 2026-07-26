@@ -1748,6 +1748,15 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     });
   }
 
+  bulkShare(): void {
+    // allowShare=false: never route bulk through the iOS share sheet, which
+    // would pop one modal per file. Each triggers a plain attachment download.
+
+    this.fileService.shareFiles(
+        this.displayFiles().filter(f => this.fileService.selectedIds().has(f.id))
+    );
+  }
+
   async submitCreateFolder(): Promise<void> {
     const name = this.newFolderName().trim();
     if (!name) return;
