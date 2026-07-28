@@ -1,5 +1,5 @@
 import {
-  Component, OnInit, OnDestroy, inject, signal, computed, effect, ViewChild
+  Component, OnInit, OnDestroy, inject, signal, computed, effect, ViewChild, ViewChildren, QueryList
 } from '@angular/core';
 import { CommonModule, DatePipe, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -100,6 +100,10 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   /** Resolved location of the item ("My Drive / A / B"), null while loading. */
   readonly infoPath = signal<string | null>(null);
   @ViewChild(SearchBarComponent) private searchBar?: SearchBarComponent;
+  // Timeline view renders one ds-file-grid per month group, so these can be
+  // more than one instance — ViewChildren, not ViewChild.
+  @ViewChildren(FileGridComponent) private fileGrids!: QueryList<FileGridComponent>;
+  @ViewChildren(FileListComponent) private fileLists!: QueryList<FileListComponent>;
 
   private readonly preSearchBreadcrumb = signal<BreadcrumbItem[]>([]);
   private _lastSearchEvent: { query: string; folderId?: string; folderName?: string } | null = null;
@@ -330,7 +334,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     effect(() => {
       this.viewToken();
       this.displayLimit.set(FileBrowserComponent.INITIAL_DISPLAY);
-    }, { allowSignalWrites: true });
+    });
 
     // Auto-fill the first screen of a search: when client-side filters (date /
     // documents) hide most of a server page, keep pulling pages until enough
@@ -342,7 +346,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
           && this.displayFiles().length < FileBrowserComponent.INITIAL_DISPLAY) {
         this.fileService.loadMoreSearch();
       }
-    }, { allowSignalWrites: true });
+    });
   }
 
   readonly selectedCount = computed(() => this.fileService.selectedIds().size);
@@ -1749,12 +1753,33 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   bulkShare(): void {
-    // allowShare=false: never route bulk through the iOS share sheet, which
-    // would pop one modal per file. Each triggers a plain attachment download.
+    // Pause background loads (folder pagination, folder-tree) FIRST, then
+    // interrupt thumbnails still mid-transfer — in that order, so
+    // pauseThumbnails() is already true by the time thumbnails are
+    // interrupted (otherwise a file removed from "started" would just get
+    // its real URL reassigned immediately, since nothing yet says it should
+    // stay paused). Both calls are synchronous and happen before
+    // shareFiles() opens its own download connections, in the same call
+    // stack — Angular wouldn't get a chance to react in time otherwise.
+    this.fileService.pauseBackgroundLoads();
+    this.fileGrids?.forEach(g => g.interruptLoadingThumbnails());
+    this.fileLists?.forEach(l => l.interruptLoadingThumbnails());
 
+    // shareFiles() bundles the selected files into a single native share
+    // sheet where supported (Android/iOS/macOS), and falls back to plain
+    // downloads on platforms without Web Share file support (e.g. Windows
+    // Firefox) so the action always does something useful. Resume once it
+    // settles (success, fallback, or error) — restarting interrupted
+    // thumbnails imperatively rather than relying on the reactive
+    // pauseThumbnails() binding to notice, since that's unreliable once
+    // img.src has been mutated directly (see interruptLoadingThumbnails()).
     this.fileService.shareFiles(
         this.displayFiles().filter(f => this.fileService.selectedIds().has(f.id))
-    );
+    ).finally(() => {
+      this.fileService.resumeBackgroundLoads();
+      this.fileGrids?.forEach(g => g.resumeInterruptedThumbnails());
+      this.fileLists?.forEach(l => l.resumeInterruptedThumbnails());
+    });
   }
 
   async submitCreateFolder(): Promise<void> {

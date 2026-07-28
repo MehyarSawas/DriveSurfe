@@ -54,6 +54,10 @@ final class KDriveClient implements DriveInterface
         $cursor  = null;
 
         do {
+            // Stop paginating once the client's gone — this walk can span
+            // many kDrive calls on a large drive, no point starting more of
+            // them once nobody's waiting for the result.
+            if (connection_aborted()) break;
             $params = ['type' => 'dir'];
             if ($cursor) $params['cursor'] = $cursor;
             $data   = $this->get("{$driveId}/files/5/files", $params, self::API_V3);
@@ -762,6 +766,7 @@ final class KDriveClient implements DriveInterface
         $body = $response->getBody();
         while (!$body->eof()) {
             echo $body->read(8192);
+            if (connection_aborted()) break;
         }
     }
 

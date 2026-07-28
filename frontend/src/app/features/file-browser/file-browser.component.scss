@@ -1137,3 +1137,75 @@ ds-search-bar {
     &:hover { background: rgba(217, 48, 37, 0.08); }
   }
 }
+
+.share-progress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.share-progress-box {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  box-shadow: var(--shadow-lg);
+
+  p {
+    font-size: 14px;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+}
+
+.share-error-toast {
+  cursor: pointer;
+  background: #fdecea;
+  color: #c62828;
+  border: 1px solid #f5c6c2;
+  z-index: 9999;
+
+  .dismiss-hint {
+    display: block;
+    font-size: 11px;
+    opacity: 0.75;
+    margin-top: 2px;
+  }
+}
+
+.share-ready-toast {
+  z-index: 9999;
+  text-align: center;
+
+  .share-ready-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 6px;
+
+    button {
+      background: var(--color-primary);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .dismiss-hint {
+      font-size: 12px;
+      opacity: 0.75;
+      cursor: pointer;
+    }
+  }
+}

@@ -545,6 +545,7 @@
                     [files]="g.files"
                     [selectedIds]="fileService.selectedIds()"
                     [sharedIds]="fileService.sharedFileIds()"
+                    [pauseThumbnails]="fileService.backgroundLoadsPaused()"
                     (fileClick)="openPreview($event)"
                     (selectToggle)="fileService.toggleSelect($event.id)"
                     (favorite)="toggleFavorite($event)"
@@ -597,6 +598,7 @@
           [large]="viewMode() === 'grid-large'"
           [trash]="isTrash()"
           [sharedIds]="fileService.sharedFileIds()"
+          [pauseThumbnails]="fileService.backgroundLoadsPaused()"
           (fileClick)="openPreview($event)"
           (selectToggle)="fileService.toggleSelect($event.id)"
           (restore)="handleRestore($event)"
@@ -620,6 +622,7 @@
           [selectedIds]="fileService.selectedIds()"
           [trash]="isTrash()"
           [sharedIds]="fileService.sharedFileIds()"
+          [pauseThumbnails]="fileService.backgroundLoadsPaused()"
           (fileClick)="openPreview($event)"
           (fileDblClick)="openPreview($event)"
           (selectToggle)="fileService.toggleSelect($event.id)"
@@ -786,6 +789,30 @@
 
 @if (uploadTotal() > 0) {
   <div class="bulk-toast">Uploading {{ uploadDone() }}/{{ uploadTotal() }}…</div>
+}
+
+@if (fileService.shareProgress(); as sp) {
+    <div class="share-progress-overlay">
+        <div class="share-progress-box">
+            <div class="media-spinner"></div>
+            <p>Preparing file {{ sp.current + 1 }} of {{ sp.total }}… {{ sp.percent }}%</p>
+        </div>
+    </div>
+}
+
+@if (fileService.pendingShareFiles(); as pf) {
+    <div class="bulk-toast share-ready-toast">
+        {{ fileService.shareError() }}
+        <div class="share-ready-actions">
+            <button type="button" (click)="fileService.retryShare()">Share</button>
+            <span class="dismiss-hint" (click)="fileService.pendingShareFiles.set(null); fileService.shareError.set(null)">Dismiss</span>
+        </div>
+    </div>
+} @else if (fileService.shareError(); as err) {
+    <div class="bulk-toast share-error-toast" (click)="fileService.shareError.set(null)">
+        {{ err }}
+        <span class="dismiss-hint">Tap to dismiss</span>
+    </div>
 }
 
 @if (scanOpen()) {

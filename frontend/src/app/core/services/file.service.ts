@@ -1,5 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpEventType } from '@angular/common/http';
 import { firstValueFrom, Subject, takeUntil } from 'rxjs';
 import { DriveFile, FileListOptions, BreadcrumbItem, HOME_FOLDER_ID, PreviewSession, ShareLink, ShareLinkOptions, MonthCover, MediaMonthsResponse } from '../models/drive-file.model';
 import { FolderTreeNode, DriveUsage } from '../models/drive.model';
@@ -53,7 +53,65 @@ export class FileService {
   readonly sharedFileIds = signal<Set<string>>(new Set());
   readonly sharedFiles = signal<DriveFile[]>([]);
 
+  /** Bulk-share download progress: null when idle. */
+  readonly shareProgress = signal<{ current: number; total: number; percent: number } | null>(null);
+  /** Last bulk-share error message, shown in a dismissible banner. Null = no error. */
+  readonly shareError = signal<string | null>(null);
+  /** Files fully downloaded and ready to share, but the OS declined the
+   *  handoff because the user-activation window from the original tap had
+   *  expired by the time the download finished (navigator.share() requires
+   *  a FRESH gesture — there is no way to keep the original one alive across
+   *  a slow download). Non-null means the UI should offer a one-tap "Share
+   *  now" retry; tapping it calls retryShare() from that tap's own gesture. */
+  readonly pendingShareFiles = signal<File[] | null>(null);
+
   private loadGeneration = 0;
+  /** Emits to actually abort in-flight /api/files requests (via takeUntil) —
+   *  bumping loadGeneration alone only discards a stale response after it
+   *  lands, it doesn't free the connection/bandwidth. Triggered by
+   *  cancelLoad()/cancelAllLoads() — used when a view is genuinely being
+   *  left (destroy/navigate), where there's nothing to resume. */
+  private loadAbort$ = new Subject<void>();
+
+  /** True while background loads (folder pagination, thumbnails) should
+   *  hold off starting anything new — set around a share/download so it
+   *  isn't competing for bandwidth/backend workers. Nothing already in
+   *  flight is aborted; only the NEXT page/thumbnail waits, then continues
+   *  from where it left off once resumeBackgroundLoads() runs. */
+  readonly backgroundLoadsPaused = signal(false);
+  private resumeLoads$ = new Subject<void>();
+
+  private async waitIfPaused(): Promise<void> {
+    while (this.backgroundLoadsPaused()) {
+      await firstValueFrom(this.resumeLoads$);
+    }
+  }
+
+  /** /api/folder-tree has no cursor the client can resume from — unlike
+   *  paginated file loads, aborting it mid-flight means the ENTIRE walk
+   *  restarts from scratch. That's still worth it to free the connection/
+   *  backend worker immediately for a slow share/download; it's just not
+   *  free the way pausing a not-yet-started request is. */
+  private folderTreeInFlight = false;
+  private folderTreeNeedsRestart = false;
+  private folderTreeAbort$ = new Subject<void>();
+
+  pauseBackgroundLoads(): void {
+    this.backgroundLoadsPaused.set(true);
+    if (this.folderTreeInFlight) {
+      this.folderTreeNeedsRestart = true;
+      this.folderTreeAbort$.next();
+    }
+  }
+
+  /** Resume paused background loads. Folder pagination continues from its
+   *  existing cursor (nothing was lost), any thumbnails held back start
+   *  fetching normally, and a folder-tree walk interrupted mid-flight
+   *  restarts from the top (see the field doc above). */
+  resumeBackgroundLoads(): void {
+    this.backgroundLoadsPaused.set(false);
+    this.resumeLoads$.next();
+  }
 
   async loadFiles(options: FileListOptions): Promise<void> {
     this.folderStats.set(null);
@@ -69,8 +127,10 @@ export class FileService {
     if (options.type) params['type'] = options.type;
 
     try {
+      await this.waitIfPaused();
+      if (generation !== this.loadGeneration) return;
       const first = await firstValueFrom(
-        this.http.get<FilesResponse>('/api/files', { params })
+        this.http.get<FilesResponse>('/api/files', { params }).pipe(takeUntil(this.loadAbort$))
       );
       if (generation !== this.loadGeneration) return;
       this.files.set(first.data);
@@ -82,8 +142,10 @@ export class FileService {
         let cursor: string | null = first.cursor;
         while (cursor) {
           if (generation !== this.loadGeneration) return;
+          await this.waitIfPaused();
+          if (generation !== this.loadGeneration) return;
           const page: FilesResponse = await firstValueFrom(
-            this.http.get<FilesResponse>('/api/files', { params: { ...params, cursor } })
+            this.http.get<FilesResponse>('/api/files', { params: { ...params, cursor } }).pipe(takeUntil(this.loadAbort$))
           );
           if (generation !== this.loadGeneration) return;
           this.files.update(f => [...f, ...page.data]);
@@ -123,8 +185,11 @@ export class FileService {
     } catch { /* non-critical */ }
   }
 
-  /** Cancel any in-progress loadFiles pagination loop. */
+  /** Cancel any in-progress loadFiles pagination loop, actually aborting the
+   *  underlying HTTP request(s) so they stop competing for bandwidth/
+   *  connections — not just discarding a response after it lands. */
   cancelLoad(): void {
+    this.loadAbort$.next();
     ++this.loadGeneration;
     this.loading.set(false);
     this.loadingMore.set(false);
@@ -136,6 +201,7 @@ export class FileService {
    *  can't have a late response from the view being left land in the new one.
    *  Called at the start of every view switch. */
   cancelAllLoads(): void {
+    this.loadAbort$.next();
     ++this.loadGeneration;
     this.searchAbort$.next();
     ++this.searchGen;
@@ -165,11 +231,23 @@ export class FileService {
 
   async loadFolderTree(): Promise<void> {
     try {
+      await this.waitIfPaused();
+      this.folderTreeInFlight = true;
       const res = await firstValueFrom(
-        this.http.get<ApiResponse<FolderTreeNode>>('/api/folder-tree')
+        this.http.get<ApiResponse<FolderTreeNode>>('/api/folder-tree').pipe(takeUntil(this.folderTreeAbort$))
       );
+      this.folderTreeInFlight = false;
       this.folderTree.set(res.data);
     } catch (err) {
+      this.folderTreeInFlight = false;
+      if (this.folderTreeNeedsRestart) {
+        // Interrupted by pauseBackgroundLoads() mid-flight — restart from
+        // the top once whatever paused it resumes (waitIfPaused() above
+        // handles that on the next call).
+        this.folderTreeNeedsRestart = false;
+        this.loadFolderTree();
+        return;
+      }
       console.error('loadFolderTree error:', err);
     }
   }
@@ -495,54 +573,197 @@ export class FileService {
     return res.data;
   }
 
+  /** Conservative ceiling above which downloading first is likely to blow the
+   *  Web Share gesture window before share() can run (NotAllowedError is a
+   *  gesture-timing issue, not a documented API size limit — canShare() does
+   *  not reliably predict it, so this is a heuristic, not an API check). */
+  private static readonly SHARE_SIZE_WARN_BYTES = 40 * 1024 * 1024; // 40MB total
+
   async shareFiles(driveFiles: DriveFile[]): Promise<void> {
+    this.shareError.set(null);
+    if (driveFiles.length === 0) return;
 
-
-    const files: File[] = [];
-
-    for (const file of driveFiles) {
-
-      const url = `/api/files/${file.id}/download?dl=1`;
-
-      const res = await firstValueFrom(
-          this.http.get(url, { responseType: 'blob' })
-      );
-
-      files.push(
-          new File([res], file.name, { type: res.type || 'application/octet-stream' })
-      );
-    }
-
-    // iOS standalone PWAs (WKWebView) can't trigger a normal file download, but
-    // they DO support the Web Share API — fetch the file and hand it to the OS
-    // share sheet so the user gets "Save to Files" / share options.
-    // (Skipped for bulk downloads — one share sheet per file would be unusable.)
     const nav = navigator as Navigator & {
       share?: (d: ShareData) => Promise<void>;
       canShare?: (d: ShareData) => boolean;
     };
 
-    if (nav.share) {
+    // Platforms with no Web Share API at all (desktop Firefox on any OS,
+    // Windows browsers outside a secure context, etc.) can never show a
+    // native share sheet no matter what we download — skip straight to plain
+    // downloads (same path as bulkDownload) so the action still does
+    // something useful instead of dead-ending with an error.
+    if (!nav.share) {
+      driveFiles.forEach(f => this.downloadFile(f.id, f.name, false));
+      return;
+    }
+
+    // Fast, size-based pre-check: NOT a canShare() call. canShare() with
+    // placeholder Files gives false negatives here (kDrive's reported
+    // mime_type often doesn't match the real download's Content-Type), and
+    // the actual failure mode for big files is gesture-window expiry during
+    // download, which canShare() can't predict anyway.
+    const totalBytes = driveFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+    if (totalBytes > FileService.SHARE_SIZE_WARN_BYTES) {
+      this.shareError.set(
+          driveFiles.length > 1
+              ? 'These files are too large to share together. Try sharing fewer files at once.'
+              : 'This file is too large to share.'
+      );
+      return;
+    }
+
+    // Pausing/resuming background loads (folder pagination, thumbnails) is
+    // the CALLER's responsibility here (see bulkShare() in
+    // FileBrowserComponent) — it needs to pause and imperatively interrupt
+    // in-flight thumbnails BEFORE calling this method (so nothing races the
+    // download's own connection), and resume/restart them only once this
+    // whole call settles, which a plain internal try/finally here can't
+    // express as cleanly as the caller awaiting this promise.
+    this.shareProgress.set({ current: 0, total: driveFiles.length, percent: 0 });
+
+    const files: File[] = [];
+    const failedNames: string[] = [];
+
+    for (let i = 0; i < driveFiles.length; i++) {
+      const file = driveFiles[i];
+      const url = `/api/files/${file.id}/download?dl=1`;
       try {
-        if (!nav.canShare || nav.canShare({ files: files })) {
-          // Once the OS share sheet is presented, this handoff is done — do NOT
-          // fall through to the anchor. If share() rejects it's a user cancel
-          // (AbortError), which is a completed action, not a retry: the anchor
-          // fallback would navigate the PWA webview to the download URL and
-          // trap the user on a dead "open in preview" page.
-          try {
-            await nav.share({ files: files });
-          } catch {
-            /* user dismissed the sheet — nothing more to do */
-          }
-          return;
-        }
+        const blob = await this.downloadWithProgress(url, pct =>
+            this.shareProgress.set({ current: i, total: driveFiles.length, percent: pct })
+        );
+        files.push(new File([blob], file.name, { type: blob.type || 'application/octet-stream' }));
+        this.shareProgress.set({ current: i + 1, total: driveFiles.length, percent: 100 });
       } catch {
-        /* couldn't fetch the blob or build the file — fall through to anchor */
+        failedNames.push(file.name);
       }
+    }
+
+    this.shareProgress.set(null);
+
+    if (files.length === 0) {
+      this.shareError.set(`Couldn't download ${failedNames.length === 1 ? 'the file' : 'any files'} to share. Please try again.`);
+      return;
+    }
+
+    // Real canShare() check, on the ACTUAL downloaded blobs — this is the one
+    // that gives a trustworthy answer, per your Mac testing. If the platform
+    // refuses these files, we've already paid for the download — save them
+    // locally instead of throwing that work away.
+    if (nav.canShare && !nav.canShare({ files })) {
+      this.saveBlobsLocally(files);
+      if (failedNames.length > 0) {
+        this.shareError.set(`${failedNames.length} file(s) couldn't be included: ${failedNames.join(', ')}`);
+      }
+      return;
+    }
+
+    try {
+      await nav.share({ files });
+    } catch (err) {
+      if (this.isShareGestureExpiredError(err)) {
+        // The download took long enough that the user-activation window
+        // from the original tap expired — navigator.share() can ONLY be
+        // called from a fresh gesture, there is no way to keep the old one
+        // alive. The files are already downloaded, so offer a one-tap retry
+        // instead of silently falling back to a plain download.
+        this.pendingShareFiles.set(files);
+        const base = files.length > 1
+            ? 'Files are ready — tap Share to send them.'
+            : 'File is ready — tap Share to send it.';
+        this.shareError.set(
+            failedNames.length > 0
+                ? `${base} (${failedNames.length} file(s) couldn't be included: ${failedNames.join(', ')})`
+                : base
+        );
+        return;
+      }
+      if (this.isShareSizeError(err)) {
+        // A genuine size limit — retrying won't help, save the files instead.
+        this.saveBlobsLocally(files);
+      }
+      /* otherwise: user dismissed the share sheet — not an error */
+    }
+
+    if (failedNames.length > 0) {
+      const prefix = this.shareError() ? this.shareError() + ' Also, ' : '';
+      this.shareError.set(`${prefix}${failedNames.length} file(s) couldn't be included: ${failedNames.join(', ')}`);
     }
   }
 
+  /** Retries navigator.share() using files already downloaded by a previous
+   *  shareFiles() call whose activation window expired. Call this as the
+   *  FIRST thing in a fresh click/tap handler ("Share now" button) — any
+   *  await before it burns the new gesture too, and share() would fail
+   *  again for the same reason. */
+  async retryShare(): Promise<void> {
+    const files = this.pendingShareFiles();
+    if (!files) return;
+    this.pendingShareFiles.set(null);
+    this.shareError.set(null);
+
+    const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
+    if (!nav.share) {
+      this.saveBlobsLocally(files);
+      return;
+    }
+
+    try {
+      await nav.share({ files });
+    } catch (err) {
+      if (this.isShareGestureExpiredError(err) || this.isShareSizeError(err)) {
+        // Failed again even with a fresh gesture — stop prompting and just
+        // save the files rather than loop the retry forever.
+        this.saveBlobsLocally(files);
+      }
+      /* otherwise: user dismissed the share sheet — not an error */
+    }
+  }
+
+  private isShareGestureExpiredError(err: unknown): boolean {
+    return (err as any)?.name === 'NotAllowedError';
+  }
+
+  private isShareSizeError(err: unknown): boolean {
+    const name = (err as any)?.name ?? '';
+    const message = String((err as any)?.message ?? err ?? '').toLowerCase();
+    return name === 'DataError' || message.includes('too large') || message.includes('exceeds share limit');
+  }
+
+  /** Saves already-downloaded blobs to disk via a synthetic anchor click —
+   *  the fallback when the OS share sheet isn't available or refuses the
+   *  files, so the user still ends up with them instead of nothing. Revoking
+   *  the object URL is deferred a tick so the download has time to start. */
+  private saveBlobsLocally(files: File[]): void {
+    for (const file of files) {
+      const url = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  }
+
+  /** Downloads a URL as a Blob while reporting percentage progress. */
+  private downloadWithProgress(url: string, onProgress: (pct: number) => void): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      this.http.get(url, { responseType: 'blob', reportProgress: true, observe: 'events' }).subscribe({
+        next: event => {
+          if (event.type === HttpEventType.DownloadProgress) {
+            if (event.total) onProgress(Math.round((event.loaded / event.total) * 100));
+          } else if (event.type === HttpEventType.Response) {
+            if (event.body) resolve(event.body);
+            else reject(new Error('Empty response body'));
+          }
+        },
+        error: err => reject(err),
+      });
+    });
+  }
 
   async downloadFile(fileId: string, name: string, allowShare = true): Promise<void> {
     const url = `/api/files/${fileId}/download?dl=1`;

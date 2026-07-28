@@ -95,9 +95,9 @@
 
       <!-- Thumbnail / Icon -->
       <div class="thumb">
-        @if (!file.is_dir && file.thumbnail_url && !failedThumbs.has(file.id)) {
-          <img [src]="file.thumbnail_url" [alt]="file.name" loading="lazy"
-               (error)="failedThumbs.add(file.id)" />
+        @if (!file.is_dir && file.thumbnail_url && !failedThumbs.has(file.id) && thumbActive(file.id)) {
+          <img [src]="thumbSrc(file)" [alt]="file.name" loading="lazy"
+               (load)="onThumbLoad(file.id)" (error)="failedThumbs.add(file.id)" />
           @if (isVideo(file)) {
             <div class="play-badge">
               <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>

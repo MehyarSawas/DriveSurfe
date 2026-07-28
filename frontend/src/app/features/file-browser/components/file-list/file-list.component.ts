@@ -1,4 +1,4 @@
-import { Component, input, output, ElementRef, NgZone, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, input, output, signal, ElementRef, NgZone, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { DriveFile } from '../../../../core/models/drive-file.model';
 
@@ -17,6 +17,12 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   readonly sharedIds = input<Set<string>>(new Set());
   readonly pinnedIds = input<Set<string>>(new Set());
   readonly offlineIds = input<Set<string>>(new Set());
+  /** While true, thumbnails not yet requested hold off starting — used
+   *  while a share/download is racing to finish so new thumbnail fetches
+   *  don't compete with it. Anything already loading/loaded is untouched
+   *  (never cancelled); it just resumes issuing new ones once this flips
+   *  back to false. */
+  readonly pauseThumbnails = input(false);
 
   readonly fileClick = output<DriveFile>();
   readonly fileDblClick = output<DriveFile>();
@@ -47,7 +53,63 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   }
 
   readonly failedThumbs = new Set<string>();
+  /** Files whose thumbnail has already been assigned a real src — once a
+   *  file is in here, thumbSrc() always returns its real URL, so a request
+   *  already loading/loaded is never reset to '' (never cancelled). */
+  private readonly startedThumbs = new Set<string>();
+  /** Files whose <img> already fired (load) — i.e. genuinely finished, not
+   *  just started. Used to tell "still mid-transfer" apart from "done"
+   *  without ever inspecting img.complete/naturalWidth directly. */
+  private readonly loadedThumbs = new Set<string>();
+  /** Files whose thumbnail is currently interrupted — the @if in the
+   *  template removes the <img> entirely for these, which is what actually
+   *  cancels an in-flight request (no manual DOM/src mutation involved).
+   *  Removing it from this set lets the @if recreate the element fresh, so
+   *  there's no stale Angular binding cache to fight — a brand new element
+   *  has no history. */
+  private readonly interruptedThumbs = signal<ReadonlySet<string>>(new Set());
   openMenuId: string | null = null;
+
+  /** Returns the thumbnail URL to bind, holding off files not yet started
+   *  while pauseThumbnails() is true. See the field doc above. */
+  thumbSrc(file: DriveFile): string {
+    if (this.startedThumbs.has(file.id)) return file.thumbnail_url ?? '';
+    if (this.pauseThumbnails()) return '';
+    this.startedThumbs.add(file.id);
+    return file.thumbnail_url ?? '';
+  }
+
+  /** Whether this file's <img> should exist in the DOM at all right now —
+   *  false only while interrupted (see interruptLoadingThumbnails()). */
+  thumbActive(id: string): boolean {
+    return !this.interruptedThumbs().has(id);
+  }
+
+  onThumbLoad(id: string): void {
+    this.loadedThumbs.add(id);
+  }
+
+  /** Interrupts thumbnails that are still mid-transfer (started but haven't
+   *  fired (load) yet) by removing their <img> from the DOM via the
+   *  template's @if — the browser cancels any in-flight request for an
+   *  element that's removed. Thumbnails that already finished loading are
+   *  left alone (no point re-fetching, and no visual disruption). Pair with
+   *  resumeInterruptedThumbnails() once the share/download is done. */
+  interruptLoadingThumbnails(): void {
+    const toInterrupt = this.files()
+      .filter(f => this.startedThumbs.has(f.id) && !this.loadedThumbs.has(f.id))
+      .map(f => f.id);
+    if (toInterrupt.length === 0) return;
+    toInterrupt.forEach(id => this.startedThumbs.delete(id));
+    this.interruptedThumbs.update(s => new Set([...s, ...toInterrupt]));
+  }
+
+  /** Brings back thumbnails interrupted by interruptLoadingThumbnails() —
+   *  the @if recreates each <img> fresh, so thumbSrc() reissues its real
+   *  URL on a brand-new element with no stale binding history. */
+  resumeInterruptedThumbnails(): void {
+    this.interruptedThumbs.set(new Set());
+  }
 
   private isDragSelecting = false;
   private dragStartIdx = -1;
