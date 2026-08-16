@@ -78,8 +78,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly sessionSaved = signal(false);
   private sessionSavedTimer: ReturnType<typeof setTimeout> | null = null;
   readonly isFullscreen = signal(false);
-  // Whether the header/footer chrome is shown while in fullscreen mode.
-  // Ignored outside fullscreen, where the chrome is always visible.
+  // Whether the header/footer chrome is shown. Tapping the media toggles this
+  // regardless of isFullscreen (the separate true-browser-fullscreen toggle) —
+  // the preview overlay is already a full-screen view on its own.
   readonly chromeVisible = signal(true);
   private _fsHandler!: () => void;
   private clickTimer: ReturnType<typeof setTimeout> | null = null;
@@ -584,10 +585,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
       // Tap detection: a short touch with minimal movement is a tap. TWO taps
-      // in quick succession (double-tap) toggle fullscreen. A single tap, while
-      // already in fullscreen, toggles the header/footer chrome — delayed so a
-      // following second tap (double-tap) can still cancel it and toggle
-      // fullscreen instead, rather than firing both.
+      // in quick succession (double-tap) toggle true browser fullscreen. A
+      // single tap toggles the header/footer chrome — delayed so a following
+      // second tap (double-tap) can still cancel it and toggle fullscreen
+      // instead, rather than firing both.
       const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
       if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
         const now = Date.now();
@@ -597,12 +598,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
           this.lastTapTime = 0; // consumed — a third tap starts fresh
         } else {
           this.lastTapTime = now;
-          if (this.isFullscreen()) {
-            this.clickTimer = setTimeout(() => {
-              this.clickTimer = null;
-              this.toggleChrome();
-            }, 300);
-          }
+          this.clickTimer = setTimeout(() => {
+            this.clickTimer = null;
+            this.toggleChrome();
+          }, 300);
         }
       }
     }
@@ -621,10 +620,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
   }
 
-  /** In fullscreen mode, a single tap/click on the media toggles the
-   *  header/footer chrome. Has no effect outside fullscreen. */
+  /** A single tap/click on the media toggles the header/footer chrome. */
   toggleChrome(): void {
-    if (!this.isFullscreen()) return;
     this.chromeVisible.update(v => !v);
   }
 

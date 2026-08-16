@@ -1,4 +1,4 @@
-<div class="preview-overlay" [class.is-fullscreen]="isFullscreen()" [class.chrome-hidden]="isFullscreen() && !chromeVisible()" (click)="requestClose()">
+<div class="preview-overlay" [class.is-fullscreen]="isFullscreen()" [class.chrome-hidden]="!chromeVisible()" (click)="requestClose()">
 
   <!-- Header -->
   <header class="preview-header" (click)="$event.stopPropagation()">

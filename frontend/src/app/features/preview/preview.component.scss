@@ -13,13 +13,22 @@
   background: #000;
 }
 
-.preview-overlay.is-fullscreen {
-  background: #000;
+.preview-header,
+.preview-footer {
+  transition: opacity 200ms ease, visibility 200ms ease;
+}
 
+.preview-overlay.chrome-hidden {
   .preview-header,
   .preview-footer {
-    transition: opacity 200ms ease, visibility 200ms ease;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
   }
+}
+
+.preview-overlay.is-fullscreen {
+  background: #000;
 
   .media-img,
   .media-video {
@@ -29,15 +38,6 @@
 
   .pdf-viewer-wrap {
     height: 100dvh;
-  }
-
-  &.chrome-hidden {
-    .preview-header,
-    .preview-footer {
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-    }
   }
 }
 
