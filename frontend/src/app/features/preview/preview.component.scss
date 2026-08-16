@@ -6,6 +6,9 @@
   display: flex;
   flex-direction: column;
   color: white;
+  // Combined header + footer height, reserved for sizing the media area.
+  // Collapses to 0 in .chrome-hidden so the media expands into the freed space.
+  --chrome-offset: calc(112px + env(safe-area-inset-top));
 }
 
 :fullscreen .preview-overlay,
@@ -15,12 +18,17 @@
 
 .preview-header,
 .preview-footer {
-  transition: opacity 200ms ease, visibility 200ms ease;
+  overflow: hidden;
+  transition: opacity 200ms ease, visibility 200ms ease, height 200ms ease, padding-top 200ms ease;
 }
 
 .preview-overlay.chrome-hidden {
+  --chrome-offset: 0px;
+
   .preview-header,
   .preview-footer {
+    height: 0;
+    padding-top: 0;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
@@ -173,23 +181,26 @@
 
 .media-img {
   max-width: 100%;
-  max-height: calc(100vh - 120px);
+  max-height: calc(100dvh - var(--chrome-offset));
   object-fit: contain;
   border-radius: 2px;
   cursor: grab;
+  transition: max-height 200ms ease;
 
   &:active { cursor: grabbing; }
 }
 
 .media-video {
   max-width: 100%;
-  max-height: calc(100vh - 120px);
+  max-height: calc(100dvh - var(--chrome-offset));
   outline: none;
+  transition: max-height 200ms ease;
 }
 
 .pdf-viewer-wrap {
   width: min(860px, 96vw);
-  height: calc(100vh - 120px);
+  height: calc(100dvh - var(--chrome-offset));
+  transition: height 200ms ease;
 }
 
 
