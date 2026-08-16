@@ -673,6 +673,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       folder_name: folderCrumb?.name ?? 'My Drive',
       thumbnail_url: file.thumbnail_url,
       adjacent_files: adj,
+      sort_by: this.sortBy(),
+      sort_dir: this.sortDir(),
     });
     // Cache adjacent files for this session so thumbnails and previews load
     // instantly the next time the session is opened.
@@ -688,8 +690,23 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   async openSession(session: PreviewSession): Promise<void> {
     this.sessionLoading.set(true);
 
+    // Restore the sort the folder was viewed with when this session was
+    // saved, so the retrieved file list matches. Compare against the
+    // currently-active sort BEFORE changing it, so an already-loaded folder
+    // whose sort now differs is forced to reload in the right order.
+    const hasSavedSort = !!(session.sort_by && session.sort_dir);
+    const sortMatches = !hasSavedSort
+      || (session.sort_by === this.sortBy() && session.sort_dir === this.sortDir());
+    if (hasSavedSort) {
+      this.sortBy.set(session.sort_by!);
+      this.sortDir.set(session.sort_dir!);
+    } else {
+      this.applySavedSort(session.folder_id);
+    }
+
     // Check BEFORE navigateToFolder changes currentFolderId
-    const alreadyInFolder = this.fileService.currentFolderId() === session.folder_id
+    const alreadyInFolder = sortMatches
+      && this.fileService.currentFolderId() === session.folder_id
       && this.fileService.files().length > 0;
 
     this.fileService.navigateToFolder(session.folder_id, session.folder_name);
