@@ -78,7 +78,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly sessionSaved = signal(false);
   private sessionSavedTimer: ReturnType<typeof setTimeout> | null = null;
   readonly isFullscreen = signal(false);
+  // Whether the header/footer chrome is shown while in fullscreen mode.
+  // Ignored outside fullscreen, where the chrome is always visible.
+  readonly chromeVisible = signal(true);
   private _fsHandler!: () => void;
+  private clickTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastTouchEndTime = 0;
 
   // Slideshow autoplay — images dwell for AUTOPLAY_MS; videos play through and
   // advance when they end (a duration-based timer is the fallback if the
@@ -373,6 +378,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.stopAutoplay();
     this.clearPending();
     if (this.sessionSavedTimer) clearTimeout(this.sessionSavedTimer);
+    if (this.clickTimer) clearTimeout(this.clickTimer);
     if (this.boundTouchMove) {
       this.el.nativeElement.removeEventListener('touchmove', this.boundTouchMove);
     }
@@ -479,7 +485,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchEnd(e?: TouchEvent): void {
-    if (!e || e.touches.length === 0) this.isTwoFingerTouch.set(false);
+    if (!e || e.touches.length === 0) {
+      this.isTwoFingerTouch.set(false);
+      this.lastTouchEndTime = Date.now();
+    }
     if (this.isPdf()) {
       if (!this.isSwiping) return;
       this.isSwiping = false;
@@ -575,16 +584,25 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
       // Tap detection: a short touch with minimal movement is a tap. TWO taps
-      // in quick succession (double-tap) toggle fullscreen; a single tap does
-      // nothing, so an accidental tap no longer flips fullscreen.
+      // in quick succession (double-tap) toggle fullscreen. A single tap, while
+      // already in fullscreen, toggles the header/footer chrome — delayed so a
+      // following second tap (double-tap) can still cancel it and toggle
+      // fullscreen instead, rather than firing both.
       const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
       if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
         const now = Date.now();
         if (now - this.lastTapTime < 300) {
+          if (this.clickTimer) { clearTimeout(this.clickTimer); this.clickTimer = null; }
           this.toggleFullscreen();
           this.lastTapTime = 0; // consumed — a third tap starts fresh
         } else {
           this.lastTapTime = now;
+          if (this.isFullscreen()) {
+            this.clickTimer = setTimeout(() => {
+              this.clickTimer = null;
+              this.toggleChrome();
+            }, 300);
+          }
         }
       }
     }
@@ -596,10 +614,35 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     } else {
       this.isFullscreen.set(true);
+      this.chromeVisible.set(true);
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
     }
+  }
+
+  /** In fullscreen mode, a single tap/click on the media toggles the
+   *  header/footer chrome. Has no effect outside fullscreen. */
+  toggleChrome(): void {
+    if (!this.isFullscreen()) return;
+    this.chromeVisible.update(v => !v);
+  }
+
+  /** Mouse click handler for the media area — distinguishes a single click
+   *  (toggle chrome) from the first half of a double-click (toggle fullscreen,
+   *  handled by the native (dblclick) binding). Ignored for clicks synthesized
+   *  right after a touch tap, which onTouchEnd already handled. */
+  onMediaClick(): void {
+    if (Date.now() - this.lastTouchEndTime < 500) return;
+    if (this.clickTimer) {
+      clearTimeout(this.clickTimer);
+      this.clickTimer = null;
+      return;
+    }
+    this.clickTimer = setTimeout(() => {
+      this.clickTimer = null;
+      this.toggleChrome();
+    }, 300);
   }
 
   /** Toggle the slideshow. Images auto-advance after a fixed dwell; videos play

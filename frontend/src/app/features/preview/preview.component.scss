@@ -18,7 +18,7 @@
 
   .preview-header,
   .preview-footer {
-    display: none;
+    transition: opacity 200ms ease, visibility 200ms ease;
   }
 
   .media-img,
@@ -29,6 +29,15 @@
 
   .pdf-viewer-wrap {
     height: 100dvh;
+  }
+
+  &.chrome-hidden {
+    .preview-header,
+    .preview-footer {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
   }
 }
 
