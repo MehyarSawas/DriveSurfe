@@ -543,10 +543,13 @@ final class KDriveClient implements DriveInterface
         $cursor  = null;
 
         do {
-            $query    = $cursor ? ['cursor' => $cursor] : [];
+            $query    = ['with' => 'is_favorite'];
+            if ($cursor) {
+                $query['cursor'] = $cursor;
+            }
             $response = $this->http->get(
                 "https://api.infomaniak.com/3/drive/{$driveId}/files/favorites",
-                ['headers' => ['Authorization' => "Bearer {$token}"], 'query' => $query ?: null]
+                ['headers' => ['Authorization' => "Bearer {$token}"], 'query' => $query]
             );
             $data    = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
             $files   = array_merge($files, $data['data'] ?? []);
