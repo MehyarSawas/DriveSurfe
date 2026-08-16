@@ -39,6 +39,8 @@ final class SessionRoutes
                 'folder_name'   => (string) ($body['folder_name'] ?? ''),
                 'thumbnail_url'  => $body['thumbnail_url'] ?? null,
                 'adjacent_files' => $body['adjacent_files'] ?? [],
+                'sort_by'        => $body['sort_by'] ?? null,
+                'sort_dir'       => $body['sort_dir'] ?? null,
                 'saved_at'       => (new \DateTime())->format(\DateTime::ATOM),
             ];
             self::save($sessions);
