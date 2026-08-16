@@ -90,9 +90,11 @@
 
   <!-- Media area -->
   <div class="media-area"
+    [class.zoomed]="zoom() > 1"
     (click)="$event.stopPropagation()"
     (touchstart)="onTouchStart($event)"
     (touchend)="onTouchEnd()"
+    (mousedown)="onMediaMouseDown($event)"
   >
     <!-- Swipe action indicators -->
     @if (swipeAction() === 'delete') {
@@ -155,8 +157,8 @@
             <div class="media-spinner"></div>
           </div>
         }
-        <img [src]="previewSrc()" [alt]="file().name" class="media-img"
-             [class.hidden]="isLoading()"
+        <img [src]="previewSrc()" [alt]="file().name" class="media-img" [class.zoomed]="zoom() > 1"
+             [class.hidden]="isLoading()" draggable="false"
              (load)="onImageLoad()" (error)="onImageError()"
              (dblclick)="toggleFullscreen()" />
       } @else {
