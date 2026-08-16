@@ -468,11 +468,23 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
 
     if (this.isPdf()) {
-      // Single finger on PDF: only track horizontal for swipe-to-navigate; vertical scrolls natively
       if (!this.isSwiping) return;
       const t = e.touches[0];
       const dx = t.clientX - this.touchStartX;
       const dy = t.clientY - this.touchStartY;
+      if (this.zoom() > 1) {
+        // Zoomed in: a single-finger drag pans freely in every direction
+        // instead of navigating or scrolling pages (native scroll is locked
+        // via .zoom-locked on ds-pdf-viewer while zoomed).
+        e.preventDefault();
+        this.touchCurrentX = t.clientX;
+        this.touchCurrentY = t.clientY;
+        const { maxX, maxY } = this.panBounds();
+        this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
+        this.swipeOffsetY.set(this.clampPan(this.panStartY + dy, maxY));
+        return;
+      }
+      // Not zoomed: only track horizontal for swipe-to-navigate; vertical scrolls natively
       if (Math.abs(dx) > Math.abs(dy)) {
         e.preventDefault();
         this.touchCurrentX = t.clientX;
@@ -514,9 +526,25 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.isTwoFingerTouch.set(false);
       this.lastTouchEndTime = Date.now();
     }
+    if (this.isPinching) {
+      if (!e || e.touches.length < 2) {
+        this.isPinching = false;
+        if (this.zoom() <= 1) {
+          this.zoom.set(1);
+          this.swipeOffsetX.set(0);
+          this.swipeOffsetY.set(0);
+        }
+      }
+      return;
+    }
     if (this.isPdf()) {
       if (!this.isSwiping) return;
       this.isSwiping = false;
+
+      // While zoomed in, the single-finger drag pans (handled in onTouchMove)
+      // — leave the pan offset where the finger left it, don't navigate.
+      if (this.zoom() > 1) return;
+
       const dx = this.touchCurrentX - this.touchStartX;
       const elapsed = Date.now() - this.touchStartTime;
       const flickX = Math.abs(dx) / elapsed >= 0.3 && Math.abs(dx) >= 20;
@@ -535,17 +563,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       } else {
         this.swipeOffsetX.set(0);
         this.isTransitioning.set(false);
-      }
-      return;
-    }
-    if (this.isPinching) {
-      if (!e || e.touches.length < 2) {
-        this.isPinching = false;
-        if (this.zoom() <= 1) {
-          this.zoom.set(1);
-          this.swipeOffsetX.set(0);
-          this.swipeOffsetY.set(0);
-        }
       }
       return;
     }
