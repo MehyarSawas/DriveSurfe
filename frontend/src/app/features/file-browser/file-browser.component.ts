@@ -352,6 +352,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly selectedCount = computed(() => this.fileService.selectedIds().size);
   readonly folderDirs = computed(() => this.displayFiles().filter(f => f.is_dir));
   readonly isTrash = computed(() => this.fileService.currentFolderId() === '__trash__');
+  readonly isStarred = computed(() => this.fileService.currentFolderId() === '__starred__');
   /** True for any virtual (non-uploadable) view — trash, starred, search. */
   readonly isVirtualFolder = computed(() => this.fileService.currentFolderId().startsWith('__'));
 
@@ -1592,10 +1593,27 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   async toggleFavorite(file: DriveFile): Promise<void> {
+    const wasFavorite = file.is_favorite;
     await this.fileService.toggleFavorite(file);
     if (this.previewFile()?.id === file.id) {
       this.previewFile.update(f => f ? { ...f, is_favorite: !file.is_favorite } : f);
     }
+    if (wasFavorite && this.isStarred()) {
+      this.fileService.searchResults.update(r => r ? r.filter(f => f.id !== file.id) : r);
+    }
+  }
+
+  /** Unstar every selected file. Only offered in the Favorites view, where
+   *  every listed item is (by definition) currently a favorite. */
+  async bulkUnfavorite(): Promise<void> {
+    const ids = [...this.fileService.selectedIds()];
+    if (ids.length === 0) return;
+    const files = this.displayFiles().filter(f => ids.includes(f.id));
+    await Promise.allSettled(files.map(f => this.fileService.toggleFavorite(f)));
+    if (this.isStarred()) {
+      this.fileService.searchResults.update(r => r ? r.filter(f => !ids.includes(f.id)) : r);
+    }
+    this.fileService.clearSelection();
   }
 
   private _pendingPickerPath = '';

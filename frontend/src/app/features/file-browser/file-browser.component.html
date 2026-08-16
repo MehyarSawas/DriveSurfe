@@ -228,6 +228,11 @@
               <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
             </button>
           } @else {
+            @if (isStarred()) {
+              <button class="icon-btn" (click)="bulkUnfavorite()" title="Unstar selected">
+                <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+              </button>
+            }
             <button class="icon-btn" (click)="openBulkMove()" title="Move selected">
               <svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM16 11h-5V8l-5 5 5 5v-3h5z"/></svg>
             </button>
