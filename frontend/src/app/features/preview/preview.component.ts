@@ -132,6 +132,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private pinchCx = 0;
   private pinchCy = 0;
 
+  // Pan state (single-finger touch drag or mouse drag) while zoomed in
+  private panStartX = 0;
+  private panStartY = 0;
+  private isMousePanning = false;
+  private mouseDidPan = false;
+  private mouseStartX = 0;
+  private mouseStartY = 0;
+  private boundMouseMove!: (e: MouseEvent) => void;
+  private boundMouseUp!: (e: MouseEvent) => void;
+
   readonly swipeOffsetX = signal(0);
   readonly swipeOffsetY = signal(0);
   readonly isTransitioning = signal(false);
@@ -219,6 +229,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   ngAfterViewInit(): void {
     this.boundTouchMove = (e: TouchEvent) => this.zone.run(() => this.onTouchMove(e));
     this.el.nativeElement.addEventListener('touchmove', this.boundTouchMove, { passive: false });
+    this.boundMouseMove = (e: MouseEvent) => this.zone.run(() => this.onWindowMouseMove(e));
+    this.boundMouseUp = () => this.zone.run(() => this.onWindowMouseUp());
+    window.addEventListener('mousemove', this.boundMouseMove);
+    window.addEventListener('mouseup', this.boundMouseUp);
     this._fsHandler = () => this.zone.run(() => {
       if (!document.fullscreenElement) this.isFullscreen.set(false);
     });
@@ -382,6 +396,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     if (this.boundTouchMove) {
       this.el.nativeElement.removeEventListener('touchmove', this.boundTouchMove);
     }
+    if (this.boundMouseMove) window.removeEventListener('mousemove', this.boundMouseMove);
+    if (this.boundMouseUp) window.removeEventListener('mouseup', this.boundMouseUp);
     if (this._fsHandler) {
       document.removeEventListener('fullscreenchange', this._fsHandler);
     }
@@ -428,6 +444,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.touchStartTime = Date.now();
     this.isSwiping = true;
     this.isTransitioning.set(false);
+    this.panStartX = this.swipeOffsetX();
+    this.panStartY = this.swipeOffsetY();
   }
 
   onTouchMove(e: TouchEvent): void {
@@ -470,10 +488,17 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.touchCurrentX = t.clientX;
     this.touchCurrentY = t.clientY;
 
-    if (this.zoom() > 1) return;
-
     const dx = t.clientX - this.touchStartX;
     const dy = t.clientY - this.touchStartY;
+
+    if (this.zoom() > 1) {
+      // Zoomed in: a single-finger drag pans the zoomed area instead of
+      // navigating (swipe-to-navigate is disabled while zoomed).
+      const { maxX, maxY } = this.panBounds();
+      this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
+      this.swipeOffsetY.set(this.clampPan(this.panStartY + dy, maxY));
+      return;
+    }
 
     if (Math.abs(dy) > Math.abs(dx)) {
       this.swipeOffsetY.set(dy);
@@ -527,12 +552,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     if (!this.isSwiping) return;
     this.isSwiping = false;
 
-    // While zoomed in, swipe gestures are disabled
-    if (this.zoom() > 1) {
-      this.swipeOffsetX.set(0);
-      this.swipeOffsetY.set(0);
-      return;
-    }
+    // While zoomed in, the single-finger drag pans (handled in onTouchMove) —
+    // leave the pan offset where the finger left it, don't snap it back.
+    if (this.zoom() > 1) return;
 
     const dx = this.touchCurrentX - this.touchStartX;
     const dy = this.touchCurrentY - this.touchStartY;
@@ -628,11 +650,55 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.chromeVisible.update(v => !v);
   }
 
+  /** Mouse-down on the media area — while zoomed in, starts a drag-to-pan
+   *  instead of letting the click/dblclick handlers see it as a plain click. */
+  onMediaMouseDown(e: MouseEvent): void {
+    if (this.zoom() <= 1 || e.button !== 0) return;
+    e.preventDefault();
+    this.isMousePanning = true;
+    this.mouseDidPan = false;
+    this.mouseStartX = e.clientX;
+    this.mouseStartY = e.clientY;
+    this.panStartX = this.swipeOffsetX();
+    this.panStartY = this.swipeOffsetY();
+  }
+
+  private onWindowMouseMove(e: MouseEvent): void {
+    if (!this.isMousePanning) return;
+    const dx = e.clientX - this.mouseStartX;
+    const dy = e.clientY - this.mouseStartY;
+    if (Math.abs(dx) + Math.abs(dy) > 3) this.mouseDidPan = true;
+    const { maxX, maxY } = this.panBounds();
+    this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
+    this.swipeOffsetY.set(this.clampPan(this.panStartY + dy, maxY));
+  }
+
+  private onWindowMouseUp(): void {
+    this.isMousePanning = false;
+  }
+
+  /** Screen-pixel pan bounds at the current zoom level, so a drag can never
+   *  pan the image entirely out of view. Zero (no panning) when not zoomed. */
+  private panBounds(): { maxX: number; maxY: number } {
+    const z = this.zoom();
+    if (z <= 1) return { maxX: 0, maxY: 0 };
+    const rect = (this.el.nativeElement.querySelector('.media-area') as HTMLElement)?.getBoundingClientRect();
+    const w = rect?.width ?? window.innerWidth;
+    const h = rect?.height ?? window.innerHeight;
+    return { maxX: (w * (z - 1)) / 2, maxY: (h * (z - 1)) / 2 };
+  }
+
+  private clampPan(value: number, max: number): number {
+    return Math.min(Math.max(value, -max), max);
+  }
+
   /** Mouse click handler for the media area — distinguishes a single click
    *  (toggle chrome) from the first half of a double-click (toggle fullscreen,
    *  handled by the native (dblclick) binding). Ignored for clicks synthesized
-   *  right after a touch tap, which onTouchEnd already handled. */
+   *  right after a touch tap, which onTouchEnd already handled, and for clicks
+   *  that end a drag-to-pan. */
   onMediaClick(): void {
+    if (this.mouseDidPan) { this.mouseDidPan = false; return; }
     if (Date.now() - this.lastTouchEndTime < 500) return;
     if (this.clickTimer) {
       clearTimeout(this.clickTimer);
@@ -795,9 +861,22 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.sessionSavedTimer = setTimeout(() => this.sessionSaved.set(false), 2000);
   }
 
-  zoomIn(): void { this.zoom.update(z => Math.min(z + 0.25, 4)); }
-  zoomOut(): void { this.zoom.update(z => Math.max(z - 0.25, 0.25)); }
+  zoomIn(): void { this.zoom.update(z => Math.min(z + 0.25, 4)); this.clampOffsetsToZoom(); }
+  zoomOut(): void { this.zoom.update(z => Math.max(z - 0.25, 0.25)); this.clampOffsetsToZoom(); }
   resetZoom(): void { this.zoom.set(1); this.swipeOffsetX.set(0); this.swipeOffsetY.set(0); }
+
+  /** After a zoom-level change (buttons/keyboard), re-clamp the pan offset so
+   *  it never leaves the image out of bounds, and reset it once back at 1x. */
+  private clampOffsetsToZoom(): void {
+    if (this.zoom() <= 1) {
+      this.swipeOffsetX.set(0);
+      this.swipeOffsetY.set(0);
+      return;
+    }
+    const { maxX, maxY } = this.panBounds();
+    this.swipeOffsetX.set(this.clampPan(this.swipeOffsetX(), maxX));
+    this.swipeOffsetY.set(this.clampPan(this.swipeOffsetY(), maxY));
+  }
 
   mediaTransform(): string {
     const x = this.swipeOffsetX();
