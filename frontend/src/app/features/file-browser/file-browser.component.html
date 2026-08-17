@@ -100,7 +100,7 @@
   <!-- Main content -->
   <main class="main-content">
     <!-- Toolbar -->
-    <header class="toolbar">
+    <header class="toolbar" [class.selecting]="selectedCount() > 0">
       @if (selectedCount() === 0) {
         <!-- Normal toolbar -->
         <button class="icon-btn menu-btn" (click)="sidebarOpen.update(v => !v)" title="Toggle sidebar">

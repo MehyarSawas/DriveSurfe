@@ -207,6 +207,15 @@
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
   min-width: 0;
+
+  // Multiselect bulk-action bar packs in more icon buttons than the normal
+  // toolbar — tighten padding/gaps so it all fits without overflow on
+  // narrower phones.
+  &.selecting {
+    gap: 4px;
+    padding-left: 8px;
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
 }
 
 .menu-btn {
@@ -357,22 +366,37 @@ ds-search-bar {
 
 /* Bulk action bar */
 .bulk-count {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--color-text);
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .bulk-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
   margin-left: auto;
 
   .icon-btn.danger {
     color: var(--color-danger);
     svg { fill: var(--color-danger); }
     &:hover { background: #fce8e6; }
+  }
+}
+
+// Shrink the icon buttons in the bulk-action bar so the full set (select-all,
+// move/copy/download/share/delete, deselect) fits without overflowing on
+// narrower phones.
+.select-all-btn,
+.bulk-actions .icon-btn {
+  width: 36px;
+  height: 36px;
+
+  svg {
+    width: 18px;
+    height: 18px;
   }
 }
 
