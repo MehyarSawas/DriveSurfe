@@ -21,6 +21,7 @@ type DeletePhase = 'idle' | 'confirming' | 'countdown';
 export class PreviewComponent implements OnDestroy, AfterViewInit {
   @ViewChild('mediaEl') mediaEl?: ElementRef<HTMLElement>;
   @ViewChild('thumbStrip') thumbStrip?: ElementRef<HTMLElement>;
+  @ViewChild(PdfViewerComponent) pdfViewerRef?: PdfViewerComponent;
 
   readonly file = input.required<DriveFile>();
   readonly hasPrev = input(false);
@@ -136,6 +137,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   // Pan state (single-finger touch drag or mouse drag) while zoomed in
   private panStartX = 0;
   private panStartY = 0;
+  // For PDFs, vertical panning moves the document's real scroll position
+  // (so it can reach content beyond what was on-screen when zoom started)
+  // instead of the visual translate used for images/video — these track the
+  // previous pointer Y so we can feed incremental deltas into scrollBy().
+  private lastPanTouchY = 0;
+  private lastPanMouseY = 0;
   private isMousePanning = false;
   private mouseDidPan = false;
   private mouseStartX = 0;
@@ -447,6 +454,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.isTransitioning.set(false);
     this.panStartX = this.swipeOffsetX();
     this.panStartY = this.swipeOffsetY();
+    this.lastPanTouchY = t.clientY;
   }
 
   onTouchMove(e: TouchEvent): void {
@@ -472,20 +480,25 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       if (!this.isSwiping) return;
       const t = e.touches[0];
       const dx = t.clientX - this.touchStartX;
-      const dy = t.clientY - this.touchStartY;
       if (this.zoom() > 1) {
-        // Zoomed in: a single-finger drag pans freely in every direction
-        // instead of navigating or scrolling pages (native scroll is locked
-        // via .zoom-locked on ds-pdf-viewer while zoomed).
+        // Zoomed in: a single-finger drag pans freely. Horizontal still uses
+        // the visual translate (a page's full width is always already
+        // rendered, so there's nothing more to reveal by scrolling). Vertical
+        // moves the document's actual scroll position instead, so dragging
+        // can reach real content beyond the slice visible when zoom started
+        // — a translate alone could only re-crop that frozen slice.
         e.preventDefault();
         this.touchCurrentX = t.clientX;
         this.touchCurrentY = t.clientY;
-        const { maxX, maxY } = this.panBounds();
+        const deltaY = t.clientY - this.lastPanTouchY;
+        this.lastPanTouchY = t.clientY;
+        this.pdfViewerRef?.scrollBy(-deltaY);
+        const { maxX } = this.panBounds();
         this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
-        this.swipeOffsetY.set(this.clampPan(this.panStartY + dy, maxY));
         return;
       }
       // Not zoomed: only track horizontal for swipe-to-navigate; vertical scrolls natively
+      const dy = t.clientY - this.touchStartY;
       if (Math.abs(dx) > Math.abs(dy)) {
         e.preventDefault();
         this.touchCurrentX = t.clientX;
@@ -533,6 +546,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         if (this.zoom() <= 1) {
           this.zoom.set(1);
           this.swipeOffsetX.set(0);
+          this.swipeOffsetY.set(0);
+        } else if (this.isPdf()) {
+          // Vertical panning for PDFs happens via real scroll from here on —
+          // migrate whatever vertical offset the pinch gesture accumulated
+          // into an actual scroll position instead of leaving it as a translate.
+          this.pdfViewerRef?.scrollBy(-this.swipeOffsetY());
           this.swipeOffsetY.set(0);
         }
       }
@@ -675,6 +694,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.mouseStartY = e.clientY;
     this.panStartX = this.swipeOffsetX();
     this.panStartY = this.swipeOffsetY();
+    this.lastPanMouseY = e.clientY;
   }
 
   private onWindowMouseMove(e: MouseEvent): void {
@@ -682,6 +702,18 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     const dx = e.clientX - this.mouseStartX;
     const dy = e.clientY - this.mouseStartY;
     if (Math.abs(dx) + Math.abs(dy) > 3) this.mouseDidPan = true;
+
+    if (this.isPdf()) {
+      // See onTouchMove: vertical panning scrolls the real document instead
+      // of translating a frozen slice, so it can reach the true top/bottom.
+      const deltaY = e.clientY - this.lastPanMouseY;
+      this.lastPanMouseY = e.clientY;
+      this.pdfViewerRef?.scrollBy(-deltaY);
+      const { maxX } = this.panBounds();
+      this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
+      return;
+    }
+
     const { maxX, maxY } = this.panBounds();
     this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
     this.swipeOffsetY.set(this.clampPan(this.panStartY + dy, maxY));

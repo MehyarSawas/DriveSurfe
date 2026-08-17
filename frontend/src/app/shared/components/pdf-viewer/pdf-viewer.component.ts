@@ -84,11 +84,22 @@ export class PdfViewerComponent implements OnChanges {
   readonly zoom = input(1);
 
   @ViewChild('pagesEl') pagesEl!: ElementRef<HTMLDivElement>;
+  @ViewChild('scrollEl') scrollEl!: ElementRef<HTMLDivElement>;
 
   readonly loading = signal(false);
   readonly error = signal('');
 
   constructor(private zone: NgZone) {}
+
+  /** Move the document's real scroll position by `dy` pixels (clamped to its
+   *  actual content bounds), so panning while zoomed can reach the true top/
+   *  bottom of the document instead of just the slice visible when zoom started. */
+  scrollBy(dy: number): void {
+    const el = this.scrollEl?.nativeElement;
+    if (!el) return;
+    const max = Math.max(el.scrollHeight - el.clientHeight, 0);
+    el.scrollTop = Math.min(Math.max(el.scrollTop + dy, 0), max);
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['fileId']) {
