@@ -14,26 +14,29 @@ use DriveSurfe\Mail\TemplateRenderer;
  */
 final class DocumentsProcessor implements ProcessorInterface
 {
-    /** format key => [label, extensions] */
+    /**
+     * format key => [label, extensions, MIME types]. An attachment matches by
+     * extension OR by MIME type — senders don't always give PDFs a ".pdf" name.
+     */
     private const FORMATS = [
-        'pdf'  => ['PDF', ['pdf']],
-        'doc'  => ['Word (doc, docx)', ['doc', 'docx', 'docm', 'dot', 'dotx']],
-        'xls'  => ['Excel (xls, xlsx)', ['xls', 'xlsx', 'xlsm', 'xlt', 'xltx']],
-        'ppt'  => ['PowerPoint (ppt, pptx)', ['ppt', 'pptx', 'pptm']],
-        'odf'  => ['OpenDocument (odt, ods, odp)', ['odt', 'ods', 'odp', 'odg']],
-        'csv'  => ['CSV', ['csv', 'tsv']],
-        'txt'  => ['Text (txt, md, rtf)', ['txt', 'md', 'rtf']],
-        'xml'  => ['XML / e-invoice', ['xml']],
-        'jpg'  => ['JPEG', ['jpg', 'jpeg', 'jfif']],
-        'png'  => ['PNG', ['png']],
-        'heic' => ['HEIC / HEIF', ['heic', 'heif']],
-        'gif'  => ['GIF', ['gif']],
-        'webp' => ['WebP', ['webp']],
-        'tif'  => ['TIFF', ['tif', 'tiff']],
-        'zip'  => ['Archives (zip, 7z, rar)', ['zip', '7z', 'rar', 'gz', 'tar']],
-        'eml'  => ['Emails (eml, msg)', ['eml', 'msg']],
-        'ics'  => ['Calendar (ics)', ['ics']],
-        'json' => ['JSON', ['json']],
+        'pdf'  => ['PDF', ['pdf'], ['application/pdf', 'application/x-pdf']],
+        'doc'  => ['Word (doc, docx)', ['doc', 'docx', 'docm', 'dot', 'dotx'], ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-word.document.macroenabled.12']],
+        'xls'  => ['Excel (xls, xlsx)', ['xls', 'xlsx', 'xlsm', 'xlt', 'xltx'], ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel.sheet.macroenabled.12']],
+        'ppt'  => ['PowerPoint (ppt, pptx)', ['ppt', 'pptx', 'pptm'], ['application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation']],
+        'odf'  => ['OpenDocument (odt, ods, odp)', ['odt', 'ods', 'odp', 'odg'], ['application/vnd.oasis.opendocument.text', 'application/vnd.oasis.opendocument.spreadsheet', 'application/vnd.oasis.opendocument.presentation', 'application/vnd.oasis.opendocument.graphics']],
+        'csv'  => ['CSV', ['csv', 'tsv'], ['text/csv', 'text/tab-separated-values']],
+        'txt'  => ['Text (txt, md, rtf)', ['txt', 'md', 'rtf'], ['text/plain', 'text/markdown', 'application/rtf', 'text/rtf']],
+        'xml'  => ['XML / e-invoice', ['xml'], ['application/xml', 'text/xml']],
+        'jpg'  => ['JPEG', ['jpg', 'jpeg', 'jfif'], ['image/jpeg', 'image/pjpeg']],
+        'png'  => ['PNG', ['png'], ['image/png']],
+        'heic' => ['HEIC / HEIF', ['heic', 'heif'], ['image/heic', 'image/heif']],
+        'gif'  => ['GIF', ['gif'], ['image/gif']],
+        'webp' => ['WebP', ['webp'], ['image/webp']],
+        'tif'  => ['TIFF', ['tif', 'tiff'], ['image/tiff']],
+        'zip'  => ['Archives (zip, 7z, rar)', ['zip', '7z', 'rar', 'gz', 'tar'], ['application/zip', 'application/x-zip-compressed', 'application/x-7z-compressed', 'application/vnd.rar', 'application/x-rar-compressed', 'application/gzip', 'application/x-tar']],
+        'eml'  => ['Emails (eml, msg)', ['eml', 'msg'], ['message/rfc822', 'application/vnd.ms-outlook']],
+        'ics'  => ['Calendar (ics)', ['ics'], ['text/calendar']],
+        'json' => ['JSON', ['json'], ['application/json']],
     ];
 
     public function __construct(private readonly KDriveClient $drive) {}
@@ -109,15 +112,32 @@ final class DocumentsProcessor implements ProcessorInterface
     public function process(Email $email, array $settings, bool $dryRun = false): array
     {
         $settings = self::normalizeSettings($settings);
-        $allowed  = [];
-        foreach ($settings['formats'] as $f) $allowed = [...$allowed, ...self::FORMATS[$f][1]];
+        $allowedExt  = [];
+        $allowedMime = [];
+        foreach ($settings['formats'] as $f) {
+            $allowedExt  = [...$allowedExt, ...self::FORMATS[$f][1]];
+            $allowedMime = [...$allowedMime, ...self::FORMATS[$f][2]];
+        }
 
-        $files = array_values(array_filter($email->attachments, function (Attachment $a) use ($settings, $allowed) {
-            if ($settings['skip_inline'] && $a->inline) return false;
-            return !$allowed || in_array($a->extension(), $allowed, true);
-        }));
+        $files   = [];
+        $skipped = [];
+        foreach ($email->attachments as $a) {
+            // "Inline" only ever skips images (signature logos etc.): some
+            // mail clients (Apple Mail, invoicing software) send real PDFs as
+            // inline parts, and those must still be saved.
+            if ($settings['skip_inline'] && $a->inline && str_starts_with($a->mimeType, 'image/')) {
+                $skipped[] = "{$a->name}: inline image";
+            } elseif ($allowedExt && !in_array($a->extension(), $allowedExt, true) && !in_array($a->mimeType, $allowedMime, true)) {
+                $skipped[] = "{$a->name}: format not selected ({$a->mimeType})";
+            } else {
+                $files[] = $a;
+            }
+        }
         if (!$files) {
-            return ['status' => 'skipped', 'detail' => 'No matching attachments', 'files' => []];
+            $detail = $email->attachments
+                ? 'No matching attachments — ' . implode('; ', $skipped)
+                : 'Email has no attachments';
+            return ['status' => 'skipped', 'detail' => mb_substr($detail, 0, 500), 'files' => []];
         }
 
         $renderer = new TemplateRenderer($email);

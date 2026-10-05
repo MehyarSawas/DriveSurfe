@@ -65,7 +65,10 @@ export interface ProcessorResult {
 
 export interface MailLogEntry {
   at: string;
-  email: { id: string; from: string; subject: string; date: string; attachments: { name: string; size: number }[] };
+  email: {
+    id: string; from: string; subject: string; date: string;
+    attachments: { name: string; size: number; mime_type?: string; inline?: boolean }[];
+  };
   results: ProcessorResult[];
 }
 

@@ -287,6 +287,9 @@
                   <span class="time">{{ entry.at | date:'MMM d, HH:mm' }}</span>
                 </div>
                 <div class="mp-log-from">{{ entry.email.from }} · {{ entry.email.attachments.length }} attachment(s)</div>
+                @for (a of entry.email.attachments; track $index) {
+                  <div class="mp-log-att">📎 {{ a.name }}@if (a.mime_type) { · {{ a.mime_type }} }@if (a.inline) { · inline } · {{ a.size | number }} B</div>
+                }
                 @if (!entry.results.length) {
                   <div class="mp-log-result">No processor matched</div>
                 }

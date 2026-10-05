@@ -114,7 +114,9 @@ final class Email
             'from'        => $this->from['address'],
             'subject'     => mb_substr($this->subject, 0, 200),
             'date'        => $this->date->format(\DateTimeInterface::ATOM),
-            'attachments' => array_map(fn(Attachment $a) => ['name' => $a->name, 'size' => $a->size], $this->attachments),
+            'attachments' => array_map(fn(Attachment $a) => [
+                'name' => $a->name, 'size' => $a->size, 'mime_type' => $a->mimeType, 'inline' => $a->inline,
+            ], $this->attachments),
         ];
     }
 
