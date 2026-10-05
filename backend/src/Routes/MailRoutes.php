@@ -100,6 +100,10 @@ final class MailRoutes
             if ($claim['state'] === 'processing') {
                 return self::json($res, ['status' => 'in_progress'], 409);
             }
+            if ($claim['state'] === 'backoff') {
+                // Failed recently — sender keeps it queued and asks again later.
+                return self::json($res, ['status' => 'retry_later'], 409);
+            }
             if ($claim['state'] === 'gave_up') {
                 // 200 so the sender stops retrying; the failures are in the log.
                 return self::json($res, ['status' => 'gave_up']);

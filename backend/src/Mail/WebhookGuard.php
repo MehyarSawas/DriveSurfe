@@ -18,6 +18,8 @@ use DriveSurfe\Service\JsonFile;
  *   15 minutes locks that IP out until the window rolls off.
  * - Idempotency: per Gmail message id, remembers which processors already
  *   succeeded, so a retried delivery never uploads the same file twice.
+ *   Failed messages are retried with exponential backoff (2, 4, 8 … min,
+ *   capped at 1 h).
  *
  * State lives in `backend/mail_webhook_state.json` (outside the web root).
  */
@@ -29,7 +31,8 @@ final class WebhookGuard
     private const FAIL_WINDOW     = 900;
     private const FAIL_MAX        = 20;
     private const PROCESSING_TTL  = 900;   // a crashed run stops blocking retries after this
-    private const MAX_ATTEMPTS    = 5;
+    private const MAX_ATTEMPTS    = 8;     // with backoff ≈ 3 h of retries before giving up
+    private const BACKOFF_MAX     = 3600;
     private const MESSAGES_KEPT   = 5000;
     private const MIN_SECRET_LEN  = 32;
 
@@ -99,7 +102,7 @@ final class WebhookGuard
 
     /**
      * Claim a message for processing.
-     * @return array{state: 'claimed'|'done'|'processing'|'gave_up', done_ids: list<string>}
+     * @return array{state: 'claimed'|'done'|'processing'|'backoff'|'gave_up', done_ids: list<string>}
      */
     public function claim(string $messageId): array
     {
@@ -109,12 +112,17 @@ final class WebhookGuard
             $msg = $s['messages']['m:' . $messageId] ?? ['status' => 'new', 'attempts' => 0, 'done_ids' => []];
             $result['done_ids'] = $msg['done_ids'] ?? [];
 
-            if ($msg['status'] === 'done') {
-                $result['state'] = 'done';
-            } elseif ($msg['status'] === 'processing' && time() - ($msg['at'] ?? 0) < self::PROCESSING_TTL) {
+            $attempts = (int) ($msg['attempts'] ?? 0);
+            $since    = time() - (int) ($msg['at'] ?? 0);
+
+            if ($msg['status'] === 'processing' && $since < self::PROCESSING_TTL) {
                 $result['state'] = 'processing';
-            } elseif (($msg['attempts'] ?? 0) >= self::MAX_ATTEMPTS) {
+            } elseif ($msg['status'] === 'done') {
+                $result['state'] = 'done';
+            } elseif ($attempts >= self::MAX_ATTEMPTS) {
                 $result['state'] = 'gave_up';
+            } elseif ($msg['status'] === 'failed' && $since < min(self::BACKOFF_MAX, 60 * 2 ** $attempts)) {
+                $result['state'] = 'backoff';
             } else {
                 $msg['status']   = 'processing';
                 $msg['attempts'] = ($msg['attempts'] ?? 0) + 1;

@@ -58,7 +58,7 @@ final class KDriveClient implements DriveInterface
             // many kDrive calls on a large drive, no point starting more of
             // them once nobody's waiting for the result.
             if (connection_aborted()) break;
-            $params = ['type' => 'dir'];
+            $params = ['type' => ['dir']];
             if ($cursor) $params['cursor'] = $cursor;
             $data   = $this->get("{$driveId}/files/5/files", $params, self::API_V3);
             $dirs   = array_merge($dirs, $data['data'] ?? []);
@@ -201,7 +201,7 @@ final class KDriveClient implements DriveInterface
             $cursor = null;
             $needle = mb_strtolower($name);
             do {
-                $params = ['type' => 'dir', 'limit' => 200];
+                $params = ['type' => ['dir'], 'limit' => 200];
                 if ($cursor) $params['cursor'] = $cursor;
                 $data = $this->get("{$driveId}/files/{$parentId}/files", $params, self::API_V3);
                 foreach ($data['data'] ?? [] as $f) {
