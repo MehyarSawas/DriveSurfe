@@ -26,6 +26,12 @@ export const routes: Routes = [
       import('./features/file-browser/file-browser.component').then(m => m.FileBrowserComponent),
   },
   {
+    path: 'settings/mail',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/mail-processors/mail-processors.component').then(m => m.MailProcessorsComponent),
+  },
+  {
     path: '**',
     redirectTo: `folder/${HOME_FOLDER_ID}`,
   },

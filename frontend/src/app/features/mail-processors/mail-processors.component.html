@@ -1,0 +1,312 @@
+<div class="mp-page">
+  <header class="mp-header">
+    <button class="icon-btn" (click)="goBack()" title="Back to drive" aria-label="Back to drive">
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+    </button>
+    <h1>Email processors</h1>
+    @if (!draft() && meta()) {
+      <button class="btn-primary" (click)="newProcessor()">New processor</button>
+    }
+  </header>
+
+  <div class="mp-content">
+    @if (loading()) {
+      <div class="mp-loading"><div class="mp-spinner"></div></div>
+    } @else if (meta(); as m) {
+
+      @if (loadError()) {
+        <p class="mp-error">{{ loadError() }}</p>
+      }
+
+      <!-- ── Editor ─────────────────────────────────────────────────── -->
+      @if (draft(); as p) {
+        <section class="mp-card">
+          <h2>{{ p.id ? 'Edit processor' : 'New processor' }}</h2>
+
+          <div class="mp-grid">
+            <label class="mp-field">
+              <span>Name</span>
+              <input type="text" [(ngModel)]="p.name" maxlength="100" placeholder="e.g. Invoices to Documents" />
+            </label>
+            <label class="mp-field">
+              <span>Processor</span>
+              <select [(ngModel)]="p.processor" (ngModelChange)="onTypeChange(p)">
+                @for (t of m.processors; track t.key) {
+                  <option [value]="t.key">{{ t.label }}</option>
+                }
+              </select>
+            </label>
+          </div>
+          @if (typeOf(p.processor); as type) {
+            <p class="mp-help">{{ type.description }}</p>
+          }
+
+          <div class="mp-toggles">
+            <label class="toggle-row"><input type="checkbox" [(ngModel)]="p.enabled" /> Enabled</label>
+            <label class="toggle-row"><input type="checkbox" [(ngModel)]="p.stop" /> Stop processing further processors when this one matches</label>
+          </div>
+
+          <!-- Filter -->
+          <h3>Filter</h3>
+          <p class="mp-help">No conditions = runs for every email. AND binds tighter than OR: <code>a AND b OR c</code> = <code>(a AND b) OR c</code>.</p>
+          <div class="mp-conditions">
+            @for (c of p.filter.conditions; track $index; let i = $index) {
+              <div class="mp-condition">
+                @if (i > 0) {
+                  <select class="join" [(ngModel)]="c.join">
+                    <option value="and">AND</option>
+                    <option value="or">OR</option>
+                  </select>
+                } @else {
+                  <span class="join join-where">Where</span>
+                }
+                <select [(ngModel)]="c.field" (ngModelChange)="onFieldChange(c)">
+                  @for (f of m.filter.fields; track f.key) {
+                    <option [value]="f.key">{{ f.label }}</option>
+                  }
+                </select>
+                <select [(ngModel)]="c.operator">
+                  @for (o of operatorsFor(c.field); track o.key) {
+                    <option [value]="o.key">{{ o.label }}</option>
+                  }
+                </select>
+                @if (needsValue(c.operator)) {
+                  <input [type]="valueInputType(c)" [(ngModel)]="c.value" maxlength="500" placeholder="Value" />
+                } @else {
+                  <span class="value-placeholder"></span>
+                }
+                <button class="icon-btn" (click)="removeCondition(p, i)" title="Remove condition">
+                  <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+              </div>
+            }
+          </div>
+          <button class="btn-link" (click)="addCondition(p)">+ Add condition</button>
+
+          <!-- Processor settings (schema-driven) -->
+          @if (typeOf(p.processor); as type) {
+            @if (type.settings.length) {
+              <h3>Settings</h3>
+              @for (f of type.settings; track f.key) {
+                <div class="mp-field">
+                  @switch (f.type) {
+                    @case ('checkbox') {
+                      <label class="toggle-row">
+                        <input type="checkbox" [ngModel]="p.settings[f.key]" (ngModelChange)="p.settings[f.key] = $event" />
+                        {{ f.label }}
+                      </label>
+                    }
+                    @case ('folder') {
+                      <span>{{ f.label }}</span>
+                      <button class="folder-btn" (click)="pickingFolder.set(f.key)">
+                        <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+                        {{ folderValue(p, f).name }}
+                        <span class="folder-change">Change</span>
+                      </button>
+                      @if (pickingFolder() === f.key) {
+                        <ds-folder-picker
+                          [title]="'Choose folder'"
+                          (folderSelected)="onFolderPicked(p, f.key, $event)"
+                          (folderPath)="onFolderPath(p, f.key, $event)"
+                          (closed)="pickingFolder.set(null)"
+                        />
+                      }
+                    }
+                    @case ('multiselect') {
+                      <span>{{ f.label }}</span>
+                      <div class="chips">
+                        @for (o of f.options ?? []; track o.value) {
+                          <button class="chip" [class.selected]="isSelected(p, f, o.value)" (click)="toggleOption(p, f, o.value)">{{ o.label }}</button>
+                        }
+                      </div>
+                    }
+                    @default {
+                      <span>{{ f.label }}</span>
+                      <input type="text" [ngModel]="p.settings[f.key]" (ngModelChange)="p.settings[f.key] = $event"
+                             [placeholder]="f.placeholder ?? ''" maxlength="500"
+                             [class.mono]="f.type === 'template'"
+                             (focus)="onTemplateFocus(f.key, $event)" />
+                      @if (f.type === 'template') {
+                        <div class="chips vars">
+                          @for (v of variablesFor(f); track v.token) {
+                            <button class="chip var" [title]="v.description"
+                                    (mousedown)="$event.preventDefault()"
+                                    (click)="insertVariable(p, f, v.token)">{{ v.token }}</button>
+                          }
+                        </div>
+                      }
+                    }
+                  }
+                  @if (f.help) {
+                    <p class="mp-help">{{ f.help }}</p>
+                  }
+                </div>
+              }
+            }
+          }
+
+          <!-- Dry-run test -->
+          <button class="btn-link" (click)="testOpen.set(!testOpen())">
+            {{ testOpen() ? '▾' : '▸' }} Test with a sample email
+          </button>
+          @if (testOpen()) {
+            <div class="mp-test">
+              <p class="mp-help">Dry run — nothing is uploaded. Shows whether the filter matches and where files would go.</p>
+              <div class="mp-grid">
+                <label class="mp-field"><span>From</span><input type="text" [(ngModel)]="testEmail.from" /></label>
+                <label class="mp-field"><span>To</span><input type="text" [(ngModel)]="testEmail.to" placeholder="me@example.com" /></label>
+                <label class="mp-field"><span>Subject</span><input type="text" [(ngModel)]="testEmail.subject" /></label>
+                <label class="mp-field"><span>Received</span><input type="datetime-local" [(ngModel)]="testEmail.date" /></label>
+              </div>
+              <label class="mp-field"><span>Attachment names (comma-separated)</span><input type="text" [(ngModel)]="testEmail.attachmentNames" /></label>
+              <button class="btn-secondary" (click)="runTest()" [disabled]="testing()">{{ testing() ? 'Testing…' : 'Run test' }}</button>
+              @if (testError()) {
+                <p class="mp-error">{{ testError() }}</p>
+              }
+              @if (testResults(); as results) {
+                @if (!results.length) {
+                  <p class="mp-result none">Filter does not match this email.</p>
+                }
+                @for (r of results; track $index) {
+                  <div class="mp-result" [class]="r.status">
+                    <strong>{{ r.detail }}</strong>
+                    @for (file of r.files ?? []; track $index) {
+                      <div class="mp-file"><span class="orig">{{ file.original }}</span> → <span class="mono">{{ file.path }}/{{ file.name }}</span></div>
+                    }
+                  </div>
+                }
+              }
+            </div>
+          }
+
+          @if (formError()) {
+            <p class="mp-error">{{ formError() }}</p>
+          }
+          <div class="mp-actions">
+            @if (p.id) {
+              @if (confirmingDelete()) {
+                <span class="confirm-text">Delete this processor?</span>
+                <button class="btn-danger" (click)="remove()" [disabled]="deleting()">
+                  {{ deleting() ? 'Deleting…' : 'Yes, delete' }}
+                </button>
+                <button class="btn-secondary" (click)="confirmingDelete.set(false)" [disabled]="deleting()">Keep</button>
+              } @else {
+                <button class="btn-secondary danger" (click)="remove()" [disabled]="saving()">Delete</button>
+              }
+            }
+            @if (!confirmingDelete()) {
+              <span class="spacer"></span>
+              <button class="btn-secondary" (click)="cancelEdit()">Cancel</button>
+              <button class="btn-primary" (click)="save()" [disabled]="saving() || deleting()">{{ saving() ? 'Saving…' : 'Save' }}</button>
+            }
+          </div>
+        </section>
+      } @else {
+
+        <!-- ── Processor list ───────────────────────────────────────── -->
+        <section class="mp-card">
+          <h2>Processors</h2>
+          <p class="mp-help">Every incoming email is checked against these, top to bottom. Each enabled processor whose filter matches runs.</p>
+          @if (!processors().length) {
+            <p class="mp-empty">No processors yet. Create one to start handling incoming email.</p>
+          }
+          <ul class="mp-list">
+            @for (p of processors(); track p.id; let i = $index; let last = $last) {
+              <li class="mp-item" [class.disabled]="!p.enabled">
+                <div class="mp-order">
+                  <button class="icon-btn small" (click)="move(i, -1)" [disabled]="i === 0" title="Move up">
+                    <svg viewBox="0 0 24 24"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+                  </button>
+                  <button class="icon-btn small" (click)="move(i, 1)" [disabled]="last" title="Move down">
+                    <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+                  </button>
+                </div>
+                <button class="mp-item-main" (click)="edit(p)">
+                  <span class="mp-item-name">{{ p.name }}
+                    <span class="badge">{{ typeOf(p.processor)?.label ?? p.processor }}</span>
+                    @if (p.stop) { <span class="badge muted">stops</span> }
+                  </span>
+                  <span class="mp-item-filter">{{ filterSummary(p) }}</span>
+                </button>
+                <label class="switch" title="Enabled">
+                  <input type="checkbox" [checked]="p.enabled" (change)="toggleEnabled(p)" />
+                  <span></span>
+                </label>
+              </li>
+            }
+          </ul>
+        </section>
+
+        <!-- ── Webhook setup ────────────────────────────────────────── -->
+        <section class="mp-card">
+          <h2>Gmail webhook</h2>
+          @if (m.webhook.configured) {
+            <p class="mp-status ok">Enabled — requests must be signed with <code>MAIL_WEBHOOK_SECRET</code>.</p>
+          } @else {
+            <p class="mp-status warn">Disabled — set <code>MAIL_WEBHOOK_SECRET</code> (min. 32 characters) in <code>backend/.env</code>.</p>
+          }
+          <div class="url-row">
+            <input type="text" readonly [value]="webhookUrl()" (click)="$any($event.target).select()" />
+            <button class="btn-secondary" (click)="copyUrl()">{{ copied() ? 'Copied' : 'Copy' }}</button>
+          </div>
+          <p class="mp-help">
+            Install <code>backend/integrations/gmail-webhook.gs</code> as a Google Apps Script in your Google account and set
+            the URL above plus the secret as script properties. It forwards new inbox mail (max. {{ m.webhook.max_mb }} MB
+            per email) every minute, HMAC-signed with replay protection.
+          </p>
+        </section>
+
+        <!-- ── Activity log ─────────────────────────────────────────── -->
+        <section class="mp-card">
+          <div class="mp-card-head">
+            <button class="btn-link" (click)="logOpen.set(!logOpen())">
+              <h2>{{ logOpen() ? '▾' : '▸' }} Recent activity ({{ log().length }})</h2>
+            </button>
+            @if (logOpen()) {
+              <span class="spacer"></span>
+              <button class="btn-link" (click)="refreshLog()">Refresh</button>
+              @if (log().length) {
+                @if (confirmingClear()) {
+                  <button class="btn-link danger" (click)="clearLog()">Confirm clear</button>
+                  <button class="btn-link" (click)="confirmingClear.set(false)">Keep</button>
+                } @else {
+                  <button class="btn-link danger" (click)="clearLog()">Clear</button>
+                }
+              }
+            }
+          </div>
+          @if (logOpen()) {
+            @if (!log().length) {
+              <p class="mp-empty">No emails received yet.</p>
+            }
+            @for (entry of log(); track $index) {
+              <div class="mp-log" [class]="logStatus(entry)">
+                <div class="mp-log-head">
+                  <span class="dot"></span>
+                  <span class="subject">{{ entry.email.subject || '(no subject)' }}</span>
+                  <span class="time">{{ entry.at | date:'MMM d, HH:mm' }}</span>
+                </div>
+                <div class="mp-log-from">{{ entry.email.from }} · {{ entry.email.attachments.length }} attachment(s)</div>
+                @if (!entry.results.length) {
+                  <div class="mp-log-result">No processor matched</div>
+                }
+                @for (r of entry.results; track $index) {
+                  <div class="mp-log-result" [class]="r.status">
+                    <strong>{{ r.name }}:</strong> {{ r.detail }}
+                    @for (file of r.files ?? []; track $index) {
+                      @if (file.error) {
+                        <div class="mp-file error">{{ file.original }} — {{ file.error }}</div>
+                      }
+                    }
+                  </div>
+                }
+              </div>
+            }
+          }
+        </section>
+      }
+    } @else if (loadError()) {
+      <p class="mp-error">{{ loadError() }}</p>
+    }
+  </div>
+</div>

@@ -16,6 +16,10 @@ backend/passkeys.json
 backend/sessions.json
 backend/pinned_folders.json
 backend/registration_attempts.json
+backend/mail_processors.json
+backend/mail_webhook_state.json
+backend/mail_webhook_log.json
+backend/*.json.lock
 backend/public/uploads/
 backend/cache/
 # composer.phar can optionally live in backend/ on the server — not committed

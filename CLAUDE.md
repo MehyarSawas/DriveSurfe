@@ -145,6 +145,13 @@ All under `/api`. "Auth" = requires a valid `ds_session` cookie via `AuthMiddlew
 | POST | `/files/{id}/share` | Yes | `{right:'inherit'\|'password'\|'public', can_download?, can_edit?, can_see_info?, can_see_stats?, can_comment?, can_request_access?, password?, valid_until?}` | `{data: ShareLink}` |
 | PUT | `/files/{id}/share` | Yes | same body, all fields optional | `{data: true}` |
 | DELETE | `/files/{id}/share` | Yes | — | `{data: true}` |
+| POST | `/hooks/gmail` | **HMAC signature** (not session) | headers `X-DS-Timestamp`, `X-DS-Signature: sha256=<hex>`; JSON email payload | `{status, results}` — see Mail Processors |
+| GET | `/mail/meta` | Yes | — | processor types + settings schemas, filter fields/operators, template variables, webhook status |
+| GET/POST | `/mail/processors` | Yes | processor record | `{data: record[] \| record}` |
+| PUT/DELETE | `/mail/processors/{id}` | Yes | id = 16 hex chars | `{data: record}` / `{ok:true}` |
+| POST | `/mail/processors/reorder` | Yes | `{ids: string[]}` | `{data: record[]}` |
+| POST | `/mail/processors/test` | Yes | `{email, processor?}` | `{data: result[]}` — dry run, no uploads |
+| GET/DELETE | `/mail/log` | Yes | — | last 100 webhook runs |
 
 Global error shape: `{error: message}`, plus `trace`+`class` only for authenticated/dev callers. Proxy routes (`thumbnail`/`preview`/`download`) emit bare 404/502 with no JSON body on failure.
 
@@ -159,9 +166,24 @@ Global error shape: `{error: message}`, plus `trace`+`class` only for authentica
 | `KDRIVE_DRIVE_ID` | Yes (throws at first kDrive call) | Infomaniak kDrive drive ID |
 | `KDRIVE_TOKEN` | Yes (throws at first kDrive call) | Bearer token for all kDrive API calls |
 | `APP_RP_ID` | No | WebAuthn RP ID override; falls back to `APP_URL` host, then `drive.msawas.com` |
+| `MAIL_WEBHOOK_SECRET` | No | HMAC secret for `/api/hooks/gmail`, min 32 chars; unset/short → endpoint answers 404 |
+| `MAIL_WEBHOOK_MAX_MB` | No (default 40, capped 95) | Max webhook body size |
+| `APP_TIMEZONE` | No | Timezone for `{date:…}` template variables (default: PHP's) |
 
 ### PHP body-size limits
 `backend/public/.user.ini`: `post_max_size=100M`, `upload_max_filesize=100M`, `memory_limit=256M`. The upload route loads the entire request body into a PHP string (`(string) $bodyStream`) — practical upload ceiling is ~100MB per file, entirely in memory.
+
+### Mail Processors (`src/Mail/`, `Routes/MailRoutes.php`)
+Inbound-email automation. Gmail has no plain webhook, and Gmail push (Pub/Sub) would need a Gmail OAuth client — so `backend/integrations/gmail-webhook.gs` is a **Google Apps Script** the owner installs in their own Google account; it polls the inbox every minute and POSTs each new message (attachments base64) to `/api/hooks/gmail`.
+
+- **Webhook security (`WebhookGuard`)**: HMAC-SHA256 over `"{timestamp}.{raw body}"` (`hash_equals`), ±5 min timestamp window, signatures remembered 10 min and refused on reuse (409), 20 failed signatures per `REMOTE_ADDR` in 15 min → 429, `Content-Type: application/json` required, body size capped. The route re-reads the raw body via `rewind()` (body-parsing-middleware gotcha above). Unauthenticated rejections are terse.
+- **Payload is still hostile** after the signature check — anyone can email the owner. `Email::fromPayload` validates/bounds every field, strips path parts from attachment names, whitelists MIME syntax, derives sizes from content. `TemplateRenderer` splits path templates on `/` *before* substitution and strips `/ \ : * ? " < > |` from substituted values, so a subject like `../../x` can never add or escape folders.
+- **Idempotency**: per Gmail message id, the guard records which processor ids already succeeded; a retry (502 on any processor error) re-runs only the failed ones; after 5 attempts it answers 200 `gave_up`.
+- **Records** (`mail_processors.json`, array order = evaluation order): `{id, name, enabled, stop, processor, filter:{conditions:[{join:'and'|'or', field, operator, value}]}, settings}`. AND binds tighter than OR. Fields/operators are defined in `FilterEvaluator::FIELDS/OPERATORS` (list fields: positive operators match ANY element, negative ones require NONE).
+- **Adding a processor**: implement `Processor/ProcessorInterface` (static `key/label/description/settingsSchema/normalizeSettings` + `process($email, $settings, $dryRun)`), add the class to `ProcessorRegistry::CLASSES`. The frontend settings form is generated from `settingsSchema()` (types: `text`, `template`, `folder`, `multiselect`, `checkbox`) — no frontend change needed.
+- **`documents` processor**: uploads attachments to `base_folder` + rendered `path` (folders created via `KDriveClient::ensureFolderPath`, case-insensitive match), optional `file_name` template (real extension re-appended if missing; `(1)`, `(2)` suffix when several attachments share a template that doesn't vary per file), `formats` allow-list by extension, `skip_inline`.
+- Flat files (all in `backend/`, gitignored): `mail_processors.json`, `mail_webhook_state.json`, `mail_webhook_log.json`, plus `*.json.lock` (`Service/JsonFile` — flock'd read-modify-write).
+- Frontend: `features/mail-processors/` at route `settings/mail` (sidebar footer "Email processors"), `core/services/mail-processor.service.ts`.
 
 ---
 

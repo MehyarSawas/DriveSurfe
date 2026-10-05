@@ -185,6 +185,43 @@ final class KDriveClient implements DriveInterface
         return $this->normalizeFile($data['data'] ?? []);
     }
 
+    /**
+     * Resolve a folder path below $baseId, creating any missing segments.
+     * Segment names must already be sanitized by the caller. Matching is
+     * case-insensitive so "Invoices" and "invoices" don't fork into two
+     * sibling folders. Returns the ID of the deepest folder.
+     */
+    public function ensureFolderPath(string $baseId, array $segments): string
+    {
+        $driveId  = $this->getDriveId();
+        $parentId = $baseId;
+
+        foreach ($segments as $name) {
+            $found  = null;
+            $cursor = null;
+            $needle = mb_strtolower($name);
+            do {
+                $params = ['type' => 'dir', 'limit' => 200];
+                if ($cursor) $params['cursor'] = $cursor;
+                $data = $this->get("{$driveId}/files/{$parentId}/files", $params, self::API_V3);
+                foreach ($data['data'] ?? [] as $f) {
+                    if (($f['type'] ?? '') === 'dir' && mb_strtolower((string) ($f['name'] ?? '')) === $needle) {
+                        $found = (string) $f['id'];
+                        break 2;
+                    }
+                }
+                $cursor = ($data['has_more'] ?? false) ? ($data['cursor'] ?? null) : null;
+            } while ($cursor);
+
+            $parentId = $found ?? $this->createFolder($parentId, $name)['id'];
+            if ($parentId === '') {
+                throw new RuntimeException("Could not create folder \"{$name}\"");
+            }
+        }
+
+        return $parentId;
+    }
+
     public function restoreFile(string $fileId): void
     {
         $driveId = $this->getDriveId();

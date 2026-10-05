@@ -3,7 +3,7 @@ import {
 } from '@angular/core';
 import { CommonModule, DatePipe, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription, skip } from 'rxjs';
 import { FileService, FolderStats } from '../../core/services/file.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -25,6 +25,7 @@ import { ScannerComponent } from '../scanner/scanner.component';
   standalone: true,
   imports: [
     CommonModule,
+    RouterLink,
     DatePipe,
     FormsModule,
     FileGridComponent,

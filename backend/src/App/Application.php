@@ -9,6 +9,7 @@ use DriveSurfe\Middleware\AuthMiddleware;
 use DriveSurfe\Routes\ActionRoutes;
 use DriveSurfe\Routes\AuthRoutes;
 use DriveSurfe\Routes\FileRoutes;
+use DriveSurfe\Routes\MailRoutes;
 use DriveSurfe\Routes\PinRoutes;
 use DriveSurfe\Routes\SessionRoutes;
 use DriveSurfe\Routes\ShareRoutes;
@@ -109,14 +110,16 @@ final class Application
         $sessionRoutes = new SessionRoutes($container);
         $shareRoutes   = new ShareRoutes($container);
         $pinRoutes     = new PinRoutes($container);
+        $mailRoutes    = new MailRoutes($container);
 
-        $this->slim->group('/api', function ($group) use ($authRoutes, $fileRoutes, $actionRoutes, $sessionRoutes, $shareRoutes, $pinRoutes) {
+        $this->slim->group('/api', function ($group) use ($authRoutes, $fileRoutes, $actionRoutes, $sessionRoutes, $shareRoutes, $pinRoutes, $mailRoutes) {
             $authRoutes->register($group);
             $fileRoutes->register($group);
             $actionRoutes->register($group);
             $sessionRoutes->register($group);
             $shareRoutes->register($group);
             $pinRoutes->register($group);
+            $mailRoutes->register($group);
         });
     }
 }
