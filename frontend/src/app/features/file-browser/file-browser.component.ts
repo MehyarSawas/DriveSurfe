@@ -353,6 +353,7 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   readonly selectedCount = computed(() => this.fileService.selectedIds().size);
   readonly folderDirs = computed(() => this.displayFiles().filter(f => f.is_dir));
   readonly isTrash = computed(() => this.fileService.currentFolderId() === '__trash__');
+  readonly isStarred = computed(() => this.fileService.currentFolderId() === '__starred__');
   /** True for any virtual (non-uploadable) view — trash, starred, search. */
   readonly isVirtualFolder = computed(() => this.fileService.currentFolderId().startsWith('__'));
 
@@ -674,6 +675,8 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
       folder_name: folderCrumb?.name ?? 'My Drive',
       thumbnail_url: file.thumbnail_url,
       adjacent_files: adj,
+      sort_by: this.sortBy(),
+      sort_dir: this.sortDir(),
     });
     // Cache adjacent files for this session so thumbnails and previews load
     // instantly the next time the session is opened.
@@ -689,8 +692,23 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   async openSession(session: PreviewSession): Promise<void> {
     this.sessionLoading.set(true);
 
+    // Restore the sort the folder was viewed with when this session was
+    // saved, so the retrieved file list matches. Compare against the
+    // currently-active sort BEFORE changing it, so an already-loaded folder
+    // whose sort now differs is forced to reload in the right order.
+    const hasSavedSort = !!(session.sort_by && session.sort_dir);
+    const sortMatches = !hasSavedSort
+      || (session.sort_by === this.sortBy() && session.sort_dir === this.sortDir());
+    if (hasSavedSort) {
+      this.sortBy.set(session.sort_by!);
+      this.sortDir.set(session.sort_dir!);
+    } else {
+      this.applySavedSort(session.folder_id);
+    }
+
     // Check BEFORE navigateToFolder changes currentFolderId
-    const alreadyInFolder = this.fileService.currentFolderId() === session.folder_id
+    const alreadyInFolder = sortMatches
+      && this.fileService.currentFolderId() === session.folder_id
       && this.fileService.files().length > 0;
 
     this.fileService.navigateToFolder(session.folder_id, session.folder_name);
@@ -1593,10 +1611,27 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   async toggleFavorite(file: DriveFile): Promise<void> {
+    const wasFavorite = file.is_favorite;
     await this.fileService.toggleFavorite(file);
     if (this.previewFile()?.id === file.id) {
       this.previewFile.update(f => f ? { ...f, is_favorite: !file.is_favorite } : f);
     }
+    if (wasFavorite && this.isStarred()) {
+      this.fileService.searchResults.update(r => r ? r.filter(f => f.id !== file.id) : r);
+    }
+  }
+
+  /** Unstar every selected file. Only offered in the Favorites view, where
+   *  every listed item is (by definition) currently a favorite. */
+  async bulkUnfavorite(): Promise<void> {
+    const ids = [...this.fileService.selectedIds()];
+    if (ids.length === 0) return;
+    const files = this.displayFiles().filter(f => ids.includes(f.id));
+    await Promise.allSettled(files.map(f => this.fileService.toggleFavorite(f)));
+    if (this.isStarred()) {
+      this.fileService.searchResults.update(r => r ? r.filter(f => !ids.includes(f.id)) : r);
+    }
+    this.fileService.clearSelection();
   }
 
   private _pendingPickerPath = '';

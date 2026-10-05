@@ -1,4 +1,4 @@
-<div class="preview-overlay" [class.is-fullscreen]="isFullscreen()" (click)="requestClose()">
+<div class="preview-overlay" [class.is-fullscreen]="isFullscreen()" [class.chrome-hidden]="!chromeVisible()" (click)="requestClose()">
 
   <!-- Header -->
   <header class="preview-header" (click)="$event.stopPropagation()">
@@ -90,9 +90,11 @@
 
   <!-- Media area -->
   <div class="media-area"
+    [class.zoomed]="zoom() > 1"
     (click)="$event.stopPropagation()"
     (touchstart)="onTouchStart($event)"
     (touchend)="onTouchEnd()"
+    (mousedown)="onMediaMouseDown($event)"
   >
     <!-- Swipe action indicators -->
     @if (swipeAction() === 'delete') {
@@ -117,12 +119,13 @@
 
     <!-- Media content -->
     <div class="media-container"
+      (click)="onMediaClick()"
       [style.transform]="mediaTransform()"
       [class.transitioning]="isTransitioning()"
       [class.deleting]="pendingDeleteFile()?.id === file().id && deletePhase() === 'countdown'"
     >
       @if (pendingDeleteFile()?.id === file().id && deletePhase() === 'countdown') {
-        <div class="delete-overlay" (click)="cancelDelete()">
+        <div class="delete-overlay" (click)="$event.stopPropagation(); cancelDelete()">
           <svg viewBox="0 0 24 24" class="delete-overlay-icon">
             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
           </svg>
@@ -154,8 +157,8 @@
             <div class="media-spinner"></div>
           </div>
         }
-        <img [src]="previewSrc()" [alt]="file().name" class="media-img"
-             [class.hidden]="isLoading()"
+        <img [src]="previewSrc()" [alt]="file().name" class="media-img" [class.zoomed]="zoom() > 1"
+             [class.hidden]="isLoading()" draggable="false"
              (load)="onImageLoad()" (error)="onImageError()"
              (dblclick)="toggleFullscreen()" />
       } @else {

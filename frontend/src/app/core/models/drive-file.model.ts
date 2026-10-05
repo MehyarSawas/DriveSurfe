@@ -74,6 +74,10 @@ export interface PreviewSession {
   thumbnail_url: string | null;
   saved_at: string;
   adjacent_files?: DriveFile[];
+  /** Sort the folder was viewed with when the session was saved — reapplied
+   *  when the session is reopened so the retrieved file list matches. */
+  sort_by?: SortBy;
+  sort_dir?: SortDir;
 }
 
 export interface BreadcrumbItem {

@@ -21,6 +21,7 @@ type DeletePhase = 'idle' | 'confirming' | 'countdown';
 export class PreviewComponent implements OnDestroy, AfterViewInit {
   @ViewChild('mediaEl') mediaEl?: ElementRef<HTMLElement>;
   @ViewChild('thumbStrip') thumbStrip?: ElementRef<HTMLElement>;
+  @ViewChild(PdfViewerComponent) pdfViewerRef?: PdfViewerComponent;
 
   readonly file = input.required<DriveFile>();
   readonly hasPrev = input(false);
@@ -78,7 +79,13 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly sessionSaved = signal(false);
   private sessionSavedTimer: ReturnType<typeof setTimeout> | null = null;
   readonly isFullscreen = signal(false);
+  // Whether the header/footer chrome is shown. Tapping the media toggles this
+  // regardless of isFullscreen (the separate true-browser-fullscreen toggle) —
+  // the preview overlay is already a full-screen view on its own.
+  readonly chromeVisible = signal(true);
   private _fsHandler!: () => void;
+  private clickTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastTouchEndTime = 0;
 
   // Slideshow autoplay — images dwell for AUTOPLAY_MS; videos play through and
   // advance when they end (a duration-based timer is the fallback if the
@@ -126,6 +133,22 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private pinchStartTy = 0;
   private pinchCx = 0;
   private pinchCy = 0;
+
+  // Pan state (single-finger touch drag or mouse drag) while zoomed in
+  private panStartX = 0;
+  private panStartY = 0;
+  // For PDFs, vertical panning moves the document's real scroll position
+  // (so it can reach content beyond what was on-screen when zoom started)
+  // instead of the visual translate used for images/video — these track the
+  // previous pointer Y so we can feed incremental deltas into scrollBy().
+  private lastPanTouchY = 0;
+  private lastPanMouseY = 0;
+  private isMousePanning = false;
+  private mouseDidPan = false;
+  private mouseStartX = 0;
+  private mouseStartY = 0;
+  private boundMouseMove!: (e: MouseEvent) => void;
+  private boundMouseUp!: (e: MouseEvent) => void;
 
   readonly swipeOffsetX = signal(0);
   readonly swipeOffsetY = signal(0);
@@ -214,6 +237,10 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   ngAfterViewInit(): void {
     this.boundTouchMove = (e: TouchEvent) => this.zone.run(() => this.onTouchMove(e));
     this.el.nativeElement.addEventListener('touchmove', this.boundTouchMove, { passive: false });
+    this.boundMouseMove = (e: MouseEvent) => this.zone.run(() => this.onWindowMouseMove(e));
+    this.boundMouseUp = () => this.zone.run(() => this.onWindowMouseUp());
+    window.addEventListener('mousemove', this.boundMouseMove);
+    window.addEventListener('mouseup', this.boundMouseUp);
     this._fsHandler = () => this.zone.run(() => {
       if (!document.fullscreenElement) this.isFullscreen.set(false);
     });
@@ -373,9 +400,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.stopAutoplay();
     this.clearPending();
     if (this.sessionSavedTimer) clearTimeout(this.sessionSavedTimer);
+    if (this.clickTimer) clearTimeout(this.clickTimer);
     if (this.boundTouchMove) {
       this.el.nativeElement.removeEventListener('touchmove', this.boundTouchMove);
     }
+    if (this.boundMouseMove) window.removeEventListener('mousemove', this.boundMouseMove);
+    if (this.boundMouseUp) window.removeEventListener('mouseup', this.boundMouseUp);
     if (this._fsHandler) {
       document.removeEventListener('fullscreenchange', this._fsHandler);
     }
@@ -422,6 +452,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.touchStartTime = Date.now();
     this.isSwiping = true;
     this.isTransitioning.set(false);
+    this.panStartX = this.swipeOffsetX();
+    this.panStartY = this.swipeOffsetY();
+    this.lastPanTouchY = t.clientY;
   }
 
   onTouchMove(e: TouchEvent): void {
@@ -444,10 +477,27 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
 
     if (this.isPdf()) {
-      // Single finger on PDF: only track horizontal for swipe-to-navigate; vertical scrolls natively
       if (!this.isSwiping) return;
       const t = e.touches[0];
       const dx = t.clientX - this.touchStartX;
+      if (this.zoom() > 1) {
+        // Zoomed in: a single-finger drag pans freely. Horizontal still uses
+        // the visual translate (a page's full width is always already
+        // rendered, so there's nothing more to reveal by scrolling). Vertical
+        // moves the document's actual scroll position instead, so dragging
+        // can reach real content beyond the slice visible when zoom started
+        // — a translate alone could only re-crop that frozen slice.
+        e.preventDefault();
+        this.touchCurrentX = t.clientX;
+        this.touchCurrentY = t.clientY;
+        const deltaY = t.clientY - this.lastPanTouchY;
+        this.lastPanTouchY = t.clientY;
+        this.pdfViewerRef?.scrollBy(-deltaY);
+        const { maxX } = this.panBounds();
+        this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
+        return;
+      }
+      // Not zoomed: only track horizontal for swipe-to-navigate; vertical scrolls natively
       const dy = t.clientY - this.touchStartY;
       if (Math.abs(dx) > Math.abs(dy)) {
         e.preventDefault();
@@ -464,10 +514,17 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.touchCurrentX = t.clientX;
     this.touchCurrentY = t.clientY;
 
-    if (this.zoom() > 1) return;
-
     const dx = t.clientX - this.touchStartX;
     const dy = t.clientY - this.touchStartY;
+
+    if (this.zoom() > 1) {
+      // Zoomed in: a single-finger drag pans the zoomed area instead of
+      // navigating (swipe-to-navigate is disabled while zoomed).
+      const { maxX, maxY } = this.panBounds();
+      this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
+      this.swipeOffsetY.set(this.clampPan(this.panStartY + dy, maxY));
+      return;
+    }
 
     if (Math.abs(dy) > Math.abs(dx)) {
       this.swipeOffsetY.set(dy);
@@ -479,10 +536,35 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchEnd(e?: TouchEvent): void {
-    if (!e || e.touches.length === 0) this.isTwoFingerTouch.set(false);
+    if (!e || e.touches.length === 0) {
+      this.isTwoFingerTouch.set(false);
+      this.lastTouchEndTime = Date.now();
+    }
+    if (this.isPinching) {
+      if (!e || e.touches.length < 2) {
+        this.isPinching = false;
+        if (this.zoom() <= 1) {
+          this.zoom.set(1);
+          this.swipeOffsetX.set(0);
+          this.swipeOffsetY.set(0);
+        } else if (this.isPdf()) {
+          // Vertical panning for PDFs happens via real scroll from here on —
+          // migrate whatever vertical offset the pinch gesture accumulated
+          // into an actual scroll position instead of leaving it as a translate.
+          this.pdfViewerRef?.scrollBy(-this.swipeOffsetY());
+          this.swipeOffsetY.set(0);
+        }
+      }
+      return;
+    }
     if (this.isPdf()) {
       if (!this.isSwiping) return;
       this.isSwiping = false;
+
+      // While zoomed in, the single-finger drag pans (handled in onTouchMove)
+      // — leave the pan offset where the finger left it, don't navigate.
+      if (this.zoom() > 1) return;
+
       const dx = this.touchCurrentX - this.touchStartX;
       const elapsed = Date.now() - this.touchStartTime;
       const flickX = Math.abs(dx) / elapsed >= 0.3 && Math.abs(dx) >= 20;
@@ -504,26 +586,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       }
       return;
     }
-    if (this.isPinching) {
-      if (!e || e.touches.length < 2) {
-        this.isPinching = false;
-        if (this.zoom() <= 1) {
-          this.zoom.set(1);
-          this.swipeOffsetX.set(0);
-          this.swipeOffsetY.set(0);
-        }
-      }
-      return;
-    }
     if (!this.isSwiping) return;
     this.isSwiping = false;
 
-    // While zoomed in, swipe gestures are disabled
-    if (this.zoom() > 1) {
-      this.swipeOffsetX.set(0);
-      this.swipeOffsetY.set(0);
-      return;
-    }
+    // While zoomed in, the single-finger drag pans (handled in onTouchMove) —
+    // leave the pan offset where the finger left it, don't snap it back.
+    if (this.zoom() > 1) return;
 
     const dx = this.touchCurrentX - this.touchStartX;
     const dy = this.touchCurrentY - this.touchStartY;
@@ -575,16 +643,23 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
       // Tap detection: a short touch with minimal movement is a tap. TWO taps
-      // in quick succession (double-tap) toggle fullscreen; a single tap does
-      // nothing, so an accidental tap no longer flips fullscreen.
+      // in quick succession (double-tap) toggle true browser fullscreen. A
+      // single tap toggles the header/footer chrome — delayed so a following
+      // second tap (double-tap) can still cancel it and toggle fullscreen
+      // instead, rather than firing both.
       const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
       if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
         const now = Date.now();
         if (now - this.lastTapTime < 300) {
+          if (this.clickTimer) { clearTimeout(this.clickTimer); this.clickTimer = null; }
           this.toggleFullscreen();
           this.lastTapTime = 0; // consumed — a third tap starts fresh
         } else {
           this.lastTapTime = now;
+          this.clickTimer = setTimeout(() => {
+            this.clickTimer = null;
+            this.toggleChrome();
+          }, 300);
         }
       }
     }
@@ -596,10 +671,90 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     } else {
       this.isFullscreen.set(true);
+      this.chromeVisible.set(true);
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
     }
+  }
+
+  /** A single tap/click on the media toggles the header/footer chrome. */
+  toggleChrome(): void {
+    this.chromeVisible.update(v => !v);
+  }
+
+  /** Mouse-down on the media area — while zoomed in, starts a drag-to-pan
+   *  instead of letting the click/dblclick handlers see it as a plain click. */
+  onMediaMouseDown(e: MouseEvent): void {
+    if (this.zoom() <= 1 || e.button !== 0) return;
+    e.preventDefault();
+    this.isMousePanning = true;
+    this.mouseDidPan = false;
+    this.mouseStartX = e.clientX;
+    this.mouseStartY = e.clientY;
+    this.panStartX = this.swipeOffsetX();
+    this.panStartY = this.swipeOffsetY();
+    this.lastPanMouseY = e.clientY;
+  }
+
+  private onWindowMouseMove(e: MouseEvent): void {
+    if (!this.isMousePanning) return;
+    const dx = e.clientX - this.mouseStartX;
+    const dy = e.clientY - this.mouseStartY;
+    if (Math.abs(dx) + Math.abs(dy) > 3) this.mouseDidPan = true;
+
+    if (this.isPdf()) {
+      // See onTouchMove: vertical panning scrolls the real document instead
+      // of translating a frozen slice, so it can reach the true top/bottom.
+      const deltaY = e.clientY - this.lastPanMouseY;
+      this.lastPanMouseY = e.clientY;
+      this.pdfViewerRef?.scrollBy(-deltaY);
+      const { maxX } = this.panBounds();
+      this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
+      return;
+    }
+
+    const { maxX, maxY } = this.panBounds();
+    this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
+    this.swipeOffsetY.set(this.clampPan(this.panStartY + dy, maxY));
+  }
+
+  private onWindowMouseUp(): void {
+    this.isMousePanning = false;
+  }
+
+  /** Screen-pixel pan bounds at the current zoom level, so a drag can never
+   *  pan the image entirely out of view. Zero (no panning) when not zoomed. */
+  private panBounds(): { maxX: number; maxY: number } {
+    const z = this.zoom();
+    if (z <= 1) return { maxX: 0, maxY: 0 };
+    const rect = (this.el.nativeElement.querySelector('.media-area') as HTMLElement)?.getBoundingClientRect();
+    const w = rect?.width ?? window.innerWidth;
+    const h = rect?.height ?? window.innerHeight;
+    return { maxX: (w * (z - 1)) / 2, maxY: (h * (z - 1)) / 2 };
+  }
+
+  private clampPan(value: number, max: number): number {
+    return Math.min(Math.max(value, -max), max);
+  }
+
+  /** Mouse click handler for the media area — distinguishes a single click
+   *  (toggle chrome) from the first half of a double-click (toggle fullscreen,
+   *  handled by the native (dblclick) binding). Ignored for clicks synthesized
+   *  right after a touch tap, which onTouchEnd already handled, and for clicks
+   *  that end a drag-to-pan. */
+  onMediaClick(): void {
+    if (this.mouseDidPan) { this.mouseDidPan = false; return; }
+    if (Date.now() - this.lastTouchEndTime < 500) return;
+    if (this.clickTimer) {
+      clearTimeout(this.clickTimer);
+      this.clickTimer = null;
+      return;
+    }
+    this.clickTimer = setTimeout(() => {
+      this.clickTimer = null;
+      this.toggleChrome();
+    }, 300);
   }
 
   /** Toggle the slideshow. Images auto-advance after a fixed dwell; videos play
@@ -752,9 +907,22 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.sessionSavedTimer = setTimeout(() => this.sessionSaved.set(false), 2000);
   }
 
-  zoomIn(): void { this.zoom.update(z => Math.min(z + 0.25, 4)); }
-  zoomOut(): void { this.zoom.update(z => Math.max(z - 0.25, 0.25)); }
+  zoomIn(): void { this.zoom.update(z => Math.min(z + 0.25, 4)); this.clampOffsetsToZoom(); }
+  zoomOut(): void { this.zoom.update(z => Math.max(z - 0.25, 0.25)); this.clampOffsetsToZoom(); }
   resetZoom(): void { this.zoom.set(1); this.swipeOffsetX.set(0); this.swipeOffsetY.set(0); }
+
+  /** After a zoom-level change (buttons/keyboard), re-clamp the pan offset so
+   *  it never leaves the image out of bounds, and reset it once back at 1x. */
+  private clampOffsetsToZoom(): void {
+    if (this.zoom() <= 1) {
+      this.swipeOffsetX.set(0);
+      this.swipeOffsetY.set(0);
+      return;
+    }
+    const { maxX, maxY } = this.panBounds();
+    this.swipeOffsetX.set(this.clampPan(this.swipeOffsetX(), maxX));
+    this.swipeOffsetY.set(this.clampPan(this.swipeOffsetY(), maxY));
+  }
 
   mediaTransform(): string {
     const x = this.swipeOffsetX();
