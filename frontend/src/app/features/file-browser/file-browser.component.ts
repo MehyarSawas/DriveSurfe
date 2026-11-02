@@ -1628,10 +1628,31 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     await this.executeCopyFiles(files, folder.id);
   }
 
+  /** Run async tasks with at most `limit` in flight at once, collecting results
+   *  in the same shape as Promise.allSettled (same order as `items`). */
+  private async runLimited<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+    const results: PromiseSettledResult<R>[] = new Array(items.length);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        try {
+          results[i] = { status: 'fulfilled', value: await task(items[i]) };
+        } catch (reason) {
+          results[i] = { status: 'rejected', reason };
+        }
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
   private async executeCopyFiles(files: DriveFile[], folderId: string): Promise<void> {
-    const results = await Promise.allSettled(
-      files.map(f => this.fileService.copyFile(f.id, folderId))
-    );
+    // Copying is two kDrive API calls per file (duplicate, then move the
+    // duplicate into place) — firing dozens of these at once trips kDrive's
+    // rate limiter more than the server's single built-in retry can absorb.
+    // A small concurrency cap keeps large bulk copies reliable.
+    const results = await this.runLimited(files, 4, f => this.fileService.copyFile(f.id, folderId));
     const failed = results.filter(r => r.status === 'rejected').length;
     const copied = files.length - failed;
     if (failed > 0) {

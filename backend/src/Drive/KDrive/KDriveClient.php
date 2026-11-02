@@ -204,7 +204,19 @@ final class KDriveClient implements DriveInterface
         $data = $this->post("{$driveId}/files/{$fileId}/duplicate", [], self::API_V3);
         $copy = $data['data'] ?? [];
         if (!empty($copy['id']) && (string)$copy['id'] !== (string)$destinationFolderId) {
-            $this->post("{$driveId}/files/{$copy['id']}/move/{$destinationFolderId}", ['conflict' => 'rename'], self::API_V3);
+            try {
+                $this->post("{$driveId}/files/{$copy['id']}/move/{$destinationFolderId}", ['conflict' => 'rename'], self::API_V3);
+            } catch (\Throwable $e) {
+                // The duplicate step already succeeded, so a failed move would
+                // otherwise strand a numbered copy next to the original. Best-effort
+                // clean it up (to trash, recoverable) before reporting the failure.
+                try {
+                    $this->delete((string) $copy['id']);
+                } catch (\Throwable) {
+                    // Cleanup failing shouldn't mask the original error below.
+                }
+                throw $e;
+            }
         }
         return $copy;
     }
@@ -1051,18 +1063,30 @@ final class KDriveClient implements DriveInterface
     private function post(string $path, array $body = [], ?string $baseUrl = null): array
     {
         $token = $this->getToken();
-        try {
-            $response = $this->http->post(($baseUrl ?? self::API_BASE) . "/{$path}", [
-                'headers' => ['Authorization' => "Bearer {$token}", 'Content-Type' => 'application/json'],
-                'json' => $body,
-            ]);
-            $data = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
-            if (($data['result'] ?? '') === 'error') {
-                throw new RuntimeException('kDrive: ' . json_encode($data['error'] ?? 'unknown'));
+        $url = ($baseUrl ?? self::API_BASE) . "/{$path}";
+
+        // Same short-rolling-window throttle as get() — bulk operations (e.g.
+        // copying/moving many files at once) fire enough concurrent POSTs to
+        // trip kDrive's rate limiter, so one honored retry matters here too.
+        for ($attempt = 0; ; $attempt++) {
+            try {
+                $response = $this->http->post($url, [
+                    'headers' => ['Authorization' => "Bearer {$token}", 'Content-Type' => 'application/json'],
+                    'json' => $body,
+                ]);
+                $data = json_decode((string) $response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+                if (($data['result'] ?? '') === 'error') {
+                    throw new RuntimeException('kDrive: ' . json_encode($data['error'] ?? 'unknown'));
+                }
+                return $data;
+            } catch (GuzzleException $e) {
+                $wait = $attempt === 0 ? self::retryAfterSeconds($e) : null;
+                if ($wait !== null) {
+                    sleep($wait);
+                    continue;
+                }
+                throw new RuntimeException("kDrive API error: " . $e->getMessage() . self::responseDetail($e), 0, $e);
             }
-            return $data;
-        } catch (GuzzleException $e) {
-            throw new RuntimeException("kDrive API error: " . $e->getMessage() . self::responseDetail($e), 0, $e);
         }
     }
 
