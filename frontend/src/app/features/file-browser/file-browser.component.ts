@@ -1610,6 +1610,12 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
     finally { this.infoStatsLoading.set(false); }
   }
 
+  /** Shift-click range select from the grid/list — add every file in the
+   *  range to the selection in one update. */
+  onSelectRange(files: DriveFile[]): void {
+    this.fileService.selectIds(files.map(f => f.id));
+  }
+
   async toggleFavorite(file: DriveFile): Promise<void> {
     const wasFavorite = file.is_favorite;
     await this.fileService.toggleFavorite(file);

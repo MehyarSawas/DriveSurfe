@@ -840,6 +840,17 @@ export class FileService {
     });
   }
 
+  /** Adds every given id to the selection in one update (union, not a
+   *  per-item toggle) — used for shift-click range select, so an item
+   *  already selected (e.g. the range's anchor) is never flipped off. */
+  selectIds(ids: string[]): void {
+    this.selectedIds.update(set => {
+      const next = new Set(set);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+  }
+
   clearSelection(): void {
     this.selectedIds.set(new Set());
   }

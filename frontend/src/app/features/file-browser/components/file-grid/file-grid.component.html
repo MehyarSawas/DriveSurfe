@@ -5,11 +5,11 @@
       [attr.data-file-id]="file.id"
       [class.selected]="isSelected(file.id)"
       [class.is-dir]="file.is_dir"
-      (click)="fileClick.emit(file)"
+      (click)="onCardClick($event, file)"
     >
       <!-- Select circle -->
       <div class="select-circle" [class.checked]="isSelected(file.id)"
-           (click)="$event.stopPropagation(); selectToggle.emit(file)"
+           (click)="onSelectClick($event, file)"
            (touchstart)="onSelectTouchStart($event, file)">
         @if (isSelected(file.id)) {
           <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>

@@ -12,6 +12,9 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background var(--transition);
+  // Shift-clicking for range select would otherwise trigger the browser's
+  // native text-selection highlight across rows.
+  user-select: none;
 
   @media (hover: hover) and (pointer: fine) {
     &:hover {
