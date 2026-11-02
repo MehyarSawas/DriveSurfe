@@ -526,8 +526,8 @@ export class FileService {
     }
   }
 
-  async copyFile(fileId: string, destinationFolderId: string): Promise<void> {
-    await firstValueFrom(this.http.post(`/api/files/${fileId}/copy`, { destination_folder_id: destinationFolderId }));
+  async copyFile(fileId: string, destinationFolderId: string, strategy: 'override' | 'skip' = 'override'): Promise<void> {
+    await firstValueFrom(this.http.post(`/api/files/${fileId}/copy`, { destination_folder_id: destinationFolderId, strategy }));
   }
 
   async uploadFile(parentFolderId: string, fileName: string, mimeType: string, data: Blob): Promise<DriveFile> {

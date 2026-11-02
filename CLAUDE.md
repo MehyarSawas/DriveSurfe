@@ -88,7 +88,7 @@ Key methods and their upstream endpoints:
 | `search($query, $folderId?, $options)` | V3 `GET /files/search` | `query_scope=filename`, `limit=500`, fully paginated server-side internally — **`has_more`/`cursor` in the response are always false/null**, clients always get one flat pre-resolved list |
 | `createFolder($parentId, $name)` | V3 `POST /files/{parentId}/directory` | |
 | `moveFile($id, $destId, $strategy)` | V3 `POST /files/{id}/move/{destId}` | `strategy='skip'` → `conflict:'error'`, else `conflict:'rename'` |
-| `copyFile($id, $destId)` | V3 `POST /files/{id}/copy/{destId}` ("Copy to Directory", `conflict:'rename'`) | Single atomic call — **returns raw (non-normalized) kDrive data**, unlike every other method. Previously implemented as `duplicate` (same-folder copy) + `move`, which could strand an orphaned numbered duplicate next to the original if the move step failed partway through a bulk copy — don't revert to that pattern |
+| `copyFile($id, $destId, $strategy)` | V3 `POST /files/{id}/copy/{destId}` ("Copy to Directory") | `strategy='skip'` → `conflict:'error'`, else `conflict:'rename'` (same convention as `moveFile`) — `'skip'` is what bulk copy uses so retrying a partially-failed bulk copy doesn't re-copy already-succeeded items under a renamed duplicate. Single atomic call — **returns raw (non-normalized) kDrive data**, unlike every other method. Previously implemented as `duplicate` (same-folder copy) + `move`, which could strand an orphaned numbered duplicate next to the original if the move step failed partway through a bulk copy — don't revert to that pattern |
 | `uploadFile($parentId, $filename, $mimeType, $binary)` | V3 `POST /upload?directory_id=&file_name=&conflict=rename&total_size=` | raw binary body, `timeout: 300` (overrides the default 30s), throws `RuntimeException` on Guzzle error or `result:'error'` response |
 | `renameFile($id, $name)` | V2 `POST /files/{id}/rename` | |
 | `favorite`/`unfavorite`/`delete` | V2 `POST\|DELETE /files/{id}/favorite`, `DELETE /files/{id}` | |
@@ -136,7 +136,7 @@ All under `/api`. "Auth" = requires a valid `ds_session` cookie via `AuthMiddlew
 | DELETE | `/files/{id}` | Yes | — | `{ok:true}` |
 | POST | `/files/{id}/restore` | Yes | — | `{data:true}` |
 | POST | `/files/{id}/move` | Yes | `{destination_folder_id, strategy:'override'\|'skip'}` | `{data:true}` |
-| POST | `/files/{id}/copy` | Yes | `{destination_folder_id}` | `{data: copy}` |
+| POST | `/files/{id}/copy` | Yes | `{destination_folder_id, strategy:'override'\|'skip'}` | `{data: copy}` |
 | POST | `/folders/{id}/upload` | Yes | headers `X-File-Name`(rawurlencoded), `Content-Type`; raw binary body | `{data: file}` |
 | POST | `/files/{id}/rename` | Yes | `{name}` (1–255 chars) | `{data: file}` |
 | GET/POST/DELETE | `/sessions[/{id}]` | Yes | preview-position bookmarks | see SessionRoutes |

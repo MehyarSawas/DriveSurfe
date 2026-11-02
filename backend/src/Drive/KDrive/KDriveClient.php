@@ -198,14 +198,19 @@ final class KDriveClient implements DriveInterface
         $this->post("{$driveId}/files/{$fileId}/move/{$destinationFolderId}", ['conflict' => $conflict], self::API_V3);
     }
 
-    public function copyFile(string $fileId, string $destinationFolderId): array
+    public function copyFile(string $fileId, string $destinationFolderId, string $strategy = 'override'): array
     {
         $driveId = $this->getDriveId();
         // kDrive's "Copy to Directory" endpoint copies the file directly into
         // the destination in one call — no separate duplicate-in-place step,
         // so there's no intermediate state that can strand a stray copy next
         // to the original if a later step fails.
-        $data = $this->post("{$driveId}/files/{$fileId}/copy/{$destinationFolderId}", ['conflict' => 'rename'], self::API_V3);
+        // strategy='skip' errors instead of creating a renamed duplicate when
+        // a same-named file already exists at the destination — lets a retried
+        // bulk copy skip items that already succeeded instead of re-copying
+        // them under a numbered name.
+        $conflict = $strategy === 'skip' ? 'error' : 'rename';
+        $data = $this->post("{$driveId}/files/{$fileId}/copy/{$destinationFolderId}", ['conflict' => $conflict], self::API_V3);
         return $data['data'] ?? [];
     }
 

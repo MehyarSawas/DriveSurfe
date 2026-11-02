@@ -1648,17 +1648,19 @@ export class FileBrowserComponent implements OnInit, OnDestroy {
   }
 
   private async executeCopyFiles(files: DriveFile[], folderId: string): Promise<void> {
-    // Copying is two kDrive API calls per file (duplicate, then move the
-    // duplicate into place) — firing dozens of these at once trips kDrive's
-    // rate limiter more than the server's single built-in retry can absorb.
-    // A small concurrency cap keeps large bulk copies reliable.
-    const results = await this.runLimited(files, 4, f => this.fileService.copyFile(f.id, folderId));
+    // Firing dozens of copies at once trips kDrive's rate limiter more than
+    // the server's single built-in retry can absorb — a small concurrency cap
+    // keeps large bulk copies reliable. strategy:'skip' errors instead of
+    // creating a renamed duplicate for a file that already exists at the
+    // destination, so retrying a partially-failed bulk copy doesn't re-copy
+    // the items that already succeeded.
+    const results = await this.runLimited(files, 4, f => this.fileService.copyFile(f.id, folderId, 'skip'));
     const failed = results.filter(r => r.status === 'rejected').length;
     const copied = files.length - failed;
     if (failed > 0) {
       const msg = copied > 0
-        ? `${copied} copied, ${failed} failed`
-        : `Copy failed for all ${failed} files`;
+        ? `${copied} copied, ${failed} already exist at destination`
+        : `${failed} already exist at destination — nothing copied`;
       this.bulkMoveToast.set(msg);
       setTimeout(() => this.bulkMoveToast.set(null), 6000);
     } else {
