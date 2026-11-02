@@ -226,9 +226,10 @@ final class FileRoutes
         $group->post('/files/{id}/copy', function (Request $req, Response $res, array $args) use ($drive): Response {
             if (!self::validFileId($args['id'])) return self::fileIdError($res);
             $body   = (array) $req->getParsedBody();
-            $destId = $body['destination_folder_id'] ?? '';
+            $destId   = $body['destination_folder_id'] ?? '';
+            $strategy = in_array($body['strategy'] ?? '', ['override', 'skip'], true) ? $body['strategy'] : 'override';
             if (!self::validFileId($destId)) return self::fileIdError($res);
-            $copy = $drive->copyFile($args['id'], $destId);
+            $copy = $drive->copyFile($args['id'], $destId, $strategy);
             return self::json($res, ['data' => $copy]);
         })->add($auth);
 
