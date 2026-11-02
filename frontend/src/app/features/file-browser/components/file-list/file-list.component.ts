@@ -1,4 +1,4 @@
-import { Component, input, output, signal, ElementRef, NgZone, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, input, output, signal, effect, ElementRef, NgZone, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { DriveFile } from '../../../../core/models/drive-file.model';
 
@@ -27,6 +27,10 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   readonly fileClick = output<DriveFile>();
   readonly fileDblClick = output<DriveFile>();
   readonly selectToggle = output<DriveFile>();
+  /** Shift-click range select — emits every file between the last explicitly
+   *  selected item and the shift-clicked one (inclusive), for the parent to
+   *  add to the selection in one atomic update. */
+  readonly selectRange = output<DriveFile[]>();
   readonly restore = output<DriveFile>();
   readonly permanentDelete = output<DriveFile>();
   readonly rename = output<DriveFile>();
@@ -119,7 +123,15 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
   private boundDragMove!: (e: TouchEvent) => void;
   private boundDragEnd!: () => void;
 
-  constructor(private el: ElementRef, private zone: NgZone) {}
+  /** Index (within files()) of the last explicitly selected item — the
+   *  anchor a shift-click range extends from. */
+  private lastSelectedIndex = -1;
+
+  constructor(private el: ElementRef, private zone: NgZone) {
+    effect(() => {
+      if (this.selectedIds().size === 0) this.lastSelectedIndex = -1;
+    });
+  }
 
   ngAfterViewInit(): void {
     this.boundDragMove = (e: TouchEvent) => this.zone.run(() => this.onDragMove(e));
@@ -132,6 +144,47 @@ export class FileListComponent implements AfterViewInit, OnDestroy {
     document.removeEventListener('touchmove', this.boundDragMove);
     document.removeEventListener('touchend',  this.boundDragEnd);
     this.stopAutoScroll();
+  }
+
+  /** Main row click — opens the file, unless shift is held (desktop range
+   *  select), in which case it extends the selection instead. */
+  onRowClick(e: MouseEvent, file: DriveFile): void {
+    if (e.shiftKey) {
+      e.preventDefault();
+      this.extendSelection(file);
+      return;
+    }
+    this.fileClick.emit(file);
+  }
+
+  /** Checkbox click — plain click toggles just this file; shift-click
+   *  extends the selection from the last explicitly selected item. */
+  onSelectClick(e: MouseEvent, file: DriveFile): void {
+    e.stopPropagation();
+    if (e.shiftKey) {
+      this.extendSelection(file);
+      return;
+    }
+    this.selectToggle.emit(file);
+    this.lastSelectedIndex = this.files().findIndex(f => f.id === file.id);
+  }
+
+  /** Shift-click range select: selects everything between the last
+   *  explicitly selected item and `file` (inclusive). With no prior anchor,
+   *  falls back to a plain single toggle. */
+  private extendSelection(file: DriveFile): void {
+    const files = this.files();
+    const targetIdx = files.findIndex(f => f.id === file.id);
+    if (targetIdx === -1) return;
+    if (this.lastSelectedIndex === -1) {
+      this.selectToggle.emit(file);
+      this.lastSelectedIndex = targetIdx;
+      return;
+    }
+    const lo = Math.min(this.lastSelectedIndex, targetIdx);
+    const hi = Math.max(this.lastSelectedIndex, targetIdx);
+    this.selectRange.emit(files.slice(lo, hi + 1));
+    this.lastSelectedIndex = targetIdx;
   }
 
   onSelectTouchStart(e: TouchEvent, file: DriveFile): void {

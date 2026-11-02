@@ -25,6 +25,9 @@
   transition: background var(--transition), box-shadow var(--transition);
   padding: 8px;
   background: var(--color-surface);
+  // Shift-clicking for range select would otherwise trigger the browser's
+  // native text-selection highlight across cards.
+  user-select: none;
 
   /* hover only on pointer devices — prevents iOS double-tap */
   @media (hover: hover) and (pointer: fine) {

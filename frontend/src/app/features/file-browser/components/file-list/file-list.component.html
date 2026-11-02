@@ -4,11 +4,11 @@
       class="file-row"
       [attr.data-file-id]="file.id"
       [class.selected]="isSelected(file.id)"
-      (click)="fileClick.emit(file)"
+      (click)="onRowClick($event, file)"
       (dblclick)="fileDblClick.emit(file)"
     >
       <!-- Checkbox -->
-      <div class="col-check" (click)="$event.stopPropagation(); selectToggle.emit(file)"
+      <div class="col-check" (click)="onSelectClick($event, file)"
            (touchstart)="onSelectTouchStart($event, file)">
         <div class="checkbox" [class.checked]="isSelected(file.id)">
           @if (isSelected(file.id)) {
