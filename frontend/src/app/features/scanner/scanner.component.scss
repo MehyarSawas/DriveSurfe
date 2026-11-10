@@ -15,7 +15,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  padding-top: max(12px, env(safe-area-inset-top));
+  padding-top: max(12px, var(--safe-top));
   background: rgba(0,0,0,0.6);
   backdrop-filter: blur(4px);
   flex-shrink: 0;
@@ -114,7 +114,7 @@
   display: flex;
   align-items: center;
   padding: 10px 16px;
-  padding-top: max(10px, env(safe-area-inset-top));
+  padding-top: max(10px, var(--safe-top));
   background: rgba(40, 40, 40, 0.75);
   backdrop-filter: blur(6px);
   flex-shrink: 0;
@@ -227,7 +227,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  padding-top: max(10px, env(safe-area-inset-top));
+  padding-top: max(10px, var(--safe-top));
   background: #c9cbcf;
   flex-shrink: 0;
 }

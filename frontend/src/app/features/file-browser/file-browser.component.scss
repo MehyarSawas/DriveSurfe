@@ -24,7 +24,7 @@
 
 .sidebar-header {
   padding: 16px;
-  padding-top: max(16px, env(safe-area-inset-top));
+  padding-top: max(16px, var(--safe-top));
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -221,8 +221,8 @@
   gap: 8px;
   padding: 0 12px;
   padding-right: max(12px, env(safe-area-inset-right));
-  padding-top: env(safe-area-inset-top);
-  height: calc(var(--header-height) + env(safe-area-inset-top));
+  padding-top: var(--safe-top);
+  height: calc(var(--header-height) + var(--safe-top));
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
