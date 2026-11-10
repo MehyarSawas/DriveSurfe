@@ -29,23 +29,6 @@
   --sidebar-width: 256px;
   --header-height: 64px;
   --transition: 150ms ease;
-  --safe-top: env(safe-area-inset-top, 0px);
-}
-
-// iOS 26.1 shipped a WebKit regression where env(safe-area-inset-top) reports
-// 0 in a standalone (Home Screen / "Add to Home Screen") web app instead of
-// the real status-bar inset. With apple-mobile-web-app-status-bar-style set
-// to black-translucent (index.html), the status bar is drawn as a
-// translucent overlay on top of page content — with the inset reporting 0,
-// our own headers lose their top padding and render underneath that
-// translucent bar, visually "blurred" by its vibrancy effect. Clamp to a
-// sane minimum only in standalone display mode (regular browser tabs report
-// the correct value and aren't affected, so leave them alone). Safe to
-// remove once Apple fixes the regression upstream.
-@media (display-mode: standalone) {
-  :root {
-    --safe-top: max(env(safe-area-inset-top, 0px), 44px);
-  }
 }
 
 html, body {

@@ -8,7 +8,7 @@
   color: white;
   // Combined header + footer height, reserved for sizing the media area.
   // Collapses to 0 in .chrome-hidden so the media expands into the freed space.
-  --chrome-offset: calc(112px + var(--safe-top));
+  --chrome-offset: calc(112px + env(safe-area-inset-top));
 }
 
 :fullscreen .preview-overlay,
@@ -55,8 +55,8 @@
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  padding-top: var(--safe-top);
-  height: calc(56px + var(--safe-top));
+  padding-top: env(safe-area-inset-top);
+  height: calc(56px + env(safe-area-inset-top));
   background: rgba(0,0,0,0.6);
   flex-shrink: 0;
   backdrop-filter: blur(8px);
@@ -747,7 +747,7 @@
 
 .preview-menu {
   position: fixed;
-  top: calc(56px + var(--safe-top) + 4px);
+  top: calc(56px + env(safe-area-inset-top) + 4px);
   right: 16px;
   background: rgba(30,30,30,0.98);
   border: 1px solid rgba(255,255,255,0.12);
