@@ -7,13 +7,19 @@ import { FormsModule } from '@angular/forms';
 import { DriveFile } from '../../core/models/drive-file.model';
 import { FolderPickerComponent } from '../../shared/components/folder-picker/folder-picker.component';
 import { PdfViewerComponent } from '../../shared/components/pdf-viewer/pdf-viewer.component';
+import { DocxViewerComponent } from '../../shared/components/docx-viewer/docx-viewer.component';
+import { XlsxViewerComponent } from '../../shared/components/xlsx-viewer/xlsx-viewer.component';
+import { TextViewerComponent } from '../../shared/components/text-viewer/text-viewer.component';
 
 type DeletePhase = 'idle' | 'confirming' | 'countdown';
 
 @Component({
   selector: 'ds-preview',
   standalone: true,
-  imports: [CommonModule, FormsModule, FolderPickerComponent, PdfViewerComponent],
+  imports: [
+    CommonModule, FormsModule, FolderPickerComponent, PdfViewerComponent,
+    DocxViewerComponent, XlsxViewerComponent, TextViewerComponent,
+  ],
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],
   host: { '(window:keydown)': 'onKeyDown($event)' },
@@ -181,6 +187,34 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     return f.mime_type === 'application/pdf' || f.extension === 'pdf';
   });
 
+  readonly isDocx = computed(() => {
+    const f = this.file();
+    return f.mime_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || f.extension === 'docx';
+  });
+
+  readonly isXlsx = computed(() => {
+    const f = this.file();
+    return f.mime_type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || f.extension === 'xlsx';
+  });
+
+  private static readonly TEXT_EXTENSIONS = new Set([
+    'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'log', 'xml', 'yml', 'yaml',
+    'ini', 'conf', 'cfg', 'env', 'sh', 'bash', 'zsh', 'js', 'mjs', 'cjs', 'ts',
+    'tsx', 'jsx', 'py', 'php', 'rb', 'go', 'rs', 'java', 'c', 'h', 'cpp', 'hpp',
+    'cs', 'css', 'scss', 'sass', 'less', 'html', 'htm', 'sql', 'toml',
+    'properties', 'gradle',
+  ]);
+
+  readonly isText = computed(() => {
+    const f = this.file();
+    return f.mime_type.startsWith('text/') || PreviewComponent.TEXT_EXTENSIONS.has(f.extension.toLowerCase());
+  });
+
+  /** PDF/docx/xlsx/text all get their own internal vertical scroll and a
+   *  horizontal-swipe-only navigation gesture (like PDF already had), rather
+   *  than the image/video swipe-up-to-delete / swipe-down-to-move gestures. */
+  readonly isScrollableDoc = computed(() => this.isPdf() || this.isDocx() || this.isXlsx() || this.isText());
+
   readonly previewSrc = computed(() => {
     const f = this.file();
     if (this.isVideo()) {
@@ -214,7 +248,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         this.previewFailed.set(false);
         this.videoTranscoding.set(false);
         this.videoReady.set(false);
-        if (!this.isVideo() && !this.isPdf()) this.isLoading.set(true);
+        if (!this.isVideo() && !this.isScrollableDoc()) this.isLoading.set(true);
         if (!this.pendingInterval) {
           this.deletePhase.set('idle');
           this.countdown.set(10);
@@ -476,7 +510,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       return;
     }
 
-    if (this.isPdf()) {
+    if (this.isScrollableDoc()) {
+      // Single finger on PDF/docx/xlsx/text: only track horizontal for swipe-to-navigate; vertical scrolls natively
       if (!this.isSwiping) return;
       const t = e.touches[0];
       const dx = t.clientX - this.touchStartX;
@@ -557,7 +592,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       }
       return;
     }
-    if (this.isPdf()) {
+    if (this.isScrollableDoc()) {
       if (!this.isSwiping) return;
       this.isSwiping = false;
 
