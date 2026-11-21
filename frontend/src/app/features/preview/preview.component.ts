@@ -595,8 +595,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       const newTx = midX - this.pinchCx - imageX * newZoom;
       const newTy = midY - this.pinchCy - imageY * newZoom;
       this.zoom.set(newZoom);
-      this.swipeOffsetX.set(newTx);
-      this.swipeOffsetY.set(newTy);
+      // Unlike the single-finger drag-to-pan-while-zoomed path below (which
+      // always clamps to panBounds()), this two-finger pinch+drag translate
+      // was applied completely unclamped — a real, reported bug: dragging
+      // while pinching could push the image arbitrarily far off-screen,
+      // into blank letterboxed margin with nothing to stop it or bring it
+      // back ("the document runs away", worse with each repeated attempt
+      // since nothing ever un-does the accumulated offset).
+      const { maxX, maxY } = this.panBounds();
+      this.swipeOffsetX.set(this.clampPan(newTx, maxX));
+      this.swipeOffsetY.set(this.clampPan(newTy, maxY));
       return;
     }
 
@@ -889,13 +897,25 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   /** Screen-pixel pan bounds at the current zoom level, so a drag can never
-   *  pan the image entirely out of view. Zero (no panning) when not zoomed. */
+   *  pan the image entirely out of view. Zero (no panning) when not zoomed.
+   *  Measures `.media-container` (which shrink-wraps to the actual
+   *  rendered image/video box), not `.media-area` (the full, fixed-size
+   *  viewport area) — a portrait document image inside a portrait phone
+   *  screen, say, fills the area's height but is letterboxed narrower than
+   *  its full width; bounds computed from the *area* instead of the actual
+   *  *image* let a drag pan straight past the image's real right/left edge
+   *  into the blank letterboxed margin, with zoom clamped so there was no
+   *  way back short of resetting — a real, reported bug ("the document
+   *  runs away"). `.media-container` already has the current zoom's CSS
+   *  transform applied (see mediaTransform()), so its live rect is
+   *  *scaled* — divide the zoom factor back out to recover the real
+   *  unscaled size this formula needs. */
   private panBounds(): { maxX: number; maxY: number } {
     const z = this.zoom();
     if (z <= 1) return { maxX: 0, maxY: 0 };
-    const rect = (this.el.nativeElement.querySelector('.media-area') as HTMLElement)?.getBoundingClientRect();
-    const w = rect?.width ?? window.innerWidth;
-    const h = rect?.height ?? window.innerHeight;
+    const rect = (this.el.nativeElement.querySelector('.media-container') as HTMLElement)?.getBoundingClientRect();
+    const w = rect ? rect.width / z : window.innerWidth;
+    const h = rect ? rect.height / z : window.innerHeight;
     return { maxX: (w * (z - 1)) / 2, maxY: (h * (z - 1)) / 2 };
   }
 
