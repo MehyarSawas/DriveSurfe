@@ -221,7 +221,13 @@
 
   <!-- Footer -->
   <footer class="preview-footer" (click)="$event.stopPropagation()">
-    <div class="swipe-hint">Swipe up to delete · Swipe left/right to navigate</div>
+    <div class="swipe-hint">
+      @if (isNativeScrollDoc()) {
+        Pinch to zoom
+      } @else {
+        Swipe up to delete · Swipe left/right to navigate
+      }
+    </div>
     <span class="footer-filename" #footerTitleEl (click)="onTitleClick(footerTitleEl)">{{ file().name }}</span>
     <div class="zoom-controls">
       <button class="icon-btn" (click)="zoomOut()" title="Zoom out (-)">
