@@ -142,21 +142,24 @@ export class DocxViewerComponent implements OnChanges {
 
   /** Called continuously while two fingers are down, so the content under the
    *  pinch midpoint stays visually fixed as it scales — like iOS's own
-   *  pinch-zoom — instead of always growing from the top-left corner. Applies
-   *  the new scale straight to the DOM (not just the `zoom` input signal) so
-   *  scrollWidth/Height are correct *immediately*, before Angular's own change
-   *  detection would otherwise catch up; the signal write right after keeps
-   *  later reactive reads (and the next normal render) consistent with it. */
+   *  pinch-zoom — instead of always growing from the top-left corner. Reads
+   *  the *currently rendered* scale straight off the DOM (not the `zoom`
+   *  input) for its "before" reference, since the input is only updated once
+   *  Angular's own change detection next runs — which, mid-gesture, can
+   *  still be a frame behind this synchronous call. Sets the new scale the
+   *  same way, so scrollWidth/Height are correct immediately rather than
+   *  waiting on that same change detection pass. */
   pinchZoomAt(newZoomInput: number, clientX: number, clientY: number): void {
     const scroll = this.scrollEl?.nativeElement;
     const box = this.scaleBoxEl?.nativeElement;
     const body = this.bodyEl?.nativeElement;
-    if (!scroll || !box || !body || !this.naturalWidth()) return;
+    const w0 = this.naturalWidth();
+    if (!scroll || !box || !body || !w0) return;
 
     const rect = scroll.getBoundingClientRect();
     const viewX = clientX - rect.left;
     const viewY = clientY - rect.top;
-    const oldScale = this.scale();
+    const oldScale = box.offsetWidth / w0;
     const contentX = (scroll.scrollLeft + viewX) / oldScale;
     const contentY = (scroll.scrollTop + viewY) / oldScale;
 
@@ -171,6 +174,26 @@ export class DocxViewerComponent implements OnChanges {
     const maxTop = Math.max(h - scroll.clientHeight, 0);
     scroll.scrollLeft = Math.min(Math.max(contentX * newScale - viewX, 0), maxLeft);
     scroll.scrollTop = Math.min(Math.max(contentY * newScale - viewY, 0), maxTop);
+  }
+
+  /** Called by the parent right after it snaps `zoom` back to 1 at the end
+   *  of a pinch gesture (e.g. the user pinched below the fit-to-width
+   *  baseline) — returns cleanly to the top-left of the fit-to-width view
+   *  instead of leaving whatever scroll position the gesture's last frame
+   *  happened to leave against the *old* (different) content size, which
+   *  would otherwise show up as a stray jump once the reactive `zoom` input
+   *  catches up and resizes the content out from under it. */
+  resetScroll(): void {
+    const scroll = this.scrollEl?.nativeElement;
+    const box = this.scaleBoxEl?.nativeElement;
+    const body = this.bodyEl?.nativeElement;
+    if (!scroll || !box || !body) return;
+    const newScale = this.baseScale();
+    box.style.width = `${this.naturalWidth() * newScale}px`;
+    box.style.height = `${this.naturalHeight() * newScale}px`;
+    body.style.transform = `scale(${newScale})`;
+    scroll.scrollLeft = 0;
+    scroll.scrollTop = 0;
   }
 
   // scrollWidth/scrollHeight are layout properties (unaffected by the

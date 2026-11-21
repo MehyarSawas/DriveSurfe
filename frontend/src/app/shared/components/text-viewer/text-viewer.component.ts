@@ -90,9 +90,12 @@ export class TextViewerComponent implements OnChanges {
 
   /** Called continuously while two fingers are down, so the line under the
    *  pinch midpoint stays visually fixed as the text scales — like iOS's own
-   *  pinch-zoom. Sets font-size directly on the DOM (not just the `zoom`
-   *  input) so scrollHeight reflects it immediately, before Angular's own
-   *  change detection would otherwise catch up. */
+   *  pinch-zoom. Reads the *currently rendered* font-size straight off the
+   *  DOM (not the `zoom` input) for its "before" reference, since the input
+   *  is only updated once Angular's own change detection next runs — which,
+   *  mid-gesture, can still be a frame behind this synchronous call. Sets
+   *  the new size the same way, so scrollHeight reflects it immediately
+   *  rather than waiting on that same change detection pass. */
   pinchZoomAt(newZoomInput: number, clientX: number, clientY: number): void {
     const scroll = this.scrollEl?.nativeElement;
     const content = this.contentEl?.nativeElement;
@@ -101,7 +104,7 @@ export class TextViewerComponent implements OnChanges {
     const rect = scroll.getBoundingClientRect();
     const viewX = clientX - rect.left;
     const viewY = clientY - rect.top;
-    const oldScale = this.zoom();
+    const oldScale = parseFloat(getComputedStyle(content).fontSize) / TextViewerComponent.BASE_FONT_PX;
     const contentX = (scroll.scrollLeft + viewX) / oldScale;
     const contentY = (scroll.scrollTop + viewY) / oldScale;
 
@@ -111,6 +114,19 @@ export class TextViewerComponent implements OnChanges {
     const maxTop = Math.max(scroll.scrollHeight - scroll.clientHeight, 0);
     scroll.scrollLeft = Math.min(Math.max(contentX * newZoomInput - viewX, 0), maxLeft);
     scroll.scrollTop = Math.min(Math.max(contentY * newZoomInput - viewY, 0), maxTop);
+  }
+
+  /** Called by the parent right after it snaps `zoom` back to 1 at the end
+   *  of a pinch gesture — returns cleanly to the top-left at the base font
+   *  size instead of leaving whatever scroll position the gesture's last
+   *  frame happened to leave against the *old* (different) content size. */
+  resetScroll(): void {
+    const scroll = this.scrollEl?.nativeElement;
+    const content = this.contentEl?.nativeElement;
+    if (!scroll || !content) return;
+    content.style.fontSize = `${TextViewerComponent.BASE_FONT_PX}px`;
+    scroll.scrollLeft = 0;
+    scroll.scrollTop = 0;
   }
 
   private async load(): Promise<void> {

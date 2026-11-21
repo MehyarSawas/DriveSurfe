@@ -518,7 +518,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   /** Whichever of docx/xlsx/text is actually rendered for the current file —
    *  at most one is ever present in the DOM at a time. */
-  private nativeScrollDocRef(): { pinchZoomAt(zoom: number, clientX: number, clientY: number): void } | undefined {
+  private nativeScrollDocRef(): { pinchZoomAt(zoom: number, clientX: number, clientY: number): void; resetScroll(): void } | undefined {
     return this.docxViewerRef ?? this.xlsxViewerRef ?? this.textViewerRef;
   }
 
@@ -632,6 +632,13 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
           this.zoom.set(1);
           this.swipeOffsetX.set(0);
           this.swipeOffsetY.set(0);
+          // docx/xlsx/text applied the last few pinch frames imperatively,
+          // straight to the DOM — the reactive `zoom` write above will
+          // eventually resize them to match again, but only once Angular's
+          // own change detection next runs, which can otherwise show up as
+          // a jump (old scroll position against the new, different size).
+          // Reset now, synchronously, so there's nothing left to jump.
+          if (this.isNativeScrollDoc()) this.nativeScrollDocRef()?.resetScroll();
         } else if (this.isPdf()) {
           // Vertical panning for PDFs happens via real scroll from here on —
           // migrate whatever vertical offset the pinch gesture accumulated
