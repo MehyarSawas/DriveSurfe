@@ -88,14 +88,36 @@ export class TextViewerComponent implements OnChanges {
     if (changes['fileId']) this.load();
   }
 
+  /** The content-space point (unscaled coordinates) that was under the
+   *  fingers when the current pinch gesture began — fixed for the gesture's
+   *  whole duration. Letting it move each frame (e.g. recomputing it from
+   *  that frame's own clientX/Y) only ever re-anchors the zoom in place; it
+   *  can't reproduce a drag, since "put the point under the current finger
+   *  position back under the current finger position" is a no-op whenever
+   *  the scale isn't also changing that frame. Keeping it fixed from gesture
+   *  start and sliding the *target* screen position (clientX/Y) each frame
+   *  instead is what makes a two-finger drag pan the view, exactly like the
+   *  existing image/video/PDF pinch math this mirrors. */
+  private pinchAnchorX = 0;
+  private pinchAnchorY = 0;
+
+  /** Call once when a pinch gesture starts (not on every move). */
+  beginPinch(clientX: number, clientY: number): void {
+    const scroll = this.scrollEl?.nativeElement;
+    const content = this.contentEl?.nativeElement;
+    if (!scroll || !content) return;
+    const rect = scroll.getBoundingClientRect();
+    const curScale = parseFloat(getComputedStyle(content).fontSize) / TextViewerComponent.BASE_FONT_PX;
+    this.pinchAnchorX = (scroll.scrollLeft + (clientX - rect.left)) / curScale;
+    this.pinchAnchorY = (scroll.scrollTop + (clientY - rect.top)) / curScale;
+  }
+
   /** Called continuously while two fingers are down, so the line under the
-   *  pinch midpoint stays visually fixed as the text scales — like iOS's own
-   *  pinch-zoom. Reads the *currently rendered* font-size straight off the
-   *  DOM (not the `zoom` input) for its "before" reference, since the input
-   *  is only updated once Angular's own change detection next runs — which,
-   *  mid-gesture, can still be a frame behind this synchronous call. Sets
-   *  the new size the same way, so scrollHeight reflects it immediately
-   *  rather than waiting on that same change detection pass. */
+   *  pinch midpoint stays visually fixed as the text scales, and the view
+   *  pans if the fingers drag — like iOS's own pinch-zoom. Sets font-size
+   *  directly on the DOM (not just the `zoom` input) so scrollHeight
+   *  reflects it immediately, before Angular's own change detection would
+   *  otherwise catch up. */
   pinchZoomAt(newZoomInput: number, clientX: number, clientY: number): void {
     const scroll = this.scrollEl?.nativeElement;
     const content = this.contentEl?.nativeElement;
@@ -104,16 +126,13 @@ export class TextViewerComponent implements OnChanges {
     const rect = scroll.getBoundingClientRect();
     const viewX = clientX - rect.left;
     const viewY = clientY - rect.top;
-    const oldScale = parseFloat(getComputedStyle(content).fontSize) / TextViewerComponent.BASE_FONT_PX;
-    const contentX = (scroll.scrollLeft + viewX) / oldScale;
-    const contentY = (scroll.scrollTop + viewY) / oldScale;
 
     content.style.fontSize = `${TextViewerComponent.BASE_FONT_PX * newZoomInput}px`;
 
     const maxLeft = Math.max(scroll.scrollWidth - scroll.clientWidth, 0);
     const maxTop = Math.max(scroll.scrollHeight - scroll.clientHeight, 0);
-    scroll.scrollLeft = Math.min(Math.max(contentX * newZoomInput - viewX, 0), maxLeft);
-    scroll.scrollTop = Math.min(Math.max(contentY * newZoomInput - viewY, 0), maxTop);
+    scroll.scrollLeft = Math.min(Math.max(this.pinchAnchorX * newZoomInput - viewX, 0), maxLeft);
+    scroll.scrollTop = Math.min(Math.max(this.pinchAnchorY * newZoomInput - viewY, 0), maxTop);
   }
 
   /** Called by the parent right after it snaps `zoom` back to 1 at the end

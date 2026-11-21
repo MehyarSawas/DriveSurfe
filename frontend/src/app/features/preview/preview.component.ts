@@ -501,6 +501,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       const rect = (this.el.nativeElement.querySelector('.media-area') as HTMLElement)?.getBoundingClientRect();
       this.pinchCx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
       this.pinchCy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+      if (this.isNativeScrollDoc()) this.nativeScrollDocRef()?.beginPinch(this.pinchStartMidX, this.pinchStartMidY);
       return;
     }
     const t = e.touches[0];
@@ -518,7 +519,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   /** Whichever of docx/xlsx/text is actually rendered for the current file —
    *  at most one is ever present in the DOM at a time. */
-  private nativeScrollDocRef(): { pinchZoomAt(zoom: number, clientX: number, clientY: number): void; resetScroll(): void } | undefined {
+  private nativeScrollDocRef(): {
+    beginPinch(clientX: number, clientY: number): void;
+    pinchZoomAt(zoom: number, clientX: number, clientY: number): void;
+    resetScroll(): void;
+  } | undefined {
     return this.docxViewerRef ?? this.xlsxViewerRef ?? this.textViewerRef;
   }
 

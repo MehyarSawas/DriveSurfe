@@ -140,28 +140,48 @@ export class DocxViewerComponent implements OnChanges {
     }
   }
 
-  /** Called continuously while two fingers are down, so the content under the
-   *  pinch midpoint stays visually fixed as it scales — like iOS's own
-   *  pinch-zoom — instead of always growing from the top-left corner. Reads
-   *  the *currently rendered* scale straight off the DOM (not the `zoom`
-   *  input) for its "before" reference, since the input is only updated once
-   *  Angular's own change detection next runs — which, mid-gesture, can
-   *  still be a frame behind this synchronous call. Sets the new scale the
-   *  same way, so scrollWidth/Height are correct immediately rather than
-   *  waiting on that same change detection pass. */
+  /** The content-space point (unscaled coordinates) that was under the
+   *  fingers when the current pinch gesture began — fixed for the gesture's
+   *  whole duration. Letting it move each frame (e.g. recomputing it from
+   *  that frame's own clientX/Y) only ever re-anchors the zoom in place; it
+   *  can't reproduce a drag, since "put the point under the current finger
+   *  position back under the current finger position" is a no-op whenever
+   *  the scale isn't also changing that frame. Keeping it fixed from gesture
+   *  start and sliding the *target* screen position (clientX/Y) each frame
+   *  instead is what makes a two-finger drag pan the view, exactly like the
+   *  existing image/video/PDF pinch math this mirrors. */
+  private pinchAnchorX = 0;
+  private pinchAnchorY = 0;
+
+  /** Call once when a pinch gesture starts (not on every move). */
+  beginPinch(clientX: number, clientY: number): void {
+    const scroll = this.scrollEl?.nativeElement;
+    const box = this.scaleBoxEl?.nativeElement;
+    const w0 = this.naturalWidth();
+    if (!scroll || !box || !w0) return;
+    const rect = scroll.getBoundingClientRect();
+    const curScale = box.offsetWidth / w0;
+    this.pinchAnchorX = (scroll.scrollLeft + (clientX - rect.left)) / curScale;
+    this.pinchAnchorY = (scroll.scrollTop + (clientY - rect.top)) / curScale;
+  }
+
+  /** Called continuously while two fingers are down, so the content under
+   *  the pinch midpoint stays visually fixed as it scales, and the view pans
+   *  if the fingers drag — like iOS's own pinch-zoom. Applies the new scale
+   *  straight to the DOM (not just the `zoom` input signal) so
+   *  scrollWidth/Height are correct *immediately*, before Angular's own
+   *  change detection would otherwise catch up; the signal write right
+   *  after keeps later reactive reads (and the next normal render)
+   *  consistent with it. */
   pinchZoomAt(newZoomInput: number, clientX: number, clientY: number): void {
     const scroll = this.scrollEl?.nativeElement;
     const box = this.scaleBoxEl?.nativeElement;
     const body = this.bodyEl?.nativeElement;
-    const w0 = this.naturalWidth();
-    if (!scroll || !box || !body || !w0) return;
+    if (!scroll || !box || !body || !this.naturalWidth()) return;
 
     const rect = scroll.getBoundingClientRect();
     const viewX = clientX - rect.left;
     const viewY = clientY - rect.top;
-    const oldScale = box.offsetWidth / w0;
-    const contentX = (scroll.scrollLeft + viewX) / oldScale;
-    const contentY = (scroll.scrollTop + viewY) / oldScale;
 
     const newScale = this.baseScale() * newZoomInput;
     const w = this.naturalWidth() * newScale;
@@ -172,8 +192,8 @@ export class DocxViewerComponent implements OnChanges {
 
     const maxLeft = Math.max(w - scroll.clientWidth, 0);
     const maxTop = Math.max(h - scroll.clientHeight, 0);
-    scroll.scrollLeft = Math.min(Math.max(contentX * newScale - viewX, 0), maxLeft);
-    scroll.scrollTop = Math.min(Math.max(contentY * newScale - viewY, 0), maxTop);
+    scroll.scrollLeft = Math.min(Math.max(this.pinchAnchorX * newScale - viewX, 0), maxLeft);
+    scroll.scrollTop = Math.min(Math.max(this.pinchAnchorY * newScale - viewY, 0), maxTop);
   }
 
   /** Called by the parent right after it snaps `zoom` back to 1 at the end
