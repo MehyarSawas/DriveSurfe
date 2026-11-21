@@ -44,7 +44,8 @@
     max-width: 100dvw;
   }
 
-  .pdf-viewer-wrap {
+  .pdf-viewer-wrap,
+  .doc-viewer-wrap {
     height: 100dvh;
   }
 }
@@ -199,6 +200,12 @@
 
 .pdf-viewer-wrap {
   width: min(860px, 96vw);
+  height: calc(100dvh - var(--chrome-offset));
+  transition: height 200ms ease;
+}
+
+.doc-viewer-wrap {
+  width: min(1100px, 96vw);
   height: calc(100dvh - var(--chrome-offset));
   transition: height 200ms ease;
 }
