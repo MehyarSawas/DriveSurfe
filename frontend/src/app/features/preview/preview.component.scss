@@ -210,6 +210,12 @@
   width: min(1100px, 96vw);
   height: calc(100dvh - var(--chrome-offset));
   transition: height 200ms ease;
+  /* .media-area disables selection app-wide so swipe/pinch gestures on an
+     image don't highlight text underneath — but docx/xlsx/text never use
+     that gesture on a single-finger drag (see isNativeScrollDoc), so there's
+     nothing for selecting their actual content to conflict with. */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 
