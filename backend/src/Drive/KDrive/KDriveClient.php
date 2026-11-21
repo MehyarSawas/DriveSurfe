@@ -1002,7 +1002,9 @@ final class KDriveClient implements DriveInterface
             'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
             'image/heic', 'image/heif', 'image/avif',
             'video/mp4', 'video/quicktime', 'video/x-m4v', 'video/webm',
-            'audio/mpeg', 'audio/mp4', 'audio/ogg',
+            'audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/ogg',
+            'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/flac', 'audio/x-flac',
+            'audio/aac', 'audio/x-aac',
             'application/pdf',
         ];
         $base = strtolower(explode(';', $mime)[0]);
@@ -1020,6 +1022,7 @@ final class KDriveClient implements DriveInterface
             'gif' => 'image/gif', 'webp' => 'image/webp', 'svg' => 'image/svg+xml',
             'heic' => 'image/heic', 'heif' => 'image/heif', 'avif' => 'image/avif',
             'mp3' => 'audio/mpeg', 'm4a' => 'audio/mp4', 'ogg' => 'audio/ogg',
+            'wav' => 'audio/wav', 'flac' => 'audio/flac', 'aac' => 'audio/aac',
             'pdf' => 'application/pdf',
         ];
         return $map[$ext] ?? null;
