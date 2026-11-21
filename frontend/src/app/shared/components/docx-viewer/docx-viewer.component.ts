@@ -1,4 +1,4 @@
-import { Component, input, OnChanges, SimpleChanges, ElementRef, ViewChild, signal } from '@angular/core';
+import { Component, input, OnChanges, SimpleChanges, ElementRef, ViewChild, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { renderAsync } from 'docx-preview';
 
@@ -7,14 +7,16 @@ import { renderAsync } from 'docx-preview';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="docx-scroll">
+    <div class="docx-scroll" #scrollEl>
       @if (loading()) {
         <div class="docx-spinner-wrap"><div class="docx-spinner"></div></div>
       }
       @if (error()) {
         <div class="docx-error">{{ error() }}</div>
       }
-      <div class="docx-body" #bodyEl></div>
+      <div class="docx-scale-box" [style.width.px]="scaledWidth()" [style.height.px]="scaledHeight()">
+        <div class="docx-body" #bodyEl [style.transform]="'scale(' + scale() + ')'"></div>
+      </div>
     </div>
   `,
   styles: [`
@@ -27,6 +29,14 @@ import { renderAsync } from 'docx-preview';
       background: #404040;
       display: flex;
       justify-content: center;
+    }
+
+    /* Sized to the post-scale footprint so the scroll container's own
+       scrollWidth/scrollHeight — and therefore native touch scrolling —
+       stay correct at any zoom level; a bare CSS transform on .docx-body
+       alone would visually resize it without changing what's scrollable. */
+    .docx-scale-box {
+      flex-shrink: 0;
     }
 
     .docx-spinner-wrap {
@@ -57,6 +67,12 @@ import { renderAsync } from 'docx-preview';
 
     .docx-body {
       padding: 16px 0;
+      width: max-content;
+      /* Must anchor at the box's own origin: .docx-scale-box is sized to
+         exactly naturalWidth*scale × naturalHeight*scale, which only lines
+         up with the scaled-down content when the scale "grows" from (0,0)
+         rather than from the (unscaled) horizontal center. */
+      transform-origin: top left;
 
       /* docx-preview renders each page as its own section with a realistic
          paper width/shadow — just let it size itself, we only scroll around it. */
@@ -68,11 +84,26 @@ import { renderAsync } from 'docx-preview';
 })
 export class DocxViewerComponent implements OnChanges {
   readonly fileId = input.required<string>();
+  /** Pinch-zoom multiplier on top of the fit-to-width base scale below. */
+  readonly zoom = input(1);
 
   @ViewChild('bodyEl') bodyEl!: ElementRef<HTMLDivElement>;
+  @ViewChild('scrollEl') scrollEl!: ElementRef<HTMLDivElement>;
 
   readonly loading = signal(false);
   readonly error = signal('');
+
+  private readonly naturalWidth = signal(0);
+  private readonly naturalHeight = signal(0);
+  /** docx-preview renders at the document's real paper width (e.g. ~816px for
+   *  Letter), almost always wider than a phone screen — shrink it to fit by
+   *  default, like Google Drive's mobile preview, instead of starting the
+   *  user off having to scroll sideways just to read a line of text. */
+  private readonly baseScale = signal(1);
+
+  readonly scale = computed(() => this.baseScale() * this.zoom());
+  readonly scaledWidth = computed(() => this.naturalWidth() * this.scale());
+  readonly scaledHeight = computed(() => this.naturalHeight() * this.scale());
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['fileId']) this.render();
@@ -81,20 +112,40 @@ export class DocxViewerComponent implements OnChanges {
   private async render(): Promise<void> {
     this.loading.set(true);
     this.error.set('');
+    this.naturalWidth.set(0);
+    this.naturalHeight.set(0);
+    this.baseScale.set(1);
 
     await new Promise(r => setTimeout(r, 0));
     if (!this.bodyEl) return;
     this.bodyEl.nativeElement.innerHTML = '';
+    this.bodyEl.nativeElement.style.transform = 'none';
 
     try {
       const response = await fetch(`/api/files/${this.fileId()}/download`);
       if (!response.ok) throw new Error(`download failed: ${response.status}`);
       const blob = await response.blob();
       await renderAsync(blob, this.bodyEl.nativeElement, this.bodyEl.nativeElement);
+      this.measure();
     } catch {
       this.error.set('Could not load document');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  // scrollWidth/scrollHeight are layout properties (unaffected by the
+  // `transform: none` set just above), so this reads the page's true,
+  // unscaled size regardless of whatever scale a previous file left behind.
+  private measure(): void {
+    const body = this.bodyEl?.nativeElement;
+    const scroll = this.scrollEl?.nativeElement;
+    if (!body || !scroll) return;
+    const w = body.scrollWidth;
+    const h = body.scrollHeight;
+    if (!w || !h) return;
+    this.naturalWidth.set(w);
+    this.naturalHeight.set(h);
+    this.baseScale.set(Math.min(1, scroll.clientWidth / w));
   }
 }

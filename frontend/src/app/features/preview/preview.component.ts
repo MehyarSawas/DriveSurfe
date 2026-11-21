@@ -983,6 +983,13 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   mediaTransform(): string {
+    // docx/xlsx/text scale themselves internally (see isNativeScrollDoc) so
+    // their own native scroll dimensions stay correct at any zoom level —
+    // scaling this outer container too would double-apply the zoom and (per
+    // a real report) leave native scroll/pinch looking like it does nothing,
+    // since the already-rendered-and-clipped content just gets visually
+    // blown up/shrunk as a flat picture instead of actually re-flowing.
+    if (this.isNativeScrollDoc()) return 'none';
     const x = this.swipeOffsetX();
     const y = this.swipeOffsetY();
     const z = this.zoom();

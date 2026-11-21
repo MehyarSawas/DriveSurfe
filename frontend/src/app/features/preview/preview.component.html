@@ -145,18 +145,18 @@
               <p>Converting video…</p>
             </div>
           }
-          <video #videoEl [src]="previewSrc()" [attr.poster]="file().thumbnail_url" [controls]="!autoplayOn()" playsinline autoplay [muted]="autoplayOn()" preload="auto" class="media-video" [style.transform]="'scale(' + zoom() + ')'" (dblclick)="toggleFullscreen()" (error)="onVideoError()" (canplay)="onVideoReady($event)" (loadedmetadata)="onVideoMeta($event)" (playing)="onVideoPlaying()">
+          <video #videoEl [src]="previewSrc()" [attr.poster]="file().thumbnail_url" [controls]="!autoplayOn()" playsinline autoplay [muted]="autoplayOn()" preload="auto" class="media-video" (dblclick)="toggleFullscreen()" (error)="onVideoError()" (canplay)="onVideoReady($event)" (loadedmetadata)="onVideoMeta($event)" (playing)="onVideoPlaying()">
             Your browser does not support video playback.
           </video>
         }
       } @else if (isPdf()) {
         <ds-pdf-viewer [fileId]="file().id" [zoom]="zoom()" class="pdf-viewer-wrap" />
       } @else if (isDocx()) {
-        <ds-docx-viewer [fileId]="file().id" class="doc-viewer-wrap" />
+        <ds-docx-viewer [fileId]="file().id" [zoom]="zoom()" class="doc-viewer-wrap" />
       } @else if (isXlsx()) {
-        <ds-xlsx-viewer [fileId]="file().id" class="doc-viewer-wrap" />
+        <ds-xlsx-viewer [fileId]="file().id" [zoom]="zoom()" class="doc-viewer-wrap" />
       } @else if (isText()) {
-        <ds-text-viewer [fileId]="file().id" class="doc-viewer-wrap" />
+        <ds-text-viewer [fileId]="file().id" [zoom]="zoom()" class="doc-viewer-wrap" />
       } @else if (!previewFailed()) {
         @if (isLoading()) {
           <div class="media-loading">
