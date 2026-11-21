@@ -14,7 +14,7 @@ import { CommonModule } from '@angular/common';
         <div class="text-error">{{ error() }}</div>
       }
       @if (!loading() && !error()) {
-        <pre class="text-content">{{ content() }}</pre>
+        <pre class="text-content" [style.font-size.px]="13 * zoom()">{{ content() }}</pre>
       }
     </div>
   `,
@@ -68,6 +68,9 @@ import { CommonModule } from '@angular/common';
 })
 export class TextViewerComponent implements OnChanges {
   readonly fileId = input.required<string>();
+  /** Pinch-zoom: text reflows (pre-wrap) at any size, so plain font-size
+   *  scaling is enough — no scale-box/spacer needed like docx/xlsx. */
+  readonly zoom = input(1);
 
   // Text past this size isn't useful to read in full inline, and would be
   // slow to fetch/render — cap it and point to downloading the rest.

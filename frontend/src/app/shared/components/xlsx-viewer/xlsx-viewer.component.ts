@@ -29,7 +29,7 @@ interface GridCell {
         </div>
       }
       <div class="xlsx-scroll">
-        <table class="xlsx-table">
+        <table class="xlsx-table" [style.font-size.px]="13 * zoom()">
           @for (row of grid(); track $index) {
             <tr>
               @for (cell of row; track $index) {
@@ -125,6 +125,10 @@ interface GridCell {
 })
 export class XlsxViewerComponent implements OnChanges {
   readonly fileId = input.required<string>();
+  /** Pinch-zoom: the table's own `.xlsx-scroll { overflow: auto }` already
+   *  scrolls both axes at any size, so plain font-size scaling is enough —
+   *  no scale-box/spacer needed like docx. */
+  readonly zoom = input(1);
 
   readonly loading = signal(false);
   readonly error = signal('');
