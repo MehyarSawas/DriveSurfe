@@ -1,4 +1,4 @@
-import { Component, input, OnChanges, SimpleChanges, signal, ElementRef, ViewChild } from '@angular/core';
+import { Component, input, OnChanges, SimpleChanges, signal, computed, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import * as XLSX from 'xlsx';
 
@@ -29,18 +29,20 @@ interface GridCell {
         </div>
       }
       <div class="xlsx-scroll" #scrollEl>
-        <table class="xlsx-table" #tableEl [style.font-size.px]="13 * zoom()">
-          @for (row of grid(); track $index) {
-            <tr>
-              @for (cell of row; track $index) {
-                @if (!cell.skip) {
-                  <td [attr.rowspan]="cell.rowSpan > 1 ? cell.rowSpan : null"
-                      [attr.colspan]="cell.colSpan > 1 ? cell.colSpan : null">{{ cell.value }}</td>
+        <div class="xlsx-scale-box" #scaleBoxEl [style.width.px]="scaledWidth()" [style.height.px]="scaledHeight()">
+          <table class="xlsx-table" #tableEl [style.transform]="'scale(' + scale() + ')'">
+            @for (row of grid(); track $index) {
+              <tr>
+                @for (cell of row; track $index) {
+                  @if (!cell.skip) {
+                    <td [attr.rowspan]="cell.rowSpan > 1 ? cell.rowSpan : null"
+                        [attr.colspan]="cell.colSpan > 1 ? cell.colSpan : null">{{ cell.value }}</td>
+                  }
                 }
-              }
-            </tr>
-          }
-        </table>
+              </tr>
+            }
+          </table>
+        </div>
       </div>
     </div>
   `,
@@ -118,6 +120,8 @@ interface GridCell {
     .xlsx-table {
       border-collapse: collapse;
       font-size: 13px;
+      width: max-content;
+      transform-origin: top left;
 
       td {
         border: 1px solid #e0e0e0;
@@ -130,21 +134,29 @@ interface GridCell {
 })
 export class XlsxViewerComponent implements OnChanges {
   readonly fileId = input.required<string>();
-  /** Pinch-zoom: the table's own `.xlsx-scroll { overflow: auto }` already
-   *  scrolls both axes at any size, so plain font-size scaling is enough —
-   *  no scale-box/spacer needed like docx. */
+  /** Pinch-zoom multiplier on top of the fit-to-width base scale below. */
   readonly zoom = input(1);
 
   @ViewChild('scrollEl') scrollEl!: ElementRef<HTMLDivElement>;
+  @ViewChild('scaleBoxEl') scaleBoxEl!: ElementRef<HTMLDivElement>;
   @ViewChild('tableEl') tableEl!: ElementRef<HTMLTableElement>;
-
-  private static readonly BASE_FONT_PX = 13;
 
   readonly loading = signal(false);
   readonly error = signal('');
   readonly sheetNames = signal<string[]>([]);
   readonly activeSheet = signal('');
   readonly grid = signal<GridCell[][]>([]);
+
+  private readonly naturalWidth = signal(0);
+  private readonly naturalHeight = signal(0);
+  /** A wide table (many columns) renders wider than a phone screen by
+   *  default — shrink it to fit, same as docx, instead of starting the user
+   *  off having to scroll sideways just to read the first row. */
+  private readonly baseScale = signal(1);
+
+  readonly scale = computed(() => this.baseScale() * this.zoom());
+  readonly scaledWidth = computed(() => this.naturalWidth() * this.scale());
+  readonly scaledHeight = computed(() => this.naturalHeight() * this.scale());
 
   private workbook: XLSX.WorkBook | null = null;
 
@@ -155,31 +167,62 @@ export class XlsxViewerComponent implements OnChanges {
   selectSheet(name: string): void {
     this.activeSheet.set(name);
     this.buildGrid();
+    this.remeasure();
   }
 
   /** Called continuously while two fingers are down, so the cell under the
    *  pinch midpoint stays visually fixed as the table scales — like iOS's
-   *  own pinch-zoom. Sets font-size directly on the DOM (not just the `zoom`
-   *  input) so scrollWidth/Height reflect it immediately, before Angular's
-   *  own change detection would otherwise catch up. */
+   *  own pinch-zoom. Reads the *currently rendered* scale straight off the
+   *  DOM (not the `zoom` input) for its "before" reference, since the input
+   *  is only updated once Angular's own change detection next runs — which,
+   *  mid-gesture, can still be a frame behind this synchronous call. Sets
+   *  the new scale the same way, so scrollWidth/Height are correct
+   *  immediately rather than waiting on that same change detection pass. */
   pinchZoomAt(newZoomInput: number, clientX: number, clientY: number): void {
     const scroll = this.scrollEl?.nativeElement;
+    const box = this.scaleBoxEl?.nativeElement;
     const table = this.tableEl?.nativeElement;
-    if (!scroll || !table) return;
+    const w0 = this.naturalWidth();
+    if (!scroll || !box || !table || !w0) return;
 
     const rect = scroll.getBoundingClientRect();
     const viewX = clientX - rect.left;
     const viewY = clientY - rect.top;
-    const oldScale = this.zoom();
+    const oldScale = box.offsetWidth / w0;
     const contentX = (scroll.scrollLeft + viewX) / oldScale;
     const contentY = (scroll.scrollTop + viewY) / oldScale;
 
-    table.style.fontSize = `${XlsxViewerComponent.BASE_FONT_PX * newZoomInput}px`;
+    const newScale = this.baseScale() * newZoomInput;
+    const w = this.naturalWidth() * newScale;
+    const h = this.naturalHeight() * newScale;
+    box.style.width = `${w}px`;
+    box.style.height = `${h}px`;
+    table.style.transform = `scale(${newScale})`;
 
-    const maxLeft = Math.max(scroll.scrollWidth - scroll.clientWidth, 0);
-    const maxTop = Math.max(scroll.scrollHeight - scroll.clientHeight, 0);
-    scroll.scrollLeft = Math.min(Math.max(contentX * newZoomInput - viewX, 0), maxLeft);
-    scroll.scrollTop = Math.min(Math.max(contentY * newZoomInput - viewY, 0), maxTop);
+    const maxLeft = Math.max(w - scroll.clientWidth, 0);
+    const maxTop = Math.max(h - scroll.clientHeight, 0);
+    scroll.scrollLeft = Math.min(Math.max(contentX * newScale - viewX, 0), maxLeft);
+    scroll.scrollTop = Math.min(Math.max(contentY * newScale - viewY, 0), maxTop);
+  }
+
+  /** Called by the parent right after it snaps `zoom` back to 1 at the end
+   *  of a pinch gesture (e.g. the user pinched below the fit-to-width
+   *  baseline) — returns cleanly to the top-left of the fit-to-width view
+   *  instead of leaving whatever scroll position the gesture's last frame
+   *  happened to leave against the *old* (different) content size, which
+   *  would otherwise show up as a stray jump once the reactive `zoom` input
+   *  catches up and resizes the table out from under it. */
+  resetScroll(): void {
+    const scroll = this.scrollEl?.nativeElement;
+    const box = this.scaleBoxEl?.nativeElement;
+    const table = this.tableEl?.nativeElement;
+    if (!scroll || !box || !table) return;
+    const newScale = this.baseScale();
+    box.style.width = `${this.naturalWidth() * newScale}px`;
+    box.style.height = `${this.naturalHeight() * newScale}px`;
+    table.style.transform = `scale(${newScale})`;
+    scroll.scrollLeft = 0;
+    scroll.scrollTop = 0;
   }
 
   private async load(): Promise<void> {
@@ -188,6 +231,9 @@ export class XlsxViewerComponent implements OnChanges {
     this.workbook = null;
     this.sheetNames.set([]);
     this.grid.set([]);
+    this.naturalWidth.set(0);
+    this.naturalHeight.set(0);
+    this.baseScale.set(1);
 
     try {
       const response = await fetch(`/api/files/${this.fileId()}/download`);
@@ -197,11 +243,30 @@ export class XlsxViewerComponent implements OnChanges {
       this.sheetNames.set(this.workbook.SheetNames);
       this.activeSheet.set(this.workbook.SheetNames[0] ?? '');
       this.buildGrid();
+      await this.remeasure();
     } catch {
       this.error.set('Could not load spreadsheet');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  // scrollWidth/scrollHeight are layout properties (unaffected by the
+  // `transform: none` reset just below), so this reads the table's true,
+  // unscaled size regardless of whatever scale a previous sheet left behind.
+  private async remeasure(): Promise<void> {
+    this.baseScale.set(1);
+    await new Promise(r => setTimeout(r, 0));
+    const table = this.tableEl?.nativeElement;
+    const scroll = this.scrollEl?.nativeElement;
+    if (!table || !scroll) return;
+    table.style.transform = 'none';
+    const w = table.scrollWidth;
+    const h = table.scrollHeight;
+    if (!w || !h) return;
+    this.naturalWidth.set(w);
+    this.naturalHeight.set(h);
+    this.baseScale.set(Math.min(1, scroll.clientWidth / w));
   }
 
   // Builds the render grid ourselves (rather than XLSX.utils.sheet_to_html)
