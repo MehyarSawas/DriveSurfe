@@ -10,6 +10,7 @@ import { PdfViewerComponent } from '../../shared/components/pdf-viewer/pdf-viewe
 import { DocxViewerComponent } from '../../shared/components/docx-viewer/docx-viewer.component';
 import { XlsxViewerComponent } from '../../shared/components/xlsx-viewer/xlsx-viewer.component';
 import { TextViewerComponent } from '../../shared/components/text-viewer/text-viewer.component';
+import { MarkdownViewerComponent } from '../../shared/components/markdown-viewer/markdown-viewer.component';
 
 type DeletePhase = 'idle' | 'confirming' | 'countdown';
 
@@ -18,7 +19,7 @@ type DeletePhase = 'idle' | 'confirming' | 'countdown';
   standalone: true,
   imports: [
     CommonModule, FormsModule, FolderPickerComponent, PdfViewerComponent,
-    DocxViewerComponent, XlsxViewerComponent, TextViewerComponent,
+    DocxViewerComponent, XlsxViewerComponent, TextViewerComponent, MarkdownViewerComponent,
   ],
   templateUrl: './preview.component.html',
   styleUrls: ['./preview.component.scss'],
@@ -31,6 +32,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   @ViewChild(DocxViewerComponent) docxViewerRef?: DocxViewerComponent;
   @ViewChild(XlsxViewerComponent) xlsxViewerRef?: XlsxViewerComponent;
   @ViewChild(TextViewerComponent) textViewerRef?: TextViewerComponent;
+  @ViewChild(MarkdownViewerComponent) markdownViewerRef?: MarkdownViewerComponent;
 
   readonly file = input.required<DriveFile>();
   readonly hasPrev = input(false);
@@ -216,8 +218,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   readonly isSpreadsheet = computed(() => this.isXlsx() || this.isCsv());
 
+  /** Markdown renders formatted (headings/bold/links/code-fence highlighting)
+   *  via ds-markdown-viewer, not as plain text — see isText's exclusion below. */
+  readonly isMarkdown = computed(() => {
+    const f = this.file();
+    const ext = f.extension.toLowerCase();
+    return f.mime_type === 'text/markdown' || ext === 'md' || ext === 'markdown';
+  });
+
   private static readonly TEXT_EXTENSIONS = new Set([
-    'txt', 'md', 'markdown', 'json', 'log', 'xml', 'yml', 'yaml',
+    'txt', 'json', 'log', 'xml', 'yml', 'yaml',
     'ini', 'conf', 'cfg', 'env', 'sh', 'bash', 'zsh', 'js', 'mjs', 'cjs', 'ts',
     'tsx', 'jsx', 'py', 'php', 'rb', 'go', 'rs', 'java', 'c', 'h', 'cpp', 'hpp',
     'cs', 'css', 'scss', 'sass', 'less', 'html', 'htm', 'sql', 'toml',
@@ -226,25 +236,25 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   readonly isText = computed(() => {
     const f = this.file();
-    if (this.isCsv()) return false;
+    if (this.isCsv() || this.isMarkdown()) return false;
     return f.mime_type.startsWith('text/') || PreviewComponent.TEXT_EXTENSIONS.has(f.extension.toLowerCase());
   });
 
-  /** PDF/docx/xlsx(+csv)/text all get their own internal vertical scroll and
-   *  a horizontal-swipe-only navigation gesture (like PDF already had),
-   *  rather than the image/video swipe-up-to-delete / swipe-down-to-move
-   *  gestures. */
-  readonly isScrollableDoc = computed(() => this.isPdf() || this.isDocx() || this.isSpreadsheet() || this.isText());
+  /** PDF/docx/xlsx(+csv)/markdown/text all get their own internal vertical
+   *  scroll and a horizontal-swipe-only navigation gesture (like PDF already
+   *  had), rather than the image/video swipe-up-to-delete / swipe-down-to-
+   *  move gestures. */
+  readonly isScrollableDoc = computed(() => this.isPdf() || this.isDocx() || this.isSpreadsheet() || this.isMarkdown() || this.isText());
 
-  /** docx/xlsx(+csv)/text render at real content size (often wider/taller
-   *  than the viewport, in both axes) inside their own native
+  /** docx/xlsx(+csv)/markdown/text render at real content size (often
+   *  wider/taller than the viewport, in both axes) inside their own native
    *  `overflow:auto` container, unlike PDF pages which are always
    *  pre-scaled to exactly fit the container width. Hijacking single-finger
    *  drags for swipe-navigation here (PDF's approach) blocks the browser's
    *  own two-axis scroll — so these types get no custom single-finger
    *  handling at all and rely entirely on native scroll plus the pinch-zoom
    *  handled above (which is type-agnostic). */
-  readonly isNativeScrollDoc = computed(() => this.isDocx() || this.isSpreadsheet() || this.isText());
+  readonly isNativeScrollDoc = computed(() => this.isDocx() || this.isSpreadsheet() || this.isMarkdown() || this.isText());
 
   readonly previewSrc = computed(() => {
     const f = this.file();
@@ -541,14 +551,14 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.lastPanTouchY = t.clientY;
   }
 
-  /** Whichever of docx/xlsx/text is actually rendered for the current file —
-   *  at most one is ever present in the DOM at a time. */
+  /** Whichever of docx/xlsx/markdown/text is actually rendered for the
+   *  current file — at most one is ever present in the DOM at a time. */
   private nativeScrollDocRef(): {
     beginPinch(clientX: number, clientY: number): void;
     pinchZoomAt(zoom: number, clientX: number, clientY: number): void;
     resetScroll(): void;
   } | undefined {
-    return this.docxViewerRef ?? this.xlsxViewerRef ?? this.textViewerRef;
+    return this.docxViewerRef ?? this.xlsxViewerRef ?? this.markdownViewerRef ?? this.textViewerRef;
   }
 
   onTouchMove(e: TouchEvent): void {
