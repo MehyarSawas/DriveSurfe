@@ -205,8 +205,19 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     return f.mime_type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || f.extension === 'xlsx';
   });
 
+  /** CSV/TSV render in the same grid viewer as xlsx (Google Sheets-style),
+   *  not as plain text — ds-xlsx-viewer parses them with SheetJS same as a
+   *  real workbook, just fetched/read differently (see its `csv` input). */
+  readonly isCsv = computed(() => {
+    const f = this.file();
+    const ext = f.extension.toLowerCase();
+    return f.mime_type === 'text/csv' || f.mime_type === 'text/tab-separated-values' || ext === 'csv' || ext === 'tsv';
+  });
+
+  readonly isSpreadsheet = computed(() => this.isXlsx() || this.isCsv());
+
   private static readonly TEXT_EXTENSIONS = new Set([
-    'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'log', 'xml', 'yml', 'yaml',
+    'txt', 'md', 'markdown', 'json', 'log', 'xml', 'yml', 'yaml',
     'ini', 'conf', 'cfg', 'env', 'sh', 'bash', 'zsh', 'js', 'mjs', 'cjs', 'ts',
     'tsx', 'jsx', 'py', 'php', 'rb', 'go', 'rs', 'java', 'c', 'h', 'cpp', 'hpp',
     'cs', 'css', 'scss', 'sass', 'less', 'html', 'htm', 'sql', 'toml',
@@ -215,22 +226,25 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
 
   readonly isText = computed(() => {
     const f = this.file();
+    if (this.isCsv()) return false;
     return f.mime_type.startsWith('text/') || PreviewComponent.TEXT_EXTENSIONS.has(f.extension.toLowerCase());
   });
 
-  /** PDF/docx/xlsx/text all get their own internal vertical scroll and a
-   *  horizontal-swipe-only navigation gesture (like PDF already had), rather
-   *  than the image/video swipe-up-to-delete / swipe-down-to-move gestures. */
-  readonly isScrollableDoc = computed(() => this.isPdf() || this.isDocx() || this.isXlsx() || this.isText());
+  /** PDF/docx/xlsx(+csv)/text all get their own internal vertical scroll and
+   *  a horizontal-swipe-only navigation gesture (like PDF already had),
+   *  rather than the image/video swipe-up-to-delete / swipe-down-to-move
+   *  gestures. */
+  readonly isScrollableDoc = computed(() => this.isPdf() || this.isDocx() || this.isSpreadsheet() || this.isText());
 
-  /** docx/xlsx/text render at real content size (often wider/taller than the
-   *  viewport, in both axes) inside their own native `overflow:auto` container,
-   *  unlike PDF pages which are always pre-scaled to exactly fit the container
-   *  width. Hijacking single-finger drags for swipe-navigation here (PDF's
-   *  approach) blocks the browser's own two-axis scroll — so these types get
-   *  no custom single-finger handling at all and rely entirely on native
-   *  scroll plus the pinch-zoom handled above (which is type-agnostic). */
-  readonly isNativeScrollDoc = computed(() => this.isDocx() || this.isXlsx() || this.isText());
+  /** docx/xlsx(+csv)/text render at real content size (often wider/taller
+   *  than the viewport, in both axes) inside their own native
+   *  `overflow:auto` container, unlike PDF pages which are always
+   *  pre-scaled to exactly fit the container width. Hijacking single-finger
+   *  drags for swipe-navigation here (PDF's approach) blocks the browser's
+   *  own two-axis scroll — so these types get no custom single-finger
+   *  handling at all and rely entirely on native scroll plus the pinch-zoom
+   *  handled above (which is type-agnostic). */
+  readonly isNativeScrollDoc = computed(() => this.isDocx() || this.isSpreadsheet() || this.isText());
 
   readonly previewSrc = computed(() => {
     const f = this.file();

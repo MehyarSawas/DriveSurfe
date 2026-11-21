@@ -136,6 +136,11 @@ export class XlsxViewerComponent implements OnChanges {
   readonly fileId = input.required<string>();
   /** Pinch-zoom multiplier on top of the fit-to-width base scale below. */
   readonly zoom = input(1);
+  /** CSV/TSV are plain delimited text, not an OOXML workbook — fetched and
+   *  parsed differently (see load()), everything downstream (grid, zoom,
+   *  pinch) is identical either way. */
+  readonly csv = input(false);
+  readonly delimiter = input(',');
 
   @ViewChild('scrollEl') scrollEl!: ElementRef<HTMLDivElement>;
   @ViewChild('scaleBoxEl') scaleBoxEl!: ElementRef<HTMLDivElement>;
@@ -257,14 +262,15 @@ export class XlsxViewerComponent implements OnChanges {
     try {
       const response = await fetch(`/api/files/${this.fileId()}/download`);
       if (!response.ok) throw new Error(`download failed: ${response.status}`);
-      const buffer = await response.arrayBuffer();
-      this.workbook = XLSX.read(buffer, { type: 'array' });
+      this.workbook = this.csv()
+        ? XLSX.read(await response.text(), { type: 'string', FS: this.delimiter() })
+        : XLSX.read(await response.arrayBuffer(), { type: 'array' });
       this.sheetNames.set(this.workbook.SheetNames);
       this.activeSheet.set(this.workbook.SheetNames[0] ?? '');
       this.buildGrid();
       await this.remeasure();
     } catch {
-      this.error.set('Could not load spreadsheet');
+      this.error.set(this.csv() ? 'Could not load CSV file' : 'Could not load spreadsheet');
     } finally {
       this.loading.set(false);
     }
