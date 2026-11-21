@@ -149,6 +149,26 @@
             Your browser does not support video playback.
           </video>
         }
+      } @else if (isAudio()) {
+        @if (previewFailed()) {
+          <div class="no-preview">
+            <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+            <p>This audio file can't be played here</p>
+            <button class="btn-primary" (click)="download.emit(file())">Download</button>
+          </div>
+        } @else {
+          <div class="audio-player">
+            @if (file().thumbnail_url) {
+              <img [src]="file().thumbnail_url" [alt]="file().name" class="audio-art" draggable="false" />
+            } @else {
+              <svg viewBox="0 0 24 24" class="audio-art-placeholder"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+            }
+            <p class="audio-title">{{ file().name }}</p>
+            <audio [src]="previewSrc()" controls preload="metadata" class="audio-controls" (error)="onAudioError()">
+              Your browser does not support audio playback.
+            </audio>
+          </div>
+        }
       } @else if (isPdf()) {
         <ds-pdf-viewer [fileId]="file().id" [zoom]="zoom()" class="pdf-viewer-wrap" />
       } @else if (isDocx()) {

@@ -185,6 +185,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     return f.mime_type.startsWith('video/') || ['mp4','mov','m4v'].includes(f.extension);
   });
 
+  readonly isAudio = computed(() => {
+    const f = this.file();
+    return f.mime_type.startsWith('audio/') || ['mp3','m4a','wav','aac','ogg','oga','flac','wma'].includes(f.extension.toLowerCase());
+  });
+
   readonly isPdf = computed(() => {
     const f = this.file();
     return f.mime_type === 'application/pdf' || f.extension === 'pdf';
@@ -234,6 +239,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         ? `/api/files/${f.id}/transcode`
         : `/api/files/${f.id}/download`;
     }
+    if (this.isAudio()) {
+      return `/api/files/${f.id}/download`;
+    }
     return this.imagePreviewUrl(f.id);
   });
 
@@ -260,7 +268,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         this.previewFailed.set(false);
         this.videoTranscoding.set(false);
         this.videoReady.set(false);
-        if (!this.isVideo() && !this.isScrollableDoc()) this.isLoading.set(true);
+        if (!this.isVideo() && !this.isAudio() && !this.isScrollableDoc()) this.isLoading.set(true);
         if (!this.pendingInterval) {
           this.deletePhase.set('idle');
           this.countdown.set(10);
@@ -376,6 +384,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     // canplay is the most reliable moment to start muted autoplay in a slideshow.
     if (this.autoplayOn() && this.isVideo()) this.playCurrentVideo(e?.target as HTMLVideoElement | undefined);
   }
+
+  onAudioError(): void { this.previewFailed.set(true); }
 
   onFolderSelected(folder: DriveFile): void {
     this.flushPendingMove();
