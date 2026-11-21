@@ -1,4 +1,4 @@
-import { Component, input, OnChanges, SimpleChanges, signal } from '@angular/core';
+import { Component, input, OnChanges, SimpleChanges, signal, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -6,7 +6,7 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="text-wrap">
+    <div class="text-wrap" #scrollEl>
       @if (loading()) {
         <div class="text-spinner-wrap"><div class="text-spinner"></div></div>
       }
@@ -14,7 +14,7 @@ import { CommonModule } from '@angular/common';
         <div class="text-error">{{ error() }}</div>
       }
       @if (!loading() && !error()) {
-        <pre class="text-content" [style.font-size.px]="13 * zoom()">{{ content() }}</pre>
+        <pre class="text-content" #contentEl [style.font-size.px]="13 * zoom()">{{ content() }}</pre>
       }
     </div>
   `,
@@ -72,9 +72,13 @@ export class TextViewerComponent implements OnChanges {
    *  scaling is enough — no scale-box/spacer needed like docx/xlsx. */
   readonly zoom = input(1);
 
+  @ViewChild('scrollEl') scrollEl!: ElementRef<HTMLDivElement>;
+  @ViewChild('contentEl') contentEl!: ElementRef<HTMLPreElement>;
+
   // Text past this size isn't useful to read in full inline, and would be
   // slow to fetch/render — cap it and point to downloading the rest.
   private static readonly MAX_BYTES = 2 * 1024 * 1024;
+  private static readonly BASE_FONT_PX = 13;
 
   readonly loading = signal(false);
   readonly error = signal('');
@@ -82,6 +86,31 @@ export class TextViewerComponent implements OnChanges {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['fileId']) this.load();
+  }
+
+  /** Called continuously while two fingers are down, so the line under the
+   *  pinch midpoint stays visually fixed as the text scales — like iOS's own
+   *  pinch-zoom. Sets font-size directly on the DOM (not just the `zoom`
+   *  input) so scrollHeight reflects it immediately, before Angular's own
+   *  change detection would otherwise catch up. */
+  pinchZoomAt(newZoomInput: number, clientX: number, clientY: number): void {
+    const scroll = this.scrollEl?.nativeElement;
+    const content = this.contentEl?.nativeElement;
+    if (!scroll || !content) return;
+
+    const rect = scroll.getBoundingClientRect();
+    const viewX = clientX - rect.left;
+    const viewY = clientY - rect.top;
+    const oldScale = this.zoom();
+    const contentX = (scroll.scrollLeft + viewX) / oldScale;
+    const contentY = (scroll.scrollTop + viewY) / oldScale;
+
+    content.style.fontSize = `${TextViewerComponent.BASE_FONT_PX * newZoomInput}px`;
+
+    const maxLeft = Math.max(scroll.scrollWidth - scroll.clientWidth, 0);
+    const maxTop = Math.max(scroll.scrollHeight - scroll.clientHeight, 0);
+    scroll.scrollLeft = Math.min(Math.max(contentX * newZoomInput - viewX, 0), maxLeft);
+    scroll.scrollTop = Math.min(Math.max(contentY * newZoomInput - viewY, 0), maxTop);
   }
 
   private async load(): Promise<void> {

@@ -28,6 +28,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   @ViewChild('mediaEl') mediaEl?: ElementRef<HTMLElement>;
   @ViewChild('thumbStrip') thumbStrip?: ElementRef<HTMLElement>;
   @ViewChild(PdfViewerComponent) pdfViewerRef?: PdfViewerComponent;
+  @ViewChild(DocxViewerComponent) docxViewerRef?: DocxViewerComponent;
+  @ViewChild(XlsxViewerComponent) xlsxViewerRef?: XlsxViewerComponent;
+  @ViewChild(TextViewerComponent) textViewerRef?: TextViewerComponent;
 
   readonly file = input.required<DriveFile>();
   readonly hasPrev = input(false);
@@ -470,7 +473,20 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchStart(e: TouchEvent): void {
-    if (this.menuOpen()) { this.menuOpen.set(false); this.isSwiping = false; return; }
+    if (this.menuOpen()) {
+      // Dismissing the menu must leave no gesture state behind for the next,
+      // unrelated touch to inherit — a stale lastTapTime here could make a
+      // later single tap register as "half of a double-tap" and toggle real
+      // fullscreen unexpectedly, with no tap gesture left working to undo it
+      // (a stale touchStartTime makes every later elapsed-time check fail,
+      // so neither single- nor double-tap are ever detected again).
+      this.menuOpen.set(false);
+      this.isSwiping = false;
+      this.isPinching = false;
+      this.lastTapTime = 0;
+      if (this.clickTimer) { clearTimeout(this.clickTimer); this.clickTimer = null; }
+      return;
+    }
     this.isTwoFingerTouch.set(e.touches.length >= 2);
     if (e.touches.length === 2) {
       this.isPinching = true;
@@ -500,6 +516,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.lastPanTouchY = t.clientY;
   }
 
+  /** Whichever of docx/xlsx/text is actually rendered for the current file —
+   *  at most one is ever present in the DOM at a time. */
+  private nativeScrollDocRef(): { pinchZoomAt(zoom: number, clientX: number, clientY: number): void } | undefined {
+    return this.docxViewerRef ?? this.xlsxViewerRef ?? this.textViewerRef;
+  }
+
   onTouchMove(e: TouchEvent): void {
     // Pinch handled for all file types
     if (this.isPinching && e.touches.length === 2) {
@@ -509,6 +531,17 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       const newZoom = Math.min(Math.max(this.pinchStartZoom * (dist / this.pinchStartDist), 0.5), 4);
       const midX = (t1.clientX + t2.clientX) / 2;
       const midY = (t1.clientY + t2.clientY) / 2;
+
+      if (this.isNativeScrollDoc()) {
+        // docx/xlsx/text scale their own real content (see isNativeScrollDoc)
+        // and keep their own scroll position, so "zoom stays under your
+        // fingers" is computed inside the viewer against its own scroll
+        // state — this outer container never translates/scales for these.
+        this.zoom.set(newZoom);
+        this.nativeScrollDocRef()?.pinchZoomAt(newZoom, midX, midY);
+        return;
+      }
+
       const imageX = (this.pinchStartMidX - this.pinchCx - this.pinchStartTx) / this.pinchStartZoom;
       const imageY = (this.pinchStartMidY - this.pinchCy - this.pinchStartTy) / this.pinchStartZoom;
       const newTx = midX - this.pinchCx - imageX * newZoom;
@@ -647,10 +680,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     if (!this.isSwiping) return;
     this.isSwiping = false;
 
-    // While zoomed in, the single-finger drag pans (handled in onTouchMove) —
-    // leave the pan offset where the finger left it, don't snap it back.
-    if (this.zoom() > 1) return;
-
     const dx = this.touchCurrentX - this.touchStartX;
     const dy = this.touchCurrentY - this.touchStartY;
     const elapsed = Date.now() - this.touchStartTime;
@@ -660,6 +689,37 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     // Quick flick: velocity ≥ 0.3 px/ms with at least 20px travel
     const flickX = vx >= 0.3 && Math.abs(dx) >= 20;
     const flickY = vy >= 0.3 && Math.abs(dy) >= 20;
+
+    // Tap detection: a short touch with minimal movement is a tap. TWO taps
+    // in quick succession (double-tap) toggle true browser fullscreen. A
+    // single tap toggles the header/footer chrome — delayed so a following
+    // second tap (double-tap) can still cancel it and toggle fullscreen
+    // instead, rather than firing both. Checked *before* the zoomed-in
+    // early-return below: this is the only way to get chrome back (or exit
+    // fullscreen) while zoomed in, so it has to keep working at any zoom level.
+    const moved = Math.abs(dx) + Math.abs(dy);
+    if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
+      this.swipeOffsetX.set(0);
+      if (this.zoom() <= 1) this.swipeOffsetY.set(0);
+      const now = Date.now();
+      if (now - this.lastTapTime < 300) {
+        if (this.clickTimer) { clearTimeout(this.clickTimer); this.clickTimer = null; }
+        this.toggleFullscreen();
+        this.lastTapTime = 0; // consumed — a third tap starts fresh
+      } else {
+        this.lastTapTime = now;
+        this.clickTimer = setTimeout(() => {
+          this.clickTimer = null;
+          this.toggleChrome();
+        }, 300);
+      }
+      return;
+    }
+
+    // While zoomed in, the single-finger drag pans (handled in onTouchMove) —
+    // leave the pan offset where the finger left it, don't snap it back or
+    // treat it as a swipe-to-navigate/delete/move gesture.
+    if (this.zoom() > 1) return;
 
     this.isTransitioning.set(true);
 
@@ -698,28 +758,11 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         this.swipeOffsetY.set(0);
       }
     } else {
+      // Not a swipe and not a tap (handled above) — e.g. a slow drag that
+      // didn't cross any threshold. Snap back.
       this.swipeOffsetX.set(0);
       this.swipeOffsetY.set(0);
-      // Tap detection: a short touch with minimal movement is a tap. TWO taps
-      // in quick succession (double-tap) toggle true browser fullscreen. A
-      // single tap toggles the header/footer chrome — delayed so a following
-      // second tap (double-tap) can still cancel it and toggle fullscreen
-      // instead, rather than firing both.
-      const moved = Math.abs(this.touchCurrentX - this.touchStartX) + Math.abs(this.touchCurrentY - this.touchStartY);
-      if (elapsed < 280 && moved < 12 && !this.isTwoFingerTouch()) {
-        const now = Date.now();
-        if (now - this.lastTapTime < 300) {
-          if (this.clickTimer) { clearTimeout(this.clickTimer); this.clickTimer = null; }
-          this.toggleFullscreen();
-          this.lastTapTime = 0; // consumed — a third tap starts fresh
-        } else {
-          this.lastTapTime = now;
-          this.clickTimer = setTimeout(() => {
-            this.clickTimer = null;
-            this.toggleChrome();
-          }, 300);
-        }
-      }
+      this.isTransitioning.set(false);
     }
   }
 
