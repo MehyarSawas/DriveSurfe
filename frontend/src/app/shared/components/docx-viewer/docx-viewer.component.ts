@@ -14,7 +14,7 @@ import { renderAsync } from 'docx-preview';
       @if (error()) {
         <div class="docx-error">{{ error() }}</div>
       }
-      <div class="docx-scale-box" [style.width.px]="scaledWidth()" [style.height.px]="scaledHeight()">
+      <div class="docx-scale-box" #scaleBoxEl [style.width.px]="scaledWidth()" [style.height.px]="scaledHeight()">
         <div class="docx-body" #bodyEl [style.transform]="'scale(' + scale() + ')'"></div>
       </div>
     </div>
@@ -27,16 +27,21 @@ import { renderAsync } from 'docx-preview';
       height: 100%;
       overflow: auto;
       background: #404040;
-      display: flex;
-      justify-content: center;
     }
 
     /* Sized to the post-scale footprint so the scroll container's own
        scrollWidth/scrollHeight — and therefore native touch scrolling —
        stay correct at any zoom level; a bare CSS transform on .docx-body
-       alone would visually resize it without changing what's scrollable. */
+       alone would visually resize it without changing what's scrollable.
+       Centered via margin:auto (not a flex parent + justify-content:center):
+       when this box is WIDER than the scroll container (zoomed in), auto
+       margins resolve to 0 and its left edge sits exactly at scrollLeft 0 —
+       flex centering instead shifts an overflowing item's rendered position
+       by the centering amount, which the pinch-to-point scroll math in
+       pinchZoomAt() below doesn't (and, short of also reading that shift
+       back out, can't cleanly) account for. */
     .docx-scale-box {
-      flex-shrink: 0;
+      margin: 0 auto;
     }
 
     .docx-spinner-wrap {
@@ -89,6 +94,7 @@ export class DocxViewerComponent implements OnChanges {
 
   @ViewChild('bodyEl') bodyEl!: ElementRef<HTMLDivElement>;
   @ViewChild('scrollEl') scrollEl!: ElementRef<HTMLDivElement>;
+  @ViewChild('scaleBoxEl') scaleBoxEl!: ElementRef<HTMLDivElement>;
 
   readonly loading = signal(false);
   readonly error = signal('');
@@ -132,6 +138,39 @@ export class DocxViewerComponent implements OnChanges {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** Called continuously while two fingers are down, so the content under the
+   *  pinch midpoint stays visually fixed as it scales — like iOS's own
+   *  pinch-zoom — instead of always growing from the top-left corner. Applies
+   *  the new scale straight to the DOM (not just the `zoom` input signal) so
+   *  scrollWidth/Height are correct *immediately*, before Angular's own change
+   *  detection would otherwise catch up; the signal write right after keeps
+   *  later reactive reads (and the next normal render) consistent with it. */
+  pinchZoomAt(newZoomInput: number, clientX: number, clientY: number): void {
+    const scroll = this.scrollEl?.nativeElement;
+    const box = this.scaleBoxEl?.nativeElement;
+    const body = this.bodyEl?.nativeElement;
+    if (!scroll || !box || !body || !this.naturalWidth()) return;
+
+    const rect = scroll.getBoundingClientRect();
+    const viewX = clientX - rect.left;
+    const viewY = clientY - rect.top;
+    const oldScale = this.scale();
+    const contentX = (scroll.scrollLeft + viewX) / oldScale;
+    const contentY = (scroll.scrollTop + viewY) / oldScale;
+
+    const newScale = this.baseScale() * newZoomInput;
+    const w = this.naturalWidth() * newScale;
+    const h = this.naturalHeight() * newScale;
+    box.style.width = `${w}px`;
+    box.style.height = `${h}px`;
+    body.style.transform = `scale(${newScale})`;
+
+    const maxLeft = Math.max(w - scroll.clientWidth, 0);
+    const maxTop = Math.max(h - scroll.clientHeight, 0);
+    scroll.scrollLeft = Math.min(Math.max(contentX * newScale - viewX, 0), maxLeft);
+    scroll.scrollTop = Math.min(Math.max(contentY * newScale - viewY, 0), maxTop);
   }
 
   // scrollWidth/scrollHeight are layout properties (unaffected by the

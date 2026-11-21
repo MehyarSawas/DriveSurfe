@@ -54,7 +54,7 @@
 
   <!-- Dropdown menu (outside header to escape backdrop-filter stacking context) -->
   @if (menuOpen()) {
-    <div class="menu-backdrop" (click)="menuOpen.set(false)" (touchstart)="menuOpen.set(false)"></div>
+    <div class="menu-backdrop" (click)="menuOpen.set(false)" (touchstart)="$event.preventDefault(); menuOpen.set(false)"></div>
     <div class="preview-menu" (click)="$event.stopPropagation()">
       <button class="preview-menu-item" (click)="download.emit(file()); menuOpen.set(false)">
         <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
@@ -93,7 +93,7 @@
     [class.zoomed]="zoom() > 1"
     (click)="$event.stopPropagation()"
     (touchstart)="onTouchStart($event)"
-    (touchend)="onTouchEnd()"
+    (touchend)="onTouchEnd($event)"
     (mousedown)="onMediaMouseDown($event)"
   >
     <!-- Swipe action indicators -->

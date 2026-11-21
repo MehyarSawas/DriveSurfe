@@ -1,4 +1,4 @@
-import { Component, input, OnChanges, SimpleChanges, signal } from '@angular/core';
+import { Component, input, OnChanges, SimpleChanges, signal, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import * as XLSX from 'xlsx';
 
@@ -28,8 +28,8 @@ interface GridCell {
           }
         </div>
       }
-      <div class="xlsx-scroll">
-        <table class="xlsx-table" [style.font-size.px]="13 * zoom()">
+      <div class="xlsx-scroll" #scrollEl>
+        <table class="xlsx-table" #tableEl [style.font-size.px]="13 * zoom()">
           @for (row of grid(); track $index) {
             <tr>
               @for (cell of row; track $index) {
@@ -53,6 +53,11 @@ interface GridCell {
       display: flex;
       flex-direction: column;
       background: #fff;
+      /* color is inherited, and the preview overlay around this component
+         sets white text for its own dark background — without this, cell
+         text inherits that white, becoming invisible on this light
+         background (only the cell borders ever showed up). */
+      color: rgba(0, 0, 0, 0.87);
     }
 
     .xlsx-spinner-wrap {
@@ -130,6 +135,11 @@ export class XlsxViewerComponent implements OnChanges {
    *  no scale-box/spacer needed like docx. */
   readonly zoom = input(1);
 
+  @ViewChild('scrollEl') scrollEl!: ElementRef<HTMLDivElement>;
+  @ViewChild('tableEl') tableEl!: ElementRef<HTMLTableElement>;
+
+  private static readonly BASE_FONT_PX = 13;
+
   readonly loading = signal(false);
   readonly error = signal('');
   readonly sheetNames = signal<string[]>([]);
@@ -145,6 +155,31 @@ export class XlsxViewerComponent implements OnChanges {
   selectSheet(name: string): void {
     this.activeSheet.set(name);
     this.buildGrid();
+  }
+
+  /** Called continuously while two fingers are down, so the cell under the
+   *  pinch midpoint stays visually fixed as the table scales — like iOS's
+   *  own pinch-zoom. Sets font-size directly on the DOM (not just the `zoom`
+   *  input) so scrollWidth/Height reflect it immediately, before Angular's
+   *  own change detection would otherwise catch up. */
+  pinchZoomAt(newZoomInput: number, clientX: number, clientY: number): void {
+    const scroll = this.scrollEl?.nativeElement;
+    const table = this.tableEl?.nativeElement;
+    if (!scroll || !table) return;
+
+    const rect = scroll.getBoundingClientRect();
+    const viewX = clientX - rect.left;
+    const viewY = clientY - rect.top;
+    const oldScale = this.zoom();
+    const contentX = (scroll.scrollLeft + viewX) / oldScale;
+    const contentY = (scroll.scrollTop + viewY) / oldScale;
+
+    table.style.fontSize = `${XlsxViewerComponent.BASE_FONT_PX * newZoomInput}px`;
+
+    const maxLeft = Math.max(scroll.scrollWidth - scroll.clientWidth, 0);
+    const maxTop = Math.max(scroll.scrollHeight - scroll.clientHeight, 0);
+    scroll.scrollLeft = Math.min(Math.max(contentX * newZoomInput - viewX, 0), maxLeft);
+    scroll.scrollTop = Math.min(Math.max(contentY * newZoomInput - viewY, 0), maxTop);
   }
 
   private async load(): Promise<void> {
