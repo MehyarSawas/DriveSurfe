@@ -73,18 +73,20 @@ marked.setOptions({ gfm: true, breaks: false });
         <div class="md-error">{{ error() }}</div>
       }
       @if (!loading() && !error()) {
-        <button class="md-toggle" (click)="showSource.set(!showSource())" [title]="showSource() ? 'Show rendered' : 'Show source'">
+        <button class="md-toggle" (click)="toggleSource()" [title]="showSource() ? 'Show rendered' : 'Show source'">
           @if (showSource()) {
             <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
           } @else {
             <svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
           }
         </button>
-        @if (showSource()) {
-          <pre class="md-source" #sourceEl [style.font-size.px]="BASE_FONT_SOURCE * zoom()">{{ rawText() }}</pre>
-        } @else {
-          <div class="md-body" #bodyEl [style.font-size.px]="BASE_FONT_RENDERED * zoom()" [innerHTML]="safeHtml()"></div>
-        }
+        <div class="md-scale-box" #scaleBoxEl [style.width.px]="scaledWidth()" [style.height.px]="scaledHeight()">
+          @if (showSource()) {
+            <pre class="md-source" #sourceEl [style.transform]="'scale(' + scale() + ')'">{{ rawText() }}</pre>
+          } @else {
+            <div class="md-body" #bodyEl [style.transform]="'scale(' + scale() + ')'" [innerHTML]="safeHtml()"></div>
+          }
+        </div>
       }
     </div>
   `,
@@ -142,24 +144,45 @@ marked.setOptions({ gfm: true, breaks: false });
       svg { width: 18px; height: 18px; fill: rgba(255,255,255,0.85); }
     }
 
+    /* Sized to the post-scale footprint so the scroll container's own
+       scrollWidth/scrollHeight — and therefore native touch scrolling and
+       pinch-to-point math — stay correct at any zoom level (same reasoning
+       as docx-viewer's identical .docx-scale-box). Centered via margin:auto:
+       when this box is WIDER than the scroll container (zoomed in), auto
+       margins resolve to 0 and its left edge sits exactly at scrollLeft 0. */
+    .md-scale-box {
+      margin: 0 auto;
+    }
+
     .md-source {
       margin: 0;
       padding: 16px 20px;
       color: #d4d4d4;
       font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px;
       line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
+      box-sizing: border-box;
+      /* A fixed pixel width (set once in JS, see remeasure()) instead of
+         max-width/flex-fill: text must wrap exactly once, at a width that
+         doesn't itself change as zoom changes, and then get visually
+         scaled as a whole — otherwise every zoom step reflows the text at
+         a new effective width, which looks like it's continuously
+         rewrapping as you pinch instead of smoothly magnifying. */
+      transform-origin: top left;
     }
 
     .md-body {
-      max-width: 780px;
-      margin: 0 auto;
       padding: 24px 28px 60px;
       color: #d4d4d4;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 15px;
       line-height: 1.6;
       word-break: break-word;
+      box-sizing: border-box;
+      /* Same fixed-width-then-scale reasoning as .md-source above. */
+      transform-origin: top left;
 
       :host ::ng-deep & {
         h1, h2, h3, h4, h5, h6 { color: #fff; margin: 1.2em 0 0.5em; line-height: 1.3; }
@@ -264,17 +287,21 @@ marked.setOptions({ gfm: true, breaks: false });
 })
 export class MarkdownViewerComponent implements OnChanges {
   readonly fileId = input.required<string>();
-  /** Pinch-zoom: markdown reflows at any size (both rendered prose and the
-   *  plain-text source view), so plain font-size scaling is enough — no
-   *  scale-box/spacer needed like docx/xlsx. Same model as ds-text-viewer. */
+  /** Pinch-zoom multiplier. Unlike docx/xlsx there's no fit-to-width shrink
+   *  (markdown reflows to any width, so the "natural" width below is simply
+   *  chosen to be reading-friendly, not measured from oversized content) —
+   *  `scale` is just `zoom` directly. */
   readonly zoom = input(1);
 
   @ViewChild('scrollEl') scrollEl!: ElementRef<HTMLDivElement>;
-  @ViewChild('bodyEl') bodyEl!: ElementRef<HTMLDivElement>;
-  @ViewChild('sourceEl') sourceEl!: ElementRef<HTMLPreElement>;
+  @ViewChild('scaleBoxEl') scaleBoxEl!: ElementRef<HTMLDivElement>;
+  @ViewChild('bodyEl') bodyEl?: ElementRef<HTMLDivElement>;
+  @ViewChild('sourceEl') sourceEl?: ElementRef<HTMLPreElement>;
 
-  readonly BASE_FONT_RENDERED = 15;
-  readonly BASE_FONT_SOURCE = 13;
+  /** Reading-friendly column width for rendered prose (GitHub-style); the
+   *  raw source view instead uses the full available width, same as
+   *  ds-text-viewer, since code/markup benefits from more horizontal room. */
+  private static readonly RENDERED_MAX_WIDTH = 780;
 
   // Text past this size isn't useful to render in full, and marked/DOMPurify
   // would be slow on it — cap it and point to downloading the rest (same
@@ -294,16 +321,24 @@ export class MarkdownViewerComponent implements OnChanges {
     return this.sanitizer.bypassSecurityTrustHtml(clean);
   });
 
+  private readonly naturalWidth = signal(0);
+  private readonly naturalHeight = signal(0);
+
+  readonly scale = computed(() => this.zoom());
+  readonly scaledWidth = computed(() => this.naturalWidth() * this.scale());
+  readonly scaledHeight = computed(() => this.naturalHeight() * this.scale());
+
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['fileId']) this.load();
   }
 
-  private activeContentEl(): HTMLElement | undefined {
-    return this.showSource() ? this.sourceEl?.nativeElement : this.bodyEl?.nativeElement;
+  toggleSource(): void {
+    this.showSource.set(!this.showSource());
+    this.remeasure();
   }
 
-  private baseFontPx(): number {
-    return this.showSource() ? this.BASE_FONT_SOURCE : this.BASE_FONT_RENDERED;
+  private activeContentEl(): HTMLElement | undefined {
+    return this.showSource() ? this.sourceEl?.nativeElement : this.bodyEl?.nativeElement;
   }
 
   /** The content-space point (unscaled coordinates) that was under the
@@ -322,48 +357,84 @@ export class MarkdownViewerComponent implements OnChanges {
   /** Call once when a pinch gesture starts (not on every move). */
   beginPinch(clientX: number, clientY: number): void {
     const scroll = this.scrollEl?.nativeElement;
-    const content = this.activeContentEl();
-    if (!scroll || !content) return;
+    const box = this.scaleBoxEl?.nativeElement;
+    const w0 = this.naturalWidth();
+    if (!scroll || !box || !w0) return;
     const rect = scroll.getBoundingClientRect();
-    const curScale = parseFloat(getComputedStyle(content).fontSize) / this.baseFontPx();
+    const curScale = box.offsetWidth / w0;
     this.pinchAnchorX = (scroll.scrollLeft + (clientX - rect.left)) / curScale;
     this.pinchAnchorY = (scroll.scrollTop + (clientY - rect.top)) / curScale;
   }
 
   /** Called continuously while two fingers are down, so the content under
    *  the pinch midpoint stays visually fixed as it scales, and the view
-   *  pans if the fingers drag — like iOS's own pinch-zoom. Sets font-size
-   *  directly on the DOM (not just the `zoom` input) so scrollHeight
-   *  reflects it immediately, before Angular's own change detection would
-   *  otherwise catch up. */
+   *  pans if the fingers drag — like iOS's own pinch-zoom. Applies the new
+   *  scale straight to the DOM (not just the `zoom` input signal) so
+   *  scrollWidth/Height are correct immediately, before Angular's own change
+   *  detection would otherwise catch up. */
   pinchZoomAt(newZoomInput: number, clientX: number, clientY: number): void {
     const scroll = this.scrollEl?.nativeElement;
+    const box = this.scaleBoxEl?.nativeElement;
     const content = this.activeContentEl();
-    if (!scroll || !content) return;
+    if (!scroll || !box || !content || !this.naturalWidth()) return;
 
     const rect = scroll.getBoundingClientRect();
     const viewX = clientX - rect.left;
     const viewY = clientY - rect.top;
 
-    content.style.fontSize = `${this.baseFontPx() * newZoomInput}px`;
+    const w = this.naturalWidth() * newZoomInput;
+    const h = this.naturalHeight() * newZoomInput;
+    box.style.width = `${w}px`;
+    box.style.height = `${h}px`;
+    content.style.transform = `scale(${newZoomInput})`;
 
-    const maxLeft = Math.max(scroll.scrollWidth - scroll.clientWidth, 0);
-    const maxTop = Math.max(scroll.scrollHeight - scroll.clientHeight, 0);
+    const maxLeft = Math.max(w - scroll.clientWidth, 0);
+    const maxTop = Math.max(h - scroll.clientHeight, 0);
     scroll.scrollLeft = Math.min(Math.max(this.pinchAnchorX * newZoomInput - viewX, 0), maxLeft);
     scroll.scrollTop = Math.min(Math.max(this.pinchAnchorY * newZoomInput - viewY, 0), maxTop);
   }
 
   /** Called by the parent right after it snaps `zoom` back to 1 at the end
-   *  of a pinch gesture — returns cleanly to the top-left at the base font
-   *  size instead of leaving whatever scroll position the gesture's last
-   *  frame happened to leave against the *old* (different) content size. */
+   *  of a pinch gesture — returns cleanly to the top-left at the base scale
+   *  instead of leaving whatever scroll position the gesture's last frame
+   *  happened to leave against the *old* (different) content size. */
   resetScroll(): void {
+    const scroll = this.scrollEl?.nativeElement;
+    const box = this.scaleBoxEl?.nativeElement;
+    const content = this.activeContentEl();
+    if (!scroll || !box || !content) return;
+    box.style.width = `${this.naturalWidth()}px`;
+    box.style.height = `${this.naturalHeight()}px`;
+    content.style.transform = 'scale(1)';
+    scroll.scrollLeft = 0;
+    scroll.scrollTop = 0;
+  }
+
+  /** Fixes the active content element's width (so it wraps exactly once, at
+   *  a width that doesn't itself change as `zoom` changes — see the CSS
+   *  comment on .md-source/.md-body for why), then measures its resulting
+   *  natural size for the scale-box. Must re-run whenever the content
+   *  actually changes: a new file loads, or source/rendered is toggled
+   *  (each has a different natural height, and the raw source view targets
+   *  a different width than rendered prose). */
+  private async remeasure(): Promise<void> {
+    await new Promise(r => setTimeout(r, 0));
     const scroll = this.scrollEl?.nativeElement;
     const content = this.activeContentEl();
     if (!scroll || !content) return;
-    content.style.fontSize = `${this.baseFontPx()}px`;
-    scroll.scrollLeft = 0;
-    scroll.scrollTop = 0;
+
+    content.style.transform = 'none';
+    const targetWidth = this.showSource()
+      ? scroll.clientWidth
+      : Math.min(MarkdownViewerComponent.RENDERED_MAX_WIDTH, scroll.clientWidth);
+    content.style.width = `${targetWidth}px`;
+
+    const w = content.scrollWidth;
+    const h = content.scrollHeight;
+    if (!w || !h) return;
+    this.naturalWidth.set(w);
+    this.naturalHeight.set(h);
+    content.style.transform = `scale(${this.scale()})`;
   }
 
   private async load(): Promise<void> {
@@ -371,6 +442,8 @@ export class MarkdownViewerComponent implements OnChanges {
     this.error.set('');
     this.rawText.set('');
     this.showSource.set(false);
+    this.naturalWidth.set(0);
+    this.naturalHeight.set(0);
 
     try {
       const response = await fetch(`/api/files/${this.fileId()}/download`);
@@ -379,10 +452,12 @@ export class MarkdownViewerComponent implements OnChanges {
       const truncated = blob.size > MarkdownViewerComponent.MAX_BYTES;
       const text = await (truncated ? blob.slice(0, MarkdownViewerComponent.MAX_BYTES) : blob).text();
       this.rawText.set(truncated ? `${text}\n\n… (truncated — download to see the full file)` : text);
+      this.loading.set(false);
+      await this.remeasure();
+      return;
     } catch {
       this.error.set('Could not load file');
-    } finally {
-      this.loading.set(false);
     }
+    this.loading.set(false);
   }
 }
