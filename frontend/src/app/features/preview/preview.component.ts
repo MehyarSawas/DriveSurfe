@@ -667,7 +667,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     if (this.isPinching) {
       if (!e || e.touches.length < 2) {
         this.isPinching = false;
-        if (this.zoom() <= 1) {
+        // A real zoom-out-past-baseline gesture lands well below 1 — but
+        // fingers naturally drift closer together as they lift off the
+        // screen, so the very last touchmove frame of an *intentionally*
+        // still-zoomed-in gesture can momentarily read as e.g. 0.97. Treating
+        // that as "the user wants to reset" snapped zoom back to exactly 1
+        // and (for docx/xlsx/markdown/text) reset scroll to the very top —
+        // a real, reported bug: panning up to read the top of a zoomed-in
+        // document, then having it jump back to the top-left baseline the
+        // instant you lift your fingers. Only reset below a real margin.
+        if (this.zoom() <= 0.9) {
           this.zoom.set(1);
           this.swipeOffsetX.set(0);
           this.swipeOffsetY.set(0);
