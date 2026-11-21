@@ -176,6 +176,8 @@
       } @else if (isSpreadsheet()) {
         <ds-xlsx-viewer [fileId]="file().id" [zoom]="zoom()" [csv]="isCsv()"
                         [delimiter]="file().extension.toLowerCase() === 'tsv' ? '\t' : ','" class="doc-viewer-wrap" />
+      } @else if (isMarkdown()) {
+        <ds-markdown-viewer [fileId]="file().id" [zoom]="zoom()" class="doc-viewer-wrap" />
       } @else if (isText()) {
         <ds-text-viewer [fileId]="file().id" [zoom]="zoom()" class="doc-viewer-wrap" />
       } @else if (!previewFailed()) {
