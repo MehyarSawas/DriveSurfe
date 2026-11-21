@@ -153,16 +153,27 @@ export class DocxViewerComponent implements OnChanges {
   private pinchAnchorX = 0;
   private pinchAnchorY = 0;
 
-  /** Call once when a pinch gesture starts (not on every move). */
-  beginPinch(clientX: number, clientY: number): void {
+  /** Call once when a pinch gesture starts (not on every move). Returns the
+   *  scale actually measured off the DOM, so the caller can use this exact
+   *  same number as its own "zoom at gesture start" reference (see the
+   *  parent's onTouchStart) — using a *different* source for that (e.g. the
+   *  `zoom` input signal, which can lag a render behind the real DOM state;
+   *  see pinchZoomAt's doc comment) would let the two slowly diverge, a real
+   *  reported bug where repeated pinch gestures drifted worse each time. */
+  beginPinch(clientX: number, clientY: number): number {
     const scroll = this.scrollEl?.nativeElement;
     const box = this.scaleBoxEl?.nativeElement;
     const w0 = this.naturalWidth();
-    if (!scroll || !box || !w0) return;
+    if (!scroll || !box || !w0) return 1;
     const rect = scroll.getBoundingClientRect();
     const curScale = box.offsetWidth / w0;
     this.pinchAnchorX = (scroll.scrollLeft + (clientX - rect.left)) / curScale;
     this.pinchAnchorY = (scroll.scrollTop + (clientY - rect.top)) / curScale;
+    // curScale is the absolute rendered scale (baseScale * zoom) — the
+    // caller tracks and multiplies the `zoom` factor alone (pinchZoomAt
+    // re-derives the absolute scale as baseScale() * zoomInput), so divide
+    // the fit-to-width factor back out before returning.
+    return curScale / this.baseScale();
   }
 
   /** Called continuously while two fingers are down, so the content under

@@ -535,7 +535,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       const rect = (this.el.nativeElement.querySelector('.media-area') as HTMLElement)?.getBoundingClientRect();
       this.pinchCx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
       this.pinchCy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-      if (this.isNativeScrollDoc()) this.nativeScrollDocRef()?.beginPinch(this.pinchStartMidX, this.pinchStartMidY);
+      if (this.isNativeScrollDoc()) {
+        // Use the exact same DOM-measured scale the child derives its pinch
+        // anchor from (not the `zoom` signal, which is only pushed into the
+        // child once Angular's own change detection next runs) — otherwise
+        // the two references can drift apart over repeated gestures, each
+        // one compounding on the last. A real, reported bug: zoom/pan got
+        // worse with every successive pinch attempt on the same document.
+        const measured = this.nativeScrollDocRef()?.beginPinch(this.pinchStartMidX, this.pinchStartMidY);
+        if (measured !== undefined) this.pinchStartZoom = measured;
+      }
       return;
     }
     const t = e.touches[0];
@@ -554,7 +563,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   /** Whichever of docx/xlsx/markdown/text is actually rendered for the
    *  current file — at most one is ever present in the DOM at a time. */
   private nativeScrollDocRef(): {
-    beginPinch(clientX: number, clientY: number): void;
+    beginPinch(clientX: number, clientY: number): number;
     pinchZoomAt(zoom: number, clientX: number, clientY: number): void;
     resetScroll(): void;
   } | undefined {
