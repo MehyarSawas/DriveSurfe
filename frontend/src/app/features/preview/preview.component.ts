@@ -215,6 +215,15 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
    *  than the image/video swipe-up-to-delete / swipe-down-to-move gestures. */
   readonly isScrollableDoc = computed(() => this.isPdf() || this.isDocx() || this.isXlsx() || this.isText());
 
+  /** docx/xlsx/text render at real content size (often wider/taller than the
+   *  viewport, in both axes) inside their own native `overflow:auto` container,
+   *  unlike PDF pages which are always pre-scaled to exactly fit the container
+   *  width. Hijacking single-finger drags for swipe-navigation here (PDF's
+   *  approach) blocks the browser's own two-axis scroll — so these types get
+   *  no custom single-finger handling at all and rely entirely on native
+   *  scroll plus the pinch-zoom handled above (which is type-agnostic). */
+  readonly isNativeScrollDoc = computed(() => this.isDocx() || this.isXlsx() || this.isText());
+
   readonly previewSrc = computed(() => {
     const f = this.file();
     if (this.isVideo()) {
@@ -510,8 +519,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       return;
     }
 
+    if (this.isNativeScrollDoc()) {
+      // Single finger on docx/xlsx/text: hands off entirely, at any zoom level.
+      // Don't preventDefault, don't track swipe state — let the browser's own
+      // overflow:auto scrolling move the document in both axes. (See
+      // isNativeScrollDoc above for why this can't share PDF's swipe-nav path.)
+      return;
+    }
+
     if (this.isScrollableDoc()) {
-      // Single finger on PDF/docx/xlsx/text: only track horizontal for swipe-to-navigate; vertical scrolls natively
+      // Single finger on PDF: only track horizontal for swipe-to-navigate; vertical scrolls natively
       if (!this.isSwiping) return;
       const t = e.touches[0];
       const dx = t.clientX - this.touchStartX;
@@ -590,6 +607,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
           this.swipeOffsetY.set(0);
         }
       }
+      return;
+    }
+    if (this.isNativeScrollDoc()) {
+      // onTouchMove never engaged for these (see there) — just clear the flag
+      // onTouchStart set, there's no swipe/pan state to resolve.
+      this.isSwiping = false;
       return;
     }
     if (this.isScrollableDoc()) {
