@@ -1,6 +1,19 @@
 .browser-layout {
   display: flex;
-  height: 100vh;
+  // Not 100vh: on iOS Safari (incl. installed PWA), 100vh sizes to the
+  // *largest* possible viewport (toolbar collapsed), not the one actually
+  // visible — with the toolbar showing, this box is taller than the real
+  // viewport, so the page itself (not .file-content) needs to scroll to
+  // reveal the rest, dragging the header off-screen with it (a real,
+  // reported bug: "scroll down and the header disappears"). The internal
+  // flex/overflow split (.toolbar fixed, .file-content: flex:1 + overflow:
+  // auto) was already correct — .file-content's own overflow:auto already
+  // gives it an automatic min-height of 0 per the flexbox spec, so it
+  // always shrinks to whatever space is actually left rather than growing
+  // to fit its content. 100dvh tracks the real, current visual viewport
+  // instead, matching every other viewport-height usage already added
+  // elsewhere in this app for the same reason (see the PWA status-bar notes).
+  height: 100dvh;
   overflow: hidden;
 }
 
