@@ -230,18 +230,34 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       windowErrors: this.debugWindowErrors,
       events: this.debugLog,
     };
+    const json = JSON.stringify(payload, null, 2);
     try {
       await fetch('/api/debug/log', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: json,
       });
     } catch {
-      // Fall through to the direct download below even if the upload failed —
-      // the file is still useful locally.
+      // Best-effort server save — still download locally below either way.
     }
-    window.open('/api/debug/log', '_blank');
+    // Download via an in-page Blob link, not window.open()/a cross-navigation
+    // to the GET route: on an installed/standalone iOS PWA, window.open()
+    // breaks out into regular Safari, which has its *own* separate cookie
+    // storage from the installed app — the "authenticated" download request
+    // then has no session cookie and silently 401s, leaving a blank page
+    // with nothing to even show an error ("export, get a blank page, stuck"
+    // — a real, reported bug). A Blob URL needs no second network request at
+    // all, so there's no second auth context to lose.
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `preview-debug-log-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
   // --- END TEMPORARY debug capture.
 
