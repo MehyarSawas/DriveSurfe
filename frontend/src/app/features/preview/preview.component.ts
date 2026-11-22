@@ -897,26 +897,36 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   /** Screen-pixel pan bounds at the current zoom level, so a drag can never
-   *  pan the image entirely out of view. Zero (no panning) when not zoomed.
-   *  Measures `.media-container` (which shrink-wraps to the actual
-   *  rendered image/video box), not `.media-area` (the full, fixed-size
-   *  viewport area) — a portrait document image inside a portrait phone
-   *  screen, say, fills the area's height but is letterboxed narrower than
-   *  its full width; bounds computed from the *area* instead of the actual
-   *  *image* let a drag pan straight past the image's real right/left edge
-   *  into the blank letterboxed margin, with zoom clamped so there was no
-   *  way back short of resetting — a real, reported bug ("the document
-   *  runs away"). `.media-container` already has the current zoom's CSS
-   *  transform applied (see mediaTransform()), so its live rect is
-   *  *scaled* — divide the zoom factor back out to recover the real
-   *  unscaled size this formula needs. */
+   *  pan the image entirely out of view: the max offset is exactly how much
+   *  bigger the live, on-screen `.media-container` box (already scaled by
+   *  the current zoom's CSS transform) is than the `.media-area` viewport
+   *  it sits in, split evenly on each side. Zero (clamped by the `max(…,0)`
+   *  below) whenever the scaled content is still smaller than the viewport
+   *  along that axis — including the whole box at zoom 1.
+   *
+   *  A previous version of this formula re-derived an "unscaled" size by
+   *  dividing the container's rect by `zoom()` and multiplied that by
+   *  `(zoom()-1)` instead of comparing the two live rects directly. That's
+   *  only correct on an axis where the content exactly fills the viewport
+   *  at zoom 1 (e.g. the height of a very tall image, letterboxed to fill
+   *  the screen's height) — on the OTHER, letterboxed axis (e.g. that same
+   *  image's width, narrower than the screen at zoom 1), it computed a
+   *  bound several times more permissive than the content's actual edge,
+   *  verified with a standalone Playwright repro of the same CSS: at
+   *  zoom≈3.37 on a 300×1800 image in a 400×800 viewport, the old formula
+   *  allowed ~158px of horizontal pan where only ~25px was needed to reach
+   *  the image's real edge — enough slack to drag the entire image past
+   *  the edge of `.media-area` into blank margin and leave it there, which
+   *  is what the "runs away" / blank-screen reports were. Comparing the two
+   *  rects directly sidesteps the asymmetry — no unscaling needed, since
+   *  both rects are already in the same (live, post-transform) space. */
   private panBounds(): { maxX: number; maxY: number } {
-    const z = this.zoom();
-    if (z <= 1) return { maxX: 0, maxY: 0 };
-    const rect = (this.el.nativeElement.querySelector('.media-container') as HTMLElement)?.getBoundingClientRect();
-    const w = rect ? rect.width / z : window.innerWidth;
-    const h = rect ? rect.height / z : window.innerHeight;
-    return { maxX: (w * (z - 1)) / 2, maxY: (h * (z - 1)) / 2 };
+    const containerRect = (this.el.nativeElement.querySelector('.media-container') as HTMLElement)?.getBoundingClientRect();
+    const areaRect = (this.el.nativeElement.querySelector('.media-area') as HTMLElement)?.getBoundingClientRect();
+    if (!containerRect || !areaRect) return { maxX: 0, maxY: 0 };
+    const maxX = Math.max((containerRect.width - areaRect.width) / 2, 0);
+    const maxY = Math.max((containerRect.height - areaRect.height) / 2, 0);
+    return { maxX, maxY };
   }
 
   private clampPan(value: number, max: number): number {
