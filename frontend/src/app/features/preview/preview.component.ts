@@ -148,12 +148,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   // Pan state (single-finger touch drag or mouse drag) while zoomed in
   private panStartX = 0;
   private panStartY = 0;
-  // For PDFs, vertical panning moves the document's real scroll position
-  // (so it can reach content beyond what was on-screen when zoom started)
-  // instead of the visual translate used for images/video — these track the
-  // previous pointer Y so we can feed incremental deltas into scrollBy().
-  private lastPanTouchY = 0;
-  private lastPanMouseY = 0;
   private isMousePanning = false;
   private mouseDidPan = false;
   private mouseStartX = 0;
@@ -357,8 +351,38 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
    *  drags for swipe-navigation here (PDF's approach) blocks the browser's
    *  own two-axis scroll — so these types get no custom single-finger
    *  handling at all and rely entirely on native scroll plus the pinch-zoom
-   *  handled above (which is type-agnostic). */
+   *  handled above (which is type-agnostic). PDF is deliberately *not*
+   *  included here — unlike these four, it still wants single-finger
+   *  horizontal drags reserved for swipe-to-navigate (see isScrollableDoc)
+   *  since a PDF page never has real horizontal content to scroll. */
   readonly isNativeScrollDoc = computed(() => this.isDocx() || this.isSpreadsheet() || this.isMarkdown() || this.isText());
+
+  /** Everything that scales its own real content internally via a
+   *  beginPinch/pinchZoomAt/resetScroll child (docx/xlsx/markdown/text, see
+   *  isNativeScrollDoc — *plus* PDF, which needs that same internal-scroll
+   *  pinch-zoom model but, unlike those four, still wants single-finger
+   *  swipe-to-navigate (handled separately via isScrollableDoc, not this).
+   *  PDF used to drive its zoom/pan through the generic *outer*
+   *  `.media-container` transform instead (the same mechanism images/video
+   *  use) — which treats the whole scrollable `.pdf-scroll` viewport as one
+   *  flat picture. That doesn't actually reveal more of the document when
+   *  zoomed: it just magnifies whatever happened to be framed in the
+   *  viewport's own fixed, content-independent size (`.pdf-viewer-wrap`
+   *  pins to `height:100dvh`, never the real page-stack height) at the
+   *  moment the gesture began. For a short document with blank trailing
+   *  space below its last page, pinching anywhere over that space showed
+   *  nothing but magnified white — indistinguishable from "it went blank"
+   *  — and `onTouchEnd`'s old PDF-specific handling then converted the
+   *  accumulated *flat-transform* pan into a real `scrollBy()` call, which
+   *  (since that pan was never computed against real document coordinates)
+   *  routinely landed somewhere else in the document entirely — reported as
+   *  "it jumps down to the empty part of the pdf" / "shows the lower part,
+   *  not where I left off". Giving PDF the same internal scale-box +
+   *  real-scroll model as docx/xlsx eliminates both: there's no flat
+   *  snapshot and no translate-to-scroll conversion step to desync from —
+   *  the live pinch and the final resting position are the same coordinate
+   *  system throughout. */
+  readonly hasInternalPinchZoom = computed(() => this.isNativeScrollDoc() || this.isPdf());
 
   readonly previewSrc = computed(() => {
     const f = this.file();
@@ -640,7 +664,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       const rect = (this.el.nativeElement.querySelector('.media-area') as HTMLElement)?.getBoundingClientRect();
       this.pinchCx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
       this.pinchCy = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-      if (this.isNativeScrollDoc()) {
+      if (this.hasInternalPinchZoom()) {
         // Use the exact same DOM-measured scale the child derives its pinch
         // anchor from (not the `zoom` signal, which is only pushed into the
         // child once Angular's own change detection next runs) — otherwise
@@ -679,17 +703,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.isTransitioning.set(false);
     this.panStartX = this.swipeOffsetX();
     this.panStartY = this.swipeOffsetY();
-    this.lastPanTouchY = t.clientY;
   }
 
-  /** Whichever of docx/xlsx/markdown/text is actually rendered for the
+  /** Whichever of docx/xlsx/markdown/text/pdf is actually rendered for the
    *  current file — at most one is ever present in the DOM at a time. */
   private nativeScrollDocRef(): {
     beginPinch(clientX: number, clientY: number): number;
     pinchZoomAt(zoom: number, clientX: number, clientY: number): void;
     resetScroll(): void;
   } | undefined {
-    return this.docxViewerRef ?? this.xlsxViewerRef ?? this.markdownViewerRef ?? this.textViewerRef;
+    return this.docxViewerRef ?? this.xlsxViewerRef ?? this.markdownViewerRef ?? this.textViewerRef ?? this.pdfViewerRef;
   }
 
   onTouchMove(e: TouchEvent): void {
@@ -702,11 +725,12 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       const midX = (t1.clientX + t2.clientX) / 2;
       const midY = (t1.clientY + t2.clientY) / 2;
 
-      if (this.isNativeScrollDoc()) {
-        // docx/xlsx/text scale their own real content (see isNativeScrollDoc)
-        // and keep their own scroll position, so "zoom stays under your
-        // fingers" is computed inside the viewer against its own scroll
-        // state — this outer container never translates/scales for these.
+      if (this.hasInternalPinchZoom()) {
+        // docx/xlsx/text/pdf all scale their own real content (see
+        // hasInternalPinchZoom) and keep their own scroll position, so "zoom
+        // stays under your fingers" is computed inside the viewer against
+        // its own scroll state — this outer container never
+        // translates/scales for these.
         this.zoom.set(newZoom);
         this.nativeScrollDocRef()?.pinchZoomAt(newZoom, midX, midY);
         return;
@@ -726,17 +750,7 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       // since nothing ever un-does the accumulated offset).
       const { maxX, maxY } = this.panBounds();
       this.swipeOffsetX.set(this.clampPan(newTx, maxX));
-      // PDF repurposes swipeOffsetY during a pinch: onTouchEnd's isPdf()
-      // branch below converts whatever value is left here into a real
-      // document scroll (`scrollBy(-swipeOffsetY())`), then resets it to 0 —
-      // it was never meant to be a persistent visual pan position like it is
-      // for images/video. panBounds() bounds how far an image can visually
-      // pan *past its own edge*, which for PDF's always-viewport-filling
-      // wrapper is ~0 whenever not zoomed in — clamping it here silently
-      // capped (often to nothing) how far a two-finger pinch+drag could
-      // scroll an unzoomed PDF, a real, reported regression. Leave PDF's Y
-      // unclamped so the full drag distance reaches scrollBy() as before.
-      this.swipeOffsetY.set(this.isPdf() ? newTy : this.clampPan(newTy, maxY));
+      this.swipeOffsetY.set(this.clampPan(newTy, maxY));
       this.logDebug('touchmove:pinch', e);
       return;
     }
@@ -750,28 +764,16 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     }
 
     if (this.isScrollableDoc()) {
-      // Single finger on PDF: only track horizontal for swipe-to-navigate; vertical scrolls natively
+      // Single finger on PDF, not zoomed: only track horizontal for
+      // swipe-to-navigate; vertical scrolls natively. Zoomed in: hand off
+      // entirely to native scroll on both axes — same as isNativeScrollDoc —
+      // now that PDF's own scale-box (see hasInternalPinchZoom) keeps real
+      // scrollWidth/Height correct at any zoom level, there's no separate
+      // "visual pan" state here left to track or convert.
       if (!this.isSwiping) return;
+      if (this.zoom() > 1) return;
       const t = e.touches[0];
       const dx = t.clientX - this.touchStartX;
-      if (this.zoom() > 1) {
-        // Zoomed in: a single-finger drag pans freely. Horizontal still uses
-        // the visual translate (a page's full width is always already
-        // rendered, so there's nothing more to reveal by scrolling). Vertical
-        // moves the document's actual scroll position instead, so dragging
-        // can reach real content beyond the slice visible when zoom started
-        // — a translate alone could only re-crop that frozen slice.
-        e.preventDefault();
-        this.touchCurrentX = t.clientX;
-        this.touchCurrentY = t.clientY;
-        const deltaY = t.clientY - this.lastPanTouchY;
-        this.lastPanTouchY = t.clientY;
-        this.pdfViewerRef?.scrollBy(-deltaY);
-        const { maxX } = this.panBounds();
-        this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
-        return;
-      }
-      // Not zoomed: only track horizontal for swipe-to-navigate; vertical scrolls natively
       const dy = t.clientY - this.touchStartY;
       if (Math.abs(dx) > Math.abs(dy)) {
         e.preventDefault();
@@ -832,19 +834,14 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
           this.zoom.set(1);
           this.swipeOffsetX.set(0);
           this.swipeOffsetY.set(0);
-          // docx/xlsx/text applied the last few pinch frames imperatively,
-          // straight to the DOM — the reactive `zoom` write above will
-          // eventually resize them to match again, but only once Angular's
-          // own change detection next runs, which can otherwise show up as
-          // a jump (old scroll position against the new, different size).
-          // Reset now, synchronously, so there's nothing left to jump.
-          if (this.isNativeScrollDoc()) this.nativeScrollDocRef()?.resetScroll();
-        } else if (this.isPdf()) {
-          // Vertical panning for PDFs happens via real scroll from here on —
-          // migrate whatever vertical offset the pinch gesture accumulated
-          // into an actual scroll position instead of leaving it as a translate.
-          this.pdfViewerRef?.scrollBy(-this.swipeOffsetY());
-          this.swipeOffsetY.set(0);
+          // docx/xlsx/text/pdf applied the last few pinch frames
+          // imperatively, straight to the DOM — the reactive `zoom` write
+          // above will eventually resize them to match again, but only once
+          // Angular's own change detection next runs, which can otherwise
+          // show up as a jump (old scroll position against the new,
+          // different size). Reset now, synchronously, so there's nothing
+          // left to jump.
+          if (this.hasInternalPinchZoom()) this.nativeScrollDocRef()?.resetScroll();
         }
         // Post-microtask snapshot: the signal writes above only re-render once
         // Angular's change detection next runs, so a synchronous snapshot here
@@ -864,8 +861,8 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       if (!this.isSwiping) return;
       this.isSwiping = false;
 
-      // While zoomed in, the single-finger drag pans (handled in onTouchMove)
-      // — leave the pan offset where the finger left it, don't navigate.
+      // While zoomed in, the single-finger drag is handled by native scroll
+      // (see onTouchMove) — nothing to resolve here, don't navigate.
       if (this.zoom() > 1) return;
 
       const dx = this.touchCurrentX - this.touchStartX;
@@ -1007,7 +1004,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     this.mouseStartY = e.clientY;
     this.panStartX = this.swipeOffsetX();
     this.panStartY = this.swipeOffsetY();
-    this.lastPanMouseY = e.clientY;
   }
 
   private onWindowMouseMove(e: MouseEvent): void {
@@ -1015,17 +1011,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     const dx = e.clientX - this.mouseStartX;
     const dy = e.clientY - this.mouseStartY;
     if (Math.abs(dx) + Math.abs(dy) > 3) this.mouseDidPan = true;
-
-    if (this.isPdf()) {
-      // See onTouchMove: vertical panning scrolls the real document instead
-      // of translating a frozen slice, so it can reach the true top/bottom.
-      const deltaY = e.clientY - this.lastPanMouseY;
-      this.lastPanMouseY = e.clientY;
-      this.pdfViewerRef?.scrollBy(-deltaY);
-      const { maxX } = this.panBounds();
-      this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
-      return;
-    }
 
     const { maxX, maxY } = this.panBounds();
     this.swipeOffsetX.set(this.clampPan(this.panStartX + dx, maxX));
@@ -1260,13 +1245,14 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   mediaTransform(): string {
-    // docx/xlsx/text scale themselves internally (see isNativeScrollDoc) so
-    // their own native scroll dimensions stay correct at any zoom level —
-    // scaling this outer container too would double-apply the zoom and (per
-    // a real report) leave native scroll/pinch looking like it does nothing,
-    // since the already-rendered-and-clipped content just gets visually
-    // blown up/shrunk as a flat picture instead of actually re-flowing.
-    if (this.isNativeScrollDoc()) return 'none';
+    // docx/xlsx/text/pdf scale themselves internally (see
+    // hasInternalPinchZoom) so their own native scroll dimensions stay
+    // correct at any zoom level — scaling this outer container too would
+    // double-apply the zoom and (per a real report) leave native
+    // scroll/pinch looking like it does nothing, since the
+    // already-rendered-and-clipped content just gets visually blown
+    // up/shrunk as a flat picture instead of actually re-flowing.
+    if (this.hasInternalPinchZoom()) return 'none';
     const x = this.swipeOffsetX();
     const y = this.swipeOffsetY();
     const z = this.zoom();
