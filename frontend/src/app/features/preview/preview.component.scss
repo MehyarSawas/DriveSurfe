@@ -811,6 +811,55 @@
   box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
 
+.debug-log-modal {
+  position: fixed;
+  inset: 10% 16px;
+  z-index: 1200;
+  background: rgba(30,30,30,0.98);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 8px;
+}
+
+.debug-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+
+  .icon-btn { width: 32px; height: 32px; }
+}
+
+.debug-log-hint {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+}
+
+.debug-log-text {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  background: rgba(0,0,0,0.3);
+  color: rgba(255,255,255,0.85);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.debug-log-copy {
+  flex-shrink: 0;
+}
+
 .preview-menu-item {
   display: flex;
   align-items: center;

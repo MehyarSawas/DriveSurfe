@@ -172,6 +172,13 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   private static readonly DEBUG_LOG_MAX = 1200;
   private debugWindowErrors: string[] = [];
   private debugErrorListenerAdded = false;
+  /** Non-null shows the export modal with this text selectable/copyable —
+   *  not a file download, since iOS Safari (including installed/standalone
+   *  PWAs) unreliably ignores `<a download>` and window.open() to a second
+   *  authenticated route breaks out of the PWA's own cookie storage (both
+   *  real, reported failures). Plain in-page text can't fail that way. */
+  readonly debugLogText = signal<string | null>(null);
+  readonly debugLogCopied = signal(false);
 
   private logDebug(tag: string, e?: TouchEvent): void {
     if (!this.debugErrorListenerAdded) {
@@ -239,25 +246,26 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         body: json,
       });
     } catch {
-      // Best-effort server save — still download locally below either way.
+      // Best-effort server save — the modal below is the real deliverable.
     }
-    // Download via an in-page Blob link, not window.open()/a cross-navigation
-    // to the GET route: on an installed/standalone iOS PWA, window.open()
-    // breaks out into regular Safari, which has its *own* separate cookie
-    // storage from the installed app — the "authenticated" download request
-    // then has no session cookie and silently 401s, leaving a blank page
-    // with nothing to even show an error ("export, get a blank page, stuck"
-    // — a real, reported bug). A Blob URL needs no second network request at
-    // all, so there's no second auth context to lose.
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `preview-debug-log-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    this.debugLogCopied.set(false);
+    this.debugLogText.set(json);
+  }
+
+  async copyDebugLog(): Promise<void> {
+    const text = this.debugLogText();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      this.debugLogCopied.set(true);
+    } catch {
+      // Clipboard API can refuse outside a secure/focused context — the
+      // text is still right there, selectable by hand, in the textarea.
+    }
+  }
+
+  closeDebugLog(): void {
+    this.debugLogText.set(null);
   }
   // --- END TEMPORARY debug capture.
 

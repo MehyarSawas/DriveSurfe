@@ -93,6 +93,26 @@
     </div>
   }
 
+  <!-- Temporary: debug-log export modal. Plain selectable text, not a file
+       download — iOS Safari (including installed/standalone PWAs) unreliably
+       ignores <a download>, and window.open() to a second authenticated
+       route breaks out of the PWA's own cookie storage. Remove this whole
+       block once the pinch-zoom investigation is resolved. -->
+  @if (debugLogText()) {
+    <div class="menu-backdrop" style="z-index:1199" (click)="closeDebugLog()" (touchstart)="$event.preventDefault(); closeDebugLog()"></div>
+    <div class="debug-log-modal" (click)="$event.stopPropagation()">
+      <div class="debug-log-header">
+        <span>Debug log</span>
+        <button class="icon-btn" (click)="closeDebugLog()" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <p class="debug-log-hint">Tap "Copy", then paste into the chat. (Also saved to the server, best-effort.)</p>
+      <textarea class="debug-log-text" readonly (click)="$event.stopPropagation()">{{ debugLogText() }}</textarea>
+      <button class="btn-primary debug-log-copy" (click)="copyDebugLog()">{{ debugLogCopied() ? 'Copied!' : 'Copy' }}</button>
+    </div>
+  }
+
   <!-- Media area -->
   <div class="media-area"
     [class.zoomed]="zoom() > 1"
