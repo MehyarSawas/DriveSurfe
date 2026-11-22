@@ -159,110 +159,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   readonly swipeOffsetY = signal(0);
   readonly isTransitioning = signal(false);
 
-  // --- TEMPORARY: debug capture for the pinch-zoom blank-screen investigation.
-  // Remove this block (and its call sites in onTouchStart/onTouchMove/onTouchEnd,
-  // and the "Export debug log" menu item) once that's resolved.
-  private readonly debugLog: Record<string, unknown>[] = [];
-  private static readonly DEBUG_LOG_MAX = 1200;
-  private debugWindowErrors: string[] = [];
-  private debugErrorListenerAdded = false;
-  /** Non-null shows the export modal with this text selectable/copyable —
-   *  not a file download, since iOS Safari (including installed/standalone
-   *  PWAs) unreliably ignores `<a download>` and window.open() to a second
-   *  authenticated route breaks out of the PWA's own cookie storage (both
-   *  real, reported failures). Plain in-page text can't fail that way. */
-  readonly debugLogText = signal<string | null>(null);
-  readonly debugLogCopied = signal(false);
-
-  private logDebug(tag: string, e?: TouchEvent): void {
-    if (!this.debugErrorListenerAdded) {
-      this.debugErrorListenerAdded = true;
-      window.addEventListener('error', (ev) => {
-        this.debugWindowErrors.push(`${new Date().toISOString()} ${ev.message} @ ${ev.filename}:${ev.lineno}`);
-      });
-      window.addEventListener('unhandledrejection', (ev) => {
-        this.debugWindowErrors.push(`${new Date().toISOString()} unhandledrejection: ${String(ev.reason)}`);
-      });
-    }
-    const container = this.el.nativeElement.querySelector('.media-container') as HTMLElement | null;
-    const area = this.el.nativeElement.querySelector('.media-area') as HTMLElement | null;
-    const img = this.el.nativeElement.querySelector('.media-img') as HTMLImageElement | null;
-    const canvases = this.el.nativeElement.querySelectorAll('canvas');
-    const containerRect = container?.getBoundingClientRect();
-    const areaRect = area?.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const entry: Record<string, unknown> = {
-      t: Math.round(performance.now()),
-      tag,
-      touchesLen: e?.touches?.length ?? null,
-      changedTouchesLen: e?.changedTouches?.length ?? null,
-      isPinching: this.isPinching,
-      isSwiping: this.isSwiping,
-      isTwoFingerTouch: this.isTwoFingerTouch(),
-      zoom: this.zoom(),
-      swipeOffsetX: this.swipeOffsetX(),
-      swipeOffsetY: this.swipeOffsetY(),
-      fileExt: this.file()?.extension,
-      fileMime: this.file()?.mime_type,
-      isPdf: this.isPdf(),
-      isImage: this.isImage(),
-      dpr,
-      containerRect: containerRect ? { w: containerRect.width, h: containerRect.height, top: containerRect.top, left: containerRect.left } : null,
-      areaRect: areaRect ? { w: areaRect.width, h: areaRect.height } : null,
-      // The actual composited GPU-layer size in device pixels — the number
-      // this investigation cares about most, directly, at every event.
-      containerDevicePx: containerRect ? { w: Math.round(containerRect.width * dpr), h: Math.round(containerRect.height * dpr) } : null,
-      imgNaturalSize: img ? { w: img.naturalWidth, h: img.naturalHeight, complete: img.complete } : null,
-      canvasCount: canvases.length,
-      canvasSizes: Array.from(canvases as NodeListOf<HTMLCanvasElement>).slice(0, 30).map(c => ({ w: c.width, h: c.height })),
-    };
-    this.debugLog.push(entry);
-    if (this.debugLog.length > PreviewComponent.DEBUG_LOG_MAX) this.debugLog.shift();
-  }
-
-  async exportDebugLog(): Promise<void> {
-    this.logDebug('export-requested');
-    const payload = {
-      exportedAt: new Date().toISOString(),
-      userAgent: navigator.userAgent,
-      screen: { width: window.screen.width, height: window.screen.height, dpr: window.devicePixelRatio },
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      file: this.file(),
-      windowErrors: this.debugWindowErrors,
-      events: this.debugLog,
-    };
-    const json = JSON.stringify(payload, null, 2);
-    try {
-      await fetch('/api/debug/log', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: json,
-      });
-    } catch {
-      // Best-effort server save — the modal below is the real deliverable.
-    }
-    this.debugLogCopied.set(false);
-    this.debugLogText.set(json);
-  }
-
-  async copyDebugLog(): Promise<void> {
-    const text = this.debugLogText();
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      this.debugLogCopied.set(true);
-    } catch {
-      // Clipboard API can refuse outside a secure/focused context — the
-      // text is still right there, selectable by hand, in the textarea.
-    }
-  }
-
-  closeDebugLog(): void {
-    this.debugLogText.set(null);
-  }
-  // --- END TEMPORARY debug capture.
-
   private pendingInterval: ReturnType<typeof setInterval> | null = null;
   private pendingFile: DriveFile | null = null;
   private alive = true;
@@ -635,7 +531,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchStart(e: TouchEvent): void {
-    this.logDebug('touchstart:enter', e);
     if (this.menuOpen()) {
       // Dismissing the menu must leave no gesture state behind for the next,
       // unrelated touch to inherit — a stale lastTapTime here could make a
@@ -674,11 +569,9 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
         const measured = this.nativeScrollDocRef()?.beginPinch(this.pinchStartMidX, this.pinchStartMidY);
         if (measured !== undefined) this.pinchStartZoom = measured;
       }
-      this.logDebug('touchstart:pinch-begin', e);
       return;
     }
     if (this.isPinching) {
-      this.logDebug('touchstart:spurious-single-finger-during-pinch (guard, ignored)', e);
       // A two-finger pinch losing one finger (2 → 1, not yet 0 — the gesture
       // isn't over) can re-fire touchstart with the remaining single touch
       // in some mobile browsers, since the TouchList itself changed. That
@@ -751,7 +644,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       const { maxX, maxY } = this.panBounds();
       this.swipeOffsetX.set(this.clampPan(newTx, maxX));
       this.swipeOffsetY.set(this.clampPan(newTy, maxY));
-      this.logDebug('touchmove:pinch', e);
       return;
     }
 
@@ -812,7 +704,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
   }
 
   onTouchEnd(e?: TouchEvent): void {
-    this.logDebug('touchend:enter', e);
     if (!e || e.touches.length === 0) {
       this.isTwoFingerTouch.set(false);
       this.lastTouchEndTime = Date.now();
@@ -820,7 +711,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
     if (this.isPinching) {
       if (!e || e.touches.length < 2) {
         this.isPinching = false;
-        this.logDebug('touchend:pinch-finalize', e);
         // A real zoom-out-past-baseline gesture lands well below 1 — but
         // fingers naturally drift closer together as they lift off the
         // screen, so the very last touchmove frame of an *intentionally*
@@ -843,11 +733,6 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
           // left to jump.
           if (this.hasInternalPinchZoom()) this.nativeScrollDocRef()?.resetScroll();
         }
-        // Post-microtask snapshot: the signal writes above only re-render once
-        // Angular's change detection next runs, so a synchronous snapshot here
-        // would still show the *pre*-write DOM. Queue this one a tick later to
-        // see what the view actually settles on.
-        setTimeout(() => this.logDebug('touchend:pinch-finalize-settled'), 0);
       }
       return;
     }
