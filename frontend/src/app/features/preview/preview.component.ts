@@ -547,6 +547,21 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       }
       return;
     }
+    if (this.isPinching) {
+      // A two-finger pinch losing one finger (2 → 1, not yet 0 — the gesture
+      // isn't over) can re-fire touchstart with the remaining single touch
+      // in some mobile browsers, since the TouchList itself changed. That
+      // must NOT be treated as the start of a brand-new single-finger
+      // gesture: falling through below would set isSwiping = true (while
+      // isPinching stays true — nothing here ever clears it) and re-anchor
+      // panStartX/Y to this one finger's current position, handing the
+      // pinch's tail end off to an independently-anchored single-finger pan
+      // for however many frames remain before the last finger actually
+      // lifts — a real, reported bug (the view jumping/going blank right as
+      // fingers were released). Keep waiting for the real end of the
+      // gesture (touches.length === 0, handled in onTouchEnd) instead.
+      return;
+    }
     const t = e.touches[0];
     this.touchStartX = t.clientX;
     this.touchStartY = t.clientY;
@@ -604,7 +619,17 @@ export class PreviewComponent implements OnDestroy, AfterViewInit {
       // since nothing ever un-does the accumulated offset).
       const { maxX, maxY } = this.panBounds();
       this.swipeOffsetX.set(this.clampPan(newTx, maxX));
-      this.swipeOffsetY.set(this.clampPan(newTy, maxY));
+      // PDF repurposes swipeOffsetY during a pinch: onTouchEnd's isPdf()
+      // branch below converts whatever value is left here into a real
+      // document scroll (`scrollBy(-swipeOffsetY())`), then resets it to 0 —
+      // it was never meant to be a persistent visual pan position like it is
+      // for images/video. panBounds() bounds how far an image can visually
+      // pan *past its own edge*, which for PDF's always-viewport-filling
+      // wrapper is ~0 whenever not zoomed in — clamping it here silently
+      // capped (often to nothing) how far a two-finger pinch+drag could
+      // scroll an unzoomed PDF, a real, reported regression. Leave PDF's Y
+      // unclamped so the full drag distance reaches scrollBy() as before.
+      this.swipeOffsetY.set(this.isPdf() ? newTy : this.clampPan(newTy, maxY));
       return;
     }
 
