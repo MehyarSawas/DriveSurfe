@@ -8,6 +8,7 @@ use DriveSurfe\Drive\KDrive\KDriveClient;
 use DriveSurfe\Middleware\AuthMiddleware;
 use DriveSurfe\Routes\ActionRoutes;
 use DriveSurfe\Routes\AuthRoutes;
+use DriveSurfe\Routes\DebugRoutes;
 use DriveSurfe\Routes\FileRoutes;
 use DriveSurfe\Routes\MailRoutes;
 use DriveSurfe\Routes\PinRoutes;
@@ -111,8 +112,9 @@ final class Application
         $shareRoutes   = new ShareRoutes($container);
         $pinRoutes     = new PinRoutes($container);
         $mailRoutes    = new MailRoutes($container);
+        $debugRoutes   = new DebugRoutes($container);
 
-        $this->slim->group('/api', function ($group) use ($authRoutes, $fileRoutes, $actionRoutes, $sessionRoutes, $shareRoutes, $pinRoutes, $mailRoutes) {
+        $this->slim->group('/api', function ($group) use ($authRoutes, $fileRoutes, $actionRoutes, $sessionRoutes, $shareRoutes, $pinRoutes, $mailRoutes, $debugRoutes) {
             $authRoutes->register($group);
             $fileRoutes->register($group);
             $actionRoutes->register($group);
@@ -120,6 +122,7 @@ final class Application
             $shareRoutes->register($group);
             $pinRoutes->register($group);
             $mailRoutes->register($group);
+            $debugRoutes->register($group);
         });
     }
 }
